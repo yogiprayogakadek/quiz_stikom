@@ -69,6 +69,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::post('sessions/{session}/peserta', [AdminSessionController::class, 'updateParticipants'])->name('sessions.participants.update');
     Route::post('sessions/{session}/tutup', [AdminSessionController::class, 'close'])->name('sessions.close');
     Route::post('sessions/{session}/lewati-soal', [AdminSessionController::class, 'skip'])->name('sessions.skip');
+    Route::post('sessions/{session}/peserta/{attempt}/kumpulkan', [AdminSessionController::class, 'forceFinish'])
+        ->name('sessions.attempts.finish');
+    Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
+        ->name('sessions.attempts.kick');
 });
 
 Route::middleware(['auth', 'role:peserta'])->group(function () {
@@ -89,6 +93,7 @@ Route::middleware(['auth', 'role:peserta'])->group(function () {
         ->middleware('throttle:answers')
         ->name('peserta.attempt.answer');
     Route::post('/attempt/{attempt}/selesai', [AttemptController::class, 'finish'])->name('peserta.attempt.finish');
+    Route::get('/attempt/{attempt}/status', [AttemptController::class, 'status'])->name('peserta.attempt.status');
     Route::post('/attempt/{attempt}/pelanggaran', [AttemptController::class, 'pelanggaran'])->name('peserta.attempt.pelanggaran');
     Route::get('/attempt/{attempt}/hasil', [AttemptController::class, 'result'])->name('peserta.attempt.result');
     Route::post('/attempt/{attempt}/events', [AttemptController::class, 'event'])

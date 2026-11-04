@@ -11,6 +11,7 @@
             sisa: 0,
             berhenti: false,
             selesaiOtomatis: false,
+            konfirmasiSelesai: false,
             kejadianTerakhir: {},
             sudahMulai: false,
             layarPenuhAktif: false,
@@ -38,6 +39,7 @@
             init() {
                 this.mulaiTimer();
                 this.pasangPengawas();
+                setInterval(() => this.cekStatus(), 5000);
             },
             format(n) {
                 const menit = Math.floor(n / 60);
@@ -94,15 +96,56 @@
                 if (this.berhenti) {
                     return;
                 }
-                if (!paksa && this.belum > 0) {
-                    const lanjut = window.confirm('Masih ada ' + this.belum + ' soal belum dijawab. Selesaikan sekarang?');
-                    if (!lanjut) {
-                        return;
-                    }
+                if (paksa) {
+                    this.kirimSelesai();
+                    return;
                 }
+                if (this.belum > 0) {
+                    this.konfirmasiSelesai = true;
+                    this.$nextTick(() => this.$refs.tombolKembali?.focus());
+                    return;
+                }
+                this.kirimSelesai();
+            },
+            tutupKonfirmasi() {
+                if (!this.konfirmasiSelesai) {
+                    return;
+                }
+                this.konfirmasiSelesai = false;
+                this.$nextTick(() => this.$refs.tombolSelesai?.focus());
+            },
+            kirimSelesai() {
+                if (this.berhenti) {
+                    return;
+                }
+                this.konfirmasiSelesai = false;
                 this.berhenti = true;
                 this.batalkanToleransi();
                 document.getElementById('form-selesai').submit();
+            },
+            async cekStatus() {
+                if (this.berhenti) {
+                    return;
+                }
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.statusUrl);
+                } catch {
+                    return;
+                }
+                if (!hasil.ok) {
+                    if (hasil.status === 404 || hasil.status === 403) {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        window.location.href = config.dashboardUrl + '?dikeluarkan=1';
+                    }
+                    return;
+                }
+                if (hasil.data?.selesai) {
+                    this.berhenti = true;
+                    this.batalkanToleransi();
+                    window.location.href = config.resultUrl;
+                }
             },
             async masukLayarPenuh() {
                 const el = document.documentElement;
@@ -253,6 +296,8 @@
             batasAkhir: {{ $attempt->batas_akhir_at }},
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
+            statusUrl: '{{ route('peserta.attempt.status', $attempt) }}',
+            dashboardUrl: '{{ route('peserta.dashboard') }}',
             resultUrl: '{{ route('peserta.attempt.result', $attempt) }}'
         })"
         class="space-y-5"
@@ -274,7 +319,7 @@
                     <x-icon name="eye" :size="20" />
                     Layar penuh
                 </button>
-                <button type="button" class="btn btn-primary" x-on:click="akhiri(false)">Selesai</button>
+                <button type="button" class="btn btn-primary" x-ref="tombolSelesai" x-on:click="akhiri(false)">Selesai</button>
             </div>
         </div>
 
@@ -425,6 +470,72 @@
                 <p class="text-base text-ink-muted">
                     Jawaban Anda sedang dikumpulkan otomatis dan sesi akun Anda sedang dikeluarkan...
                 </p>
+            </div>
+        </div>
+
+        {{-- Modal Konfirmasi: Kumpulkan Sebelum Semua Soal Terjawab --}}
+        <div
+            x-show="konfirmasiSelesai"
+            x-cloak
+            x-transition.opacity
+            class="fixed inset-0 z-[60] flex items-end justify-center bg-ink/70 p-4 backdrop-blur-sm sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="judul-konfirmasi-selesai"
+            aria-describedby="isi-konfirmasi-selesai"
+            x-on:keydown.escape.window="tutupKonfirmasi()"
+            x-on:click.self="tutupKonfirmasi()"
+        >
+            <div class="card max-h-[92vh] w-full max-w-md overflow-y-auto border-2 border-sun bg-page p-6 shadow-modal sm:p-7">
+                <div class="flex items-start gap-4">
+                    <span class="flex h-14 w-14 flex-none items-center justify-center rounded-2xl bg-sun-soft text-sun-deep">
+                        <x-icon name="alert" :size="28" />
+                    </span>
+                    <div class="min-w-0">
+                        <span class="pill pill-sun">Belum semua terjawab</span>
+                        <h2 id="judul-konfirmasi-selesai" class="mt-2 text-2xl">
+                            Masih ada <span x-text="belum"></span> soal kosong
+                        </h2>
+                    </div>
+                </div>
+
+                <p id="isi-konfirmasi-selesai" class="mt-4 text-base leading-relaxed text-ink-muted">
+                    Soal yang tidak dijawab dihitung salah. Kamu masih bisa menutup dialog ini dan melanjutkan mengerjakan selama waktu tersisa.
+                </p>
+
+                <dl class="mt-4 grid grid-cols-2 gap-3">
+                    <div class="rounded-2xl bg-leaf-soft px-4 py-3">
+                        <dt class="text-sm font-bold text-leaf-deep">Sudah dijawab</dt>
+                        <dd class="display-number mt-1 text-3xl text-leaf-deep" x-text="terjawab"></dd>
+                    </div>
+                    <div class="rounded-2xl bg-sun-soft px-4 py-3">
+                        <dt class="text-sm font-bold text-sun-deep">Belum dijawab</dt>
+                        <dd class="display-number mt-1 text-3xl text-sun-deep" x-text="belum"></dd>
+                    </div>
+                </dl>
+
+                <p class="mt-4 flex items-center gap-2 text-base font-bold text-ink">
+                    <x-icon name="clock" :size="20" />
+                    Sisa waktu <span class="timer" x-text="format(sisa)">0:00</span>
+                </p>
+
+                <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                    <button
+                        type="button"
+                        class="btn btn-secondary flex-1"
+                        x-ref="tombolKembali"
+                        x-on:click="tutupKonfirmasi()"
+                    >
+                        Kembali kerjakan
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-primary flex-1"
+                        x-on:click="kirimSelesai()"
+                    >
+                        Kumpulkan sekarang
+                    </button>
+                </div>
             </div>
         </div>
 

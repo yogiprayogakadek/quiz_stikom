@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAnswerRequest;
 use App\Models\Answer;
 use App\Models\Attempt;
+use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Events\PesertaPeringatan;
 use App\Models\QuizSession;
@@ -292,7 +293,7 @@ class SessionController extends Controller
         if ($attempt !== null) {
             $attempt->loadMissing('user');
 
-            $attempt->events()->create([
+            $kejadian = $attempt->events()->create([
                 'tipe' => 'fullscreen_exit_timeout',
                 'detail' => 'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
                 'ip' => $request->ip(),
@@ -300,12 +301,15 @@ class SessionController extends Controller
             ]);
 
             if ($session->display_token) {
+                $label = AttemptEvent::label('fullscreen_exit_timeout');
+
                 PesertaPeringatan::safeDispatch($session->display_token, [
+                    'id' => $kejadian->id,
                     'nama' => $attempt->user?->nama ?? 'Peserta',
                     'username' => $attempt->user?->username ?? '-',
                     'tipe' => 'fullscreen_exit_timeout',
-                    'pesan' => 'Toleransi habis: kuis dikumpulkan otomatis & akun di-logout.',
-                    'level' => 'danger',
+                    'pesan' => $label['pesan'],
+                    'level' => $label['level'],
                     'waktu' => now()->format('H:i:s'),
                     'jumlah_pelanggaran' => $attempt->events()->count(),
                 ]);

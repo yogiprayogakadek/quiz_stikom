@@ -107,6 +107,12 @@
         })"
         class="space-y-6"
     >
+        @if (request()->boolean('dikeluarkan'))
+            <x-alert jenis="warning">
+                Sesi ini sudah tidak tersedia untukmu. Kalau kamu masih seharusnya mengerjakan, hubungi pengajar.
+            </x-alert>
+        @endif
+
         <!-- Notifikasi Real-time Banner -->
         <div
             x-show="notifPesan"

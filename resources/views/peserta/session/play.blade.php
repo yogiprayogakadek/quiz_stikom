@@ -38,6 +38,12 @@
                 const hasil = await window.kuisFetch(config.stateUrl);
                 this.memuat = false;
                 if (!hasil.ok || !hasil.data) {
+                    if (hasil.status === 404 || hasil.status === 403) {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        window.location.href = config.dashboardUrl + '?dikeluarkan=1';
+                        return;
+                    }
                     this.error = 'Gagal memuat status sesi. Mencoba lagi sebentar.';
                     return;
                 }
@@ -248,6 +254,7 @@
             stateUrl: '{{ $stateUrl }}',
             answerUrl: '{{ $answerUrl }}',
             resultUrl: '{{ $resultUrl }}',
+            dashboardUrl: '{{ route('peserta.dashboard') }}',
             channel: '{{ $channel }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}'
         })"

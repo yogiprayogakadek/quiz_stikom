@@ -7,6 +7,7 @@ use App\Http\Requests\StoreAnswerRequest;
 use App\Http\Requests\StoreAttemptEventRequest;
 use App\Models\Answer;
 use App\Models\Attempt;
+use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Events\PesertaPeringatan;
 use App\Models\User;
@@ -178,7 +179,7 @@ class AttemptController extends Controller
 
         $attempt->loadMissing(['user', 'quizSession']);
 
-        $attempt->events()->create([
+        $kejadian = $attempt->events()->create([
             'tipe' => 'fullscreen_exit_timeout',
             'detail' => 'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
             'ip' => $request->ip(),
@@ -187,12 +188,15 @@ class AttemptController extends Controller
 
         $session = $attempt->quizSession;
         if ($session && $session->display_token) {
+            $label = AttemptEvent::label('fullscreen_exit_timeout');
+
             PesertaPeringatan::safeDispatch($session->display_token, [
+                'id' => $kejadian->id,
                 'nama' => $attempt->user?->nama ?? 'Peserta',
                 'username' => $attempt->user?->username ?? '-',
                 'tipe' => 'fullscreen_exit_timeout',
-                'pesan' => 'Toleransi habis: kuis dikumpulkan otomatis & akun di-logout.',
-                'level' => 'danger',
+                'pesan' => $label['pesan'],
+                'level' => $label['level'],
                 'waktu' => now()->format('H:i:s'),
                 'jumlah_pelanggaran' => $attempt->events()->count(),
             ]);
@@ -230,6 +234,20 @@ class AttemptController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->with('peringatan', 'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena keluar dari mode layar penuh.');
+    }
+
+    /**
+     * Status ringkas untuk halaman pengerjaan. Dipakai polling agar peserta
+     * tahu ketika admin mengumpulkan paksa atau mengeluarkannya dari sesi.
+     */
+    public function status(Request $request, Attempt $attempt): JsonResponse
+    {
+        abort_unless($attempt->user_id === $request->user()->id, 403);
+
+        return response()->json([
+            'status' => $attempt->status,
+            'selesai' => $attempt->status === 'selesai',
+        ]);
     }
 
     public function result(Request $request, Attempt $attempt): View|RedirectResponse
@@ -282,7 +300,7 @@ class AttemptController extends Controller
         $tipe = $request->input('tipe');
         $detail = $request->input('detail');
 
-        $attempt->events()->create([
+        $kejadian = $attempt->events()->create([
             'tipe' => $tipe,
             'detail' => $detail,
             'ip' => $request->ip(),
@@ -293,21 +311,15 @@ class AttemptController extends Controller
 
         $session = $attempt->quizSession;
         if ($session && $session->display_token) {
-            $labelAksi = match ($tipe) {
-                'fullscreen_exit' => 'Keluar dari layar penuh (Toleransi 10s berjalan)',
-                'tab_hidden' => 'Membuka tab lain / tab disembunyikan',
-                'blur_window' => 'Berpindah ke jendela aplikasi lain',
-                'copy_attempt' => 'Mencoba menyalin (copy) teks soal',
-                'fullscreen_exit_timeout' => 'Toleransi habis: kuis dikumpulkan paksa & akun di-logout',
-                default => $tipe,
-            };
+            $label = AttemptEvent::label($tipe);
 
             PesertaPeringatan::safeDispatch($session->display_token, [
+                'id' => $kejadian->id,
                 'nama' => $attempt->user?->nama ?? 'Peserta',
                 'username' => $attempt->user?->username ?? '-',
                 'tipe' => $tipe,
-                'pesan' => $labelAksi,
-                'level' => in_array($tipe, ['fullscreen_exit_timeout'], true) ? 'danger' : 'warning',
+                'pesan' => $label['pesan'],
+                'level' => $label['level'],
                 'waktu' => now()->format('H:i:s'),
                 'jumlah_pelanggaran' => $jumlah,
             ]);

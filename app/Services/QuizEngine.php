@@ -11,6 +11,7 @@ use App\Jobs\CloseQuestionJob;
 use App\Jobs\NextQuestionJob;
 use App\Models\Answer;
 use App\Models\Attempt;
+use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Models\Option;
 use App\Models\Question;
@@ -144,6 +145,36 @@ class QuizEngine
                 'selesai_at' => now()->getTimestampMs(),
                 'jumlah_benar' => $benar,
                 'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
+            ]);
+
+            return $attempt->fresh();
+        });
+    }
+
+    /**
+     * Kumpulkan pekerjaan peserta atas perintah admin, tanpa menunggu
+     * peserta menekan tombol Selesai. Skor dihitung dari jawaban tersimpan.
+     */
+    public function kumpulkanPaksa(Attempt $attempt): Attempt
+    {
+        $attempt->loadMissing('quizSession');
+
+        if ($attempt->quizSession->mode === 'acak') {
+            return $this->selesaikanAcak($attempt);
+        }
+
+        return DB::transaction(function () use ($attempt) {
+            $attempt = Attempt::lockForUpdate()->findOrFail($attempt->id);
+
+            if ($attempt->status === 'selesai') {
+                return $attempt;
+            }
+
+            $this->hitungUlangSkorSerempak($attempt->id);
+
+            $attempt->update([
+                'status' => 'selesai',
+                'selesai_at' => now()->getTimestampMs(),
             ]);
 
             return $attempt->fresh();
@@ -583,6 +614,7 @@ class QuizEngine
             'status' => $session->status,
             'server_now' => now()->getTimestampMs(),
             'total_peserta' => $session->attempts()->count(),
+            'peringatan' => $this->peringatanTerbaru($session),
         ];
 
         if ($session->status === 'lobby' || $session->status === 'draft') {
@@ -608,8 +640,43 @@ class QuizEngine
             'total' => $attempts->count(),
             'selesai' => $selesai,
             'rata_terjawab' => $attempts->count() > 0 ? round($terjawab / $attempts->count(), 1) : 0,
+            'leaderboard_live' => (bool) $session->leaderboard_live,
             'top5' => $session->leaderboard_live ? $this->leaderboard($session) : [],
         ];
+    }
+
+    /**
+     * Kejadian terbaru untuk notifikasi layar. Dipakai juga oleh polling
+     * 3 detik, sehingga peringatan tetap tampil saat websocket terputus.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function peringatanTerbaru(QuizSession $session): array
+    {
+        return AttemptEvent::query()
+            ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
+            ->where('created_at', '>=', now()->subMinutes(5))
+            ->with(['attempt' => fn ($q) => $q->with('user')->withCount('events')])
+            ->orderByDesc('id')
+            ->limit(6)
+            ->get()
+            ->reverse()
+            ->values()
+            ->map(function (AttemptEvent $kejadian) {
+                $label = AttemptEvent::label($kejadian->tipe);
+
+                return [
+                    'id' => $kejadian->id,
+                    'nama' => $kejadian->attempt?->user?->nama ?? 'Peserta',
+                    'username' => $kejadian->attempt?->user?->username ?? '-',
+                    'tipe' => $kejadian->tipe,
+                    'pesan' => $label['pesan'],
+                    'level' => $label['level'],
+                    'waktu' => $kejadian->created_at?->format('H:i:s'),
+                    'jumlah_pelanggaran' => $kejadian->attempt?->events_count ?? 1,
+                ];
+            })
+            ->all();
     }
 
     private function statusSerempak(QuizSession $session): array
@@ -627,6 +694,7 @@ class QuizEngine
             'total' => $skor,
             'ends_at' => $session->soal_berakhir_at,
             'jeda_detik' => $session->jeda_detik,
+            'leaderboard_live' => (bool) $session->leaderboard_live,
         ];
 
         if ($sessionQuestion !== null) {

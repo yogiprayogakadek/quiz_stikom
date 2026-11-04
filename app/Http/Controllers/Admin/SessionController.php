@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Services\QuizEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -255,6 +257,92 @@ class SessionController extends Controller
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_updated']);
 
         return back()->with('sukses', 'Daftar peserta hadir berhasil disimpan (' . count($selectedIds) . ' peserta dipilih).');
+    }
+
+    /**
+     * Kumpulkan pekerjaan seorang peserta saat sesi masih berjalan.
+     */
+    public function forceFinish(Request $request, QuizSession $session, Attempt $attempt, QuizEngine $engine): RedirectResponse
+    {
+        $this->pastikanAttemptMilikSesi($session, $attempt);
+
+        if ($session->status !== 'berjalan' || $attempt->status !== 'berjalan') {
+            throw ValidationException::withMessages([
+                'peserta' => 'Hanya pekerjaan yang sedang berjalan yang bisa dikumpulkan.',
+            ]);
+        }
+
+        $attempt->loadMissing('user');
+        $nama = $attempt->user?->nama ?? 'Peserta';
+        $username = $attempt->user?->username;
+
+        $engine->kumpulkanPaksa($attempt);
+
+        Log::notice('Admin mengumpulkan pekerjaan peserta secara paksa.', [
+            'admin_id' => $request->user()->id,
+            'admin_username' => $request->user()->username,
+            'attempt_id' => $attempt->id,
+            'peserta' => $nama,
+            'peserta_username' => $username,
+            'quiz_session_id' => $session->id,
+        ]);
+
+        $fresh = $session->fresh();
+        $engine->siarkanDisplay($fresh);
+        SesiStatusUpdated::safeDispatch($fresh, ['action' => 'attempt_dikumpulkan']);
+
+        return back()->with('sukses', 'Pekerjaan ' . $nama . ' dikumpulkan. Nilai dihitung dari jawaban yang tersimpan.');
+    }
+
+    /**
+     * Keluarkan peserta dari sesi: cabut izin ikut serta dan hapus attempt-nya.
+     */
+    public function kick(Request $request, QuizSession $session, Attempt $attempt, QuizEngine $engine): RedirectResponse
+    {
+        $this->pastikanAttemptMilikSesi($session, $attempt);
+
+        if (! in_array($session->status, ['lobby', 'berjalan'], true)) {
+            throw ValidationException::withMessages([
+                'peserta' => 'Peserta hanya bisa dikeluarkan saat lobby atau sesi berjalan.',
+            ]);
+        }
+
+        $attempt->loadMissing('user');
+        $nama = $attempt->user?->nama ?? 'Peserta';
+        $username = $attempt->user?->username;
+        $userId = $attempt->user_id;
+
+        DB::transaction(function () use ($session, $attempt, $userId) {
+            // Sesi tanpa daftar peserta berarti terbuka untuk semua. Kunci daftarnya
+            // dulu supaya peserta yang dikeluarkan tidak bisa langsung bergabung lagi.
+            $diizinkan = $session->allowedParticipants()->pluck('users.id')->all();
+
+            if ($diizinkan === []) {
+                $diizinkan = User::where('role', 'peserta')->pluck('id')->all();
+            }
+
+            $session->allowedParticipants()->sync(array_values(array_diff($diizinkan, [$userId])));
+            $attempt->delete();
+        });
+
+        Log::notice('Admin mengeluarkan peserta dari sesi.', [
+            'admin_id' => $request->user()->id,
+            'admin_username' => $request->user()->username,
+            'peserta' => $nama,
+            'peserta_username' => $username,
+            'quiz_session_id' => $session->id,
+        ]);
+
+        $fresh = $session->fresh();
+        $engine->siarkanDisplay($fresh);
+        SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_dikeluarkan']);
+
+        return back()->with('sukses', $nama . ' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
+    }
+
+    private function pastikanAttemptMilikSesi(QuizSession $session, Attempt $attempt): void
+    {
+        abort_unless((int) $attempt->quiz_session_id === (int) $session->id, 404);
     }
 
     public function close(QuizSession $session, QuizEngine $engine): RedirectResponse

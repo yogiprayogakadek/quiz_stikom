@@ -10,6 +10,7 @@
             audioAktif: true,
             audioCtx: null,
             peringatanList: [],
+            peringatanDilihat: {},
             tampilkanSkor: localStorage.getItem('display_tampilkan_skor') !== 'false',
             toggleSkor() {
                 this.tampilkanSkor = !this.tampilkanSkor;
@@ -89,10 +90,18 @@
                     console.warn('Audio play error:', e);
                 }
             },
-            tambahPeringatan(item) {
-                const id = Date.now() + Math.random().toString(36).substring(2, 6);
+            tambahPeringatan(item, bunyikan = true) {
+                const kunci = item.id
+                    ? 'kejadian-' + item.id
+                    : [item.tipe, item.username, item.waktu, item.jumlah_pelanggaran].join('|');
+
+                if (this.peringatanDilihat[kunci]) {
+                    return;
+                }
+                this.peringatanDilihat[kunci] = true;
+
                 const data = {
-                    id,
+                    id: kunci,
                     nama: item.nama || 'Peserta',
                     username: item.username || '',
                     pesan: item.pesan || 'Aktivitas mencurigakan terdeteksi',
@@ -107,10 +116,12 @@
                     this.peringatanList.pop();
                 }
 
-                this.bunyikanPeringatan(data.level);
+                if (bunyikan) {
+                    this.bunyikanPeringatan(data.level);
+                }
 
                 setTimeout(() => {
-                    this.hapusPeringatan(id);
+                    this.hapusPeringatan(data.id);
                 }, data.level === 'danger' ? 10000 : 7000);
             },
             hapusPeringatan(id) {
@@ -118,7 +129,10 @@
             },
             async muat() {
                 try {
-                    const response = await fetch(config.stateUrl, { headers: { Accept: 'application/json' } });
+                    const response = await fetch(config.stateUrl, {
+                        headers: { Accept: 'application/json' },
+                        cache: 'no-store',
+                    });
                     if (!response.ok) {
                         throw new Error('gagal');
                     }
@@ -131,12 +145,17 @@
                 }
             },
             terapkan(data) {
+                const pertamaKali = this.state === null;
                 this.state = data;
                 this.offset = Date.now() - data.server_now;
                 this.target = data.fase === 'jeda'
                     ? (data.ends_at ?? 0) + ((data.jeda_detik ?? 0) * 1000)
                     : (data.ends_at ?? 0);
                 this.hitung();
+
+                // Sumber cadangan saat websocket terputus: peringatan terbaru
+                // ikut terbawa di polling 3 detik. Id mencegah duplikat.
+                (data.peringatan ?? []).forEach((item) => this.tambahPeringatan(item, !pertamaKali));
             },
             hitung() {
                 if (!this.target) {
@@ -391,7 +410,12 @@
                         </template>
 
                         <template x-if="!state.top5 || state.top5.length === 0">
-                            <p class="mt-6 text-xl text-ink-muted">Belum ada peserta yang selesai. Leaderboard muncul setelah peserta pertama menyelesaikan semua soal.</p>
+                            <p
+                                class="mt-6 text-xl text-ink-muted"
+                                x-text="state.leaderboard_live
+                                    ? 'Belum ada peserta yang selesai. Leaderboard muncul setelah peserta pertama menyelesaikan semua soal.'
+                                    : 'Leaderboard live dimatikan untuk sesi ini. Skor tetap dihitung dan tersedia di laporan akhir.'"
+                            ></p>
                         </template>
                     </div>
                 </section>
@@ -466,7 +490,12 @@
                             </ol>
                         </template>
                         <template x-if="!state.top5 || state.top5.length === 0">
-                            <p class="mt-5 text-xl text-ink-muted">Belum ada skor yang bisa ditampilkan.</p>
+                            <p
+                                class="mt-5 text-xl text-ink-muted"
+                                x-text="state.leaderboard_live
+                                    ? 'Belum ada skor yang bisa ditampilkan.'
+                                    : 'Leaderboard live dimatikan untuk sesi ini. Skor tetap dihitung dan tersedia di laporan akhir.'"
+                            ></p>
                         </template>
                     </div>
                 </section>

@@ -356,7 +356,31 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
+
+                                        @if ($session->status === 'berjalan' && $attempt->status === 'berjalan')
+                                            <form
+                                                method="POST"
+                                                action="{{ route('admin.sessions.attempts.finish', [$session, $attempt]) }}"
+                                                onsubmit="return confirm('Kumpulkan pekerjaan peserta ini sekarang? Nilai dihitung dari jawaban yang sudah tersimpan.')"
+                                            >
+                                                @csrf
+                                                <button type="submit" class="btn btn-secondary px-3 whitespace-nowrap">Kumpulkan</button>
+                                            </form>
+                                        @endif
+
+                                        @if (in_array($session->status, ['lobby', 'berjalan'], true))
+                                            <form
+                                                method="POST"
+                                                action="{{ route('admin.sessions.attempts.kick', [$session, $attempt]) }}"
+                                                onsubmit="return confirm('Keluarkan peserta ini dari sesi? Jawaban yang sudah tersimpan ikut terhapus dan peserta tidak bisa bergabung lagi.')"
+                                            >
+                                                @csrf
+                                                <button type="submit" class="btn btn-soft-danger px-3 whitespace-nowrap">Keluarkan</button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
