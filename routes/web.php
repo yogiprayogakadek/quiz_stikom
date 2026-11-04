@@ -83,9 +83,11 @@ Route::middleware(['auth', 'role:peserta'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'peserta'])->name('peserta.dashboard');
     Route::get('/dashboard/state', [DashboardController::class, 'pesertaState'])->name('peserta.dashboard.state');
 
-    Route::post('/dashboard/kelas/gabung', [PesertaKelasController::class, 'join'])
+    Route::get('/kelas', [PesertaKelasController::class, 'index'])->name('peserta.kelas.index');
+    Route::get('/kelas/{kelas}', [PesertaKelasController::class, 'show'])->name('peserta.kelas.show');
+    Route::post('/kelas/{kelas}/masuk', [PesertaKelasController::class, 'masuk'])
         ->middleware('throttle:10,1')
-        ->name('peserta.kelas.join');
+        ->name('peserta.kelas.masuk');
 
     Route::post('/sesi/{session}/gabung', [PesertaSessionController::class, 'join'])->name('peserta.session.join');
     Route::get('/sesi/{session}/kerjakan', [PesertaSessionController::class, 'play'])->name('peserta.session.play');

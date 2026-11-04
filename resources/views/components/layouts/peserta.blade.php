@@ -21,7 +21,7 @@
             </a>
 
             <div class="flex flex-wrap items-center gap-2">
-                <nav aria-label="Navigasi peserta">
+                <nav aria-label="Navigasi peserta" class="flex flex-wrap items-center gap-2">
                     <a
                         href="{{ route('peserta.dashboard') }}"
                         class="nav-link {{ request()->routeIs('peserta.dashboard') ? 'nav-link-active' : '' }}"
@@ -29,6 +29,14 @@
                     >
                         <x-icon name="home" :size="20" />
                         Dashboard
+                    </a>
+                    <a
+                        href="{{ route('peserta.kelas.index') }}"
+                        class="nav-link {{ request()->routeIs('peserta.kelas.*') ? 'nav-link-active' : '' }}"
+                        @if (request()->routeIs('peserta.kelas.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="kelas" :size="20" />
+                        Kelas
                     </a>
                 </nav>
                 <span class="hidden h-8 w-px bg-outline sm:block"></span>

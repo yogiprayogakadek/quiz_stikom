@@ -48,29 +48,56 @@ class KelasTest extends TestCase
             ->assertSee($peserta->nama);
     }
 
-    public function test_peserta_gabung_kelas_dengan_pin(): void
+    public function test_peserta_memilih_kelas_lalu_masuk_dengan_pin(): void
     {
+        $admin = $this->admin();
         $peserta = $this->peserta('pin');
         $kelas = Kelas::create(['nama' => 'Kelas PIN', 'pin' => 'AB12']);
+        $quiz = Quiz::create(['judul' => 'Kuis Kelas PIN', 'created_by' => $admin->id]);
+        $kelas->quizzes()->attach($quiz->id);
 
         $this->actingAs($peserta)
             ->withSession(['auth_token' => $peserta->current_session_token])
-            ->post('/dashboard/kelas/gabung', ['pin' => 'salah'])
+            ->get('/kelas')
+            ->assertOk()
+            ->assertSee('Kelas PIN')
+            ->assertSee('Perlu PIN');
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => $peserta->current_session_token])
+            ->get("/kelas/{$kelas->id}")
+            ->assertOk()
+            ->assertSee('PIN kelas')
+            ->assertDontSee('Kuis di kelas');
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => $peserta->current_session_token])
+            ->post("/kelas/{$kelas->id}/masuk", ['pin' => 'salah'])
             ->assertSessionHasErrors('pin');
 
+        $this->assertFalse($kelas->peserta()->whereKey($peserta->id)->exists());
+
         $this->actingAs($peserta)
             ->withSession(['auth_token' => $peserta->current_session_token])
-            ->post('/dashboard/kelas/gabung', ['pin' => 'AB12'])
-            ->assertRedirect();
+            ->post("/kelas/{$kelas->id}/masuk", ['pin' => 'AB12'])
+            ->assertRedirect(route('peserta.kelas.show', $kelas));
 
         $this->assertTrue($kelas->peserta()->whereKey($peserta->id)->exists());
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => $peserta->current_session_token])
+            ->get("/kelas/{$kelas->id}")
+            ->assertOk()
+            ->assertSee('Kuis di kelas')
+            ->assertSee('Kuis Kelas PIN')
+            ->assertSee('Sesi yang dibuka');
 
         $this->actingAs($peserta)
             ->withSession(['auth_token' => $peserta->current_session_token])
             ->get('/dashboard')
             ->assertOk()
             ->assertSee('Kelas saya')
-            ->assertSee('Kelas PIN');
+            ->assertSee(route('peserta.kelas.show', $kelas));
     }
 
     public function test_sesi_kelas_hanya_tampil_untuk_anggota_kelas(): void
@@ -86,11 +113,25 @@ class KelasTest extends TestCase
             ->assertOk()
             ->assertJsonPath('sesi_tersedia.0.id', $sesi->id);
 
+        $this->actingAs($anggota)
+            ->withSession(['auth_token' => $anggota->current_session_token])
+            ->get("/kelas/{$sesi->kelas_id}")
+            ->assertOk()
+            ->assertSee('Sesi Kelas')
+            ->assertSee('Gabung sesi');
+
         $this->actingAs($luar)
             ->withSession(['auth_token' => $luar->current_session_token])
             ->getJson('/dashboard/state')
             ->assertOk()
             ->assertJsonCount(0, 'sesi_tersedia');
+
+        $this->actingAs($luar)
+            ->withSession(['auth_token' => $luar->current_session_token])
+            ->get("/kelas/{$sesi->kelas_id}")
+            ->assertOk()
+            ->assertSee('PIN kelas')
+            ->assertDontSee('Sesi Kelas');
     }
 
     public function test_peserta_di_luar_kelas_tidak_bisa_gabung_sesi_kelas(): void

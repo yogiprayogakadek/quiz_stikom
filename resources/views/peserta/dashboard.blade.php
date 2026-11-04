@@ -135,32 +135,28 @@
         <section aria-labelledby="kelas-saya">
             <div class="flex items-center justify-between gap-3">
                 <h2 id="kelas-saya" class="text-2xl">Kelas saya</h2>
-                <span class="pill pill-neutral">{{ $kelasSaya->count() }} kelas</span>
+                <a href="{{ route('peserta.kelas.index') }}" class="btn btn-ghost">Semua kelas</a>
             </div>
 
             @if ($kelasSaya->isEmpty())
-                <p class="mt-3 text-base text-ink-muted">Belum ada kelas. Masukkan PIN kelas dari admin untuk bergabung.</p>
+                <p class="mt-3 text-base text-ink-muted">
+                    Belum ada kelas. Buka <a href="{{ route('peserta.kelas.index') }}" class="font-bold text-brand-deep underline">daftar kelas</a> dan masuk dengan PIN dari admin.
+                </p>
             @else
                 <div class="mt-4 grid gap-5 md:grid-cols-2">
                     @foreach ($kelasSaya as $kelas)
-                        <article class="card">
+                        <article class="card card-hover flex flex-col">
                             <h3 class="text-xl font-bold text-ink">{{ $kelas->nama }}</h3>
                             <p class="mt-1 text-base text-ink-muted">
                                 {{ $kelas->quizzes_count }} kuis · {{ $kelas->sessions_count }} sesi
                             </p>
+                            <div class="mt-auto pt-4">
+                                <a href="{{ route('peserta.kelas.show', $kelas) }}" class="btn btn-secondary">Masuk kelas</a>
+                            </div>
                         </article>
                     @endforeach
                 </div>
             @endif
-
-            <form method="POST" action="{{ route('peserta.kelas.join') }}" class="card mt-4">
-                @csrf
-                <label for="pin" class="label">Gabung kelas dengan PIN</label>
-                <div class="flex flex-col gap-3 sm:flex-row">
-                    <input id="pin" name="pin" type="text" class="input sm:max-w-xs" required maxlength="12" autocomplete="off" placeholder="PIN dari admin">
-                    <button type="submit" class="btn btn-primary">Gabung kelas</button>
-                </div>
-            </form>
         </section>
 
         <section aria-labelledby="sesi-tersedia">
