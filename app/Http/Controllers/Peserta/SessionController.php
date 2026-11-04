@@ -80,7 +80,7 @@ class SessionController extends Controller
             'attempt_status' => $attempt->status,
             'skor_total' => $attempt->skor_total,
             'jumlah_benar' => $attempt->jumlah_benar,
-            'total_peserta' => $session->attempts()->count(),
+            'total_peserta' => $session->attempts()->bergabung()->count(),
             'result_url' => route('peserta.session.result', $session),
         ];
 
@@ -190,7 +190,7 @@ class SessionController extends Controller
             ]
         );
 
-        $totalPeserta = $session->attempts()->count();
+        $totalPeserta = $session->attempts()->bergabung()->count();
         $sudahMenjawab = Answer::query()
             ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
             ->where('question_id', $attemptQuestion->question_id)

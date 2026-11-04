@@ -11,6 +11,7 @@ use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\QuizEngine;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +69,47 @@ class SessionController extends Controller
     {
         $session->load('quiz');
 
+        $data = $this->dataMonitor($session);
+
+        $allParticipants = User::where('role', 'peserta')
+            ->orderBy('nama')
+            ->get();
+
+        $allowedParticipantIds = $session->allowedParticipants()->pluck('users.id')->all();
+
+        // Jika belum ada filter peserta khusus yang disimpan, tandai semua peserta terdaftar secara default
+        if (empty($allowedParticipantIds)) {
+            $allowedParticipantIds = $allParticipants->pluck('id')->all();
+        }
+
+        return view('admin.sessions.show', $data + compact(
+            'session',
+            'allParticipants',
+            'allowedParticipantIds'
+        ));
+    }
+
+    /**
+     * Potongan halaman yang dipakai polling halaman admin supaya daftar
+     * peserta dan statusnya ikut berubah saat peserta bergabung atau menjawab.
+     */
+    public function monitor(QuizSession $session): JsonResponse
+    {
+        $session->load('quiz');
+
+        $data = $this->dataMonitor($session) + ['session' => $session];
+
+        return response()->json([
+            'status' => view('admin.sessions._status', $data)->render(),
+            'peserta' => view('admin.sessions._peserta', $data)->render(),
+        ]);
+    }
+
+    /**
+     * @return array{attempts: \Illuminate\Database\Eloquent\Collection<int, Attempt>, soalAktif: mixed, sudahMenjawab: int, totalPeserta: int}
+     */
+    private function dataMonitor(QuizSession $session): array
+    {
         $attempts = $session->attempts()
             ->with('user')
             ->withCount('events')
@@ -88,28 +130,12 @@ class SessionController extends Controller
                 ->count()
             : 0;
 
-        $totalPeserta = $attempts->count();
-
-        $allParticipants = User::where('role', 'peserta')
-            ->orderBy('nama')
-            ->get();
-
-        $allowedParticipantIds = $session->allowedParticipants()->pluck('users.id')->all();
-
-        // Jika belum ada filter peserta khusus yang disimpan, tandai semua peserta terdaftar secara default
-        if (empty($allowedParticipantIds)) {
-            $allowedParticipantIds = $allParticipants->pluck('id')->all();
-        }
-
-        return view('admin.sessions.show', compact(
-            'session',
-            'attempts',
-            'soalAktif',
-            'sudahMenjawab',
-            'totalPeserta',
-            'allParticipants',
-            'allowedParticipantIds'
-        ));
+        return [
+            'attempts' => $attempts,
+            'soalAktif' => $soalAktif,
+            'sudahMenjawab' => $sudahMenjawab,
+            'totalPeserta' => $attempts->whereNotNull('bergabung_at')->count(),
+        ];
     }
 
     public function edit(QuizSession $session): View

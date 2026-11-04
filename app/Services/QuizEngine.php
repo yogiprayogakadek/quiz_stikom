@@ -235,7 +235,9 @@ class QuizEngine
                     ]);
                 }
 
-                $attempts = Attempt::where('quiz_session_id', $session->id)->get();
+                $attempts = Attempt::where('quiz_session_id', $session->id)
+                    ->bergabung()
+                    ->get();
 
                 foreach ($attempts as $attempt) {
                     $this->buatAttemptQuestions($attempt, $questions, $session->acak_opsi);
@@ -447,6 +449,12 @@ class QuizEngine
                 continue;
             }
 
+            // Peserta yang tidak pernah menekan Gabung tidak ikut ditutup.
+            // Attempt-nya tetap ada sebagai catatan daftar hadir dari admin.
+            if (! $attempt->sudahBergabung()) {
+                continue;
+            }
+
             if ($attempt->status === 'berjalan' && $session->mode === 'acak') {
                 $this->hitungSelesaiAcakTerkunci($attempt);
             } else {
@@ -577,6 +585,7 @@ class QuizEngine
     public function leaderboard(QuizSession $session, int $limit = 5): array
     {
         return $session->attempts()
+            ->bergabung()
             ->when($session->mode === 'acak', fn ($q) => $q->where('status', 'selesai'))
             ->when($session->mode === 'serempak', fn ($q) => $q->where('status', '!=', 'menunggu'))
             ->orderByDesc('skor_total')
@@ -619,13 +628,13 @@ class QuizEngine
             'mode' => $session->mode,
             'status' => $session->status,
             'server_now' => now()->getTimestampMs(),
-            'total_peserta' => $session->attempts()->count(),
+            'total_peserta' => $session->attempts()->bergabung()->count(),
             'peringatan' => $this->peringatanTerbaru($session),
         ];
 
         if ($session->status === 'lobby' || $session->status === 'draft') {
             return $base + [
-                'peserta' => $session->attempts()->with('user')->get()->pluck('user.nama')->all(),
+                'peserta' => $session->attempts()->bergabung()->with('user')->get()->pluck('user.nama')->all(),
             ];
         }
 
@@ -637,7 +646,7 @@ class QuizEngine
             return $base + $this->statusSerempak($session);
         }
 
-        $attempts = $session->attempts()->get();
+        $attempts = $session->attempts()->bergabung()->get();
         $selesai = $attempts->where('status', 'selesai')->count();
         $terjawab = Answer::whereIn('attempt_id', $attempts->pluck('id'))->count();
 
@@ -691,7 +700,7 @@ class QuizEngine
         $urutan = $session->soal_aktif_urutan;
         $sessionQuestion = $session->sessionQuestions()->where('urutan', $urutan)->with('question.options')->first();
 
-        $skor = $session->attempts()->count();
+        $skor = $session->attempts()->bergabung()->count();
 
         $data = [
             'fase' => $session->fase,
@@ -728,7 +737,7 @@ class QuizEngine
 
     private function hasilAkhir(QuizSession $session): array
     {
-        $attempts = $session->attempts()->with('user')->get();
+        $attempts = $session->attempts()->bergabung()->with('user')->get();
         $totalSoal = $session->mode === 'serempak'
             ? max(1, $session->sessionQuestions()->count())
             : max(1, (int) $attempts->max(fn (Attempt $a) => $a->attemptQuestions()->count()));

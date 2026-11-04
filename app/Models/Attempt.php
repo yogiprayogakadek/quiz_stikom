@@ -42,6 +42,15 @@ class Attempt extends Model
         return $this->bergabung_at !== null;
     }
 
+    /**
+     * Batasi ke peserta yang benar-benar menekan Gabung, bukan attempt yang
+     * hanya disiapkan admin dari daftar hadir.
+     */
+    public function scopeBergabung(Builder $query): Builder
+    {
+        return $query->whereNotNull('bergabung_at');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class)->withTrashed();

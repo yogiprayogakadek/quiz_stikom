@@ -23,6 +23,7 @@ class ReportController extends Controller
         $tinjau = $request->boolean('tinjau');
 
         $attempts = $session->attempts()
+            ->bergabung()
             ->with('user')
             ->withCount(['events', 'answers'])
             ->when($tinjau, fn ($q) => $q->has('events', '>=', 3))
@@ -30,9 +31,9 @@ class ReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        $totalAttempt = $session->attempts()->count();
-        $selesai = $session->attempts()->where('status', 'selesai')->count();
-        $perluTinjau = $session->attempts()->has('events', '>=', 3)->count();
+        $totalAttempt = $session->attempts()->bergabung()->count();
+        $selesai = $session->attempts()->bergabung()->where('status', 'selesai')->count();
+        $perluTinjau = $session->attempts()->bergabung()->has('events', '>=', 3)->count();
 
         $statistikSoal = $this->statistikSoal($session);
 
@@ -74,6 +75,7 @@ class ReportController extends Controller
     public function export(QuizSession $session): StreamedResponse
     {
         $attempts = $session->attempts()
+            ->bergabung()
             ->with('user')
             ->withCount('events')
             ->orderByDesc('skor_total')

@@ -110,69 +110,8 @@
             </p>
         </section>
 
-        <section class="card" aria-labelledby="status-langsung">
-            <h2 id="status-langsung" class="text-2xl">Status langsung</h2>
-
-            @if ($session->status === 'lobby' || $session->status === 'draft')
-                <p class="mt-3 text-base text-ink-muted">Peserta yang sudah bergabung</p>
-                <p class="display-number mt-1 text-5xl">{{ $totalPeserta }}</p>
-                @if ($attempts->isNotEmpty())
-                    <ul class="mt-3 space-y-1 text-base text-ink">
-                        @foreach ($attempts as $attempt)
-                            <li class="truncate">{{ $attempt->user?->nama ?? '(peserta dihapus)' }}</li>
-                        @endforeach
-                    </ul>
-                @else
-                    <p class="mt-3 text-base text-ink-muted">Belum ada peserta. Minta peserta masuk dan menekan Gabung dari dashboard mereka.</p>
-                @endif
-            @elseif ($session->status === 'berjalan' && $session->mode === 'acak')
-                @php $selesai = $attempts->where('status', 'selesai')->count(); @endphp
-                <p class="mt-3 text-base text-ink-muted">Peserta selesai</p>
-                <p class="display-number mt-1 text-5xl">{{ $selesai }}<span class="text-3xl text-ink-muted">/{{ $totalPeserta }}</span></p>
-                <p class="mt-3 text-base text-ink-muted">Sisa peserta yang masih mengerjakan: {{ $totalPeserta - $selesai }}</p>
-            @elseif ($session->status === 'berjalan' && $session->mode === 'serempak')
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <x-status-badge :status="$session->status" />
-                    <span class="pill pill-neutral">{{ $session->fase === 'jeda' ? 'Jeda' : 'Soal terbuka' }}</span>
-                    <span class="pill pill-brand">Soal {{ $session->soal_aktif_urutan ?? '-' }} dari {{ $session->sessionQuestions()->count() }}</span>
-                </div>
-                <p class="mt-3 text-base text-ink-muted">Sudah menjawab</p>
-                <p class="display-number mt-1 text-5xl">{{ $sudahMenjawab }}<span class="text-3xl text-ink-muted">/{{ $totalPeserta }}</span></p>
-
-                @if ($session->fase === 'soal_terbuka' && $session->soal_berakhir_at)
-                    <div
-                        x-data="{
-                            sisa: 0,
-                            format(n) {
-                                const menit = Math.floor(n / 60);
-                                const detik = n % 60;
-                                return menit + ':' + String(detik).padStart(2, '0');
-                            },
-                            init() {
-                                const akhir = {{ $session->soal_berakhir_at }};
-                                const selisih = Date.now() - {{ now()->getTimestampMs() }};
-                                const hitung = () => {
-                                    this.sisa = Math.max(0, Math.round((akhir - (Date.now() - selisih)) / 1000));
-                                };
-                                hitung();
-                                setInterval(hitung, 250);
-                            }
-                        }"
-                        class="mt-4 rounded-2xl bg-sun-soft px-4 py-3"
-                    >
-                        <p class="text-base font-bold text-sun-deep">Sisa waktu soal</p>
-                        <p class="timer mt-1 text-4xl text-ink" x-text="format(sisa)">0:00</p>
-                    </div>
-                @else
-                    <p class="mt-4 rounded-2xl bg-brand-soft px-4 py-3 text-base text-brand-deep">
-                        Jeda {{ $session->jeda_detik }} detik. Soal berikutnya dibuka otomatis oleh server.
-                    </p>
-                @endif
-            @else
-                <p class="mt-3 text-base text-ink-muted">Sesi selesai. Semua attempt sudah dikunci.</p>
-                <p class="display-number mt-1 text-5xl">{{ $totalPeserta }}</p>
-                <p class="text-base text-ink-muted">peserta mengikuti sesi ini.</p>
-            @endif
+        <section class="card" id="monitor-status" aria-labelledby="status-langsung">
+            @include('admin.sessions._status')
         </section>
     </div>
 
@@ -185,7 +124,7 @@
                     'id' => $p->id,
                     'nama' => $p->nama,
                     'username' => $p->username,
-                    'di_lobby' => $attempts->contains('user_id', $p->id)
+                    'di_lobby' => $attempts->whereNotNull('bergabung_at')->contains('user_id', $p->id)
                 ])) }},
                 terpilih: {{ json_encode($allowedParticipantIds) }},
                 cari: '',
@@ -315,84 +254,8 @@
         </section>
     @endif
 
-    <section class="mt-6 card" aria-labelledby="peserta-sesi">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="peserta-sesi" class="text-2xl">Peserta di sesi ini</h2>
-            <a href="{{ route('admin.reports.session', $session) }}" class="btn btn-secondary">Lihat laporan</a>
-        </div>
-
-        @if ($attempts->isEmpty())
-            <p class="mt-3 text-base text-ink-muted">Belum ada peserta yang bergabung.</p>
-        @else
-            <div class="mt-4 overflow-x-auto">
-                <table class="table">
-                    <caption class="sr-only">Peserta dan status attempt</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Nama</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Benar</th>
-                            <th scope="col">Skor</th>
-                            <th scope="col">Kejadian</th>
-                            <th scope="col">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($attempts as $attempt)
-                            <tr>
-                                <td class="font-bold text-ink">{{ $attempt->user?->nama ?? '(peserta dihapus)' }}</td>
-                                <td>
-                                    <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
-                                        {{ ucfirst($attempt->status) }}
-                                    </span>
-                                    @if (! $attempt->sudahBergabung())
-                                        <div class="mt-2">
-                                            <span class="pill pill-sun">Belum bergabung</span>
-                                        </div>
-                                    @endif
-                                </td>
-                                <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
-                                <td class="font-mono">{{ $attempt->skor_total }}</td>
-                                <td>
-                                    @if ($attempt->events_count >= 3)
-                                        <span class="pill pill-coral">Perlu ditinjau</span>
-                                    @else
-                                        <span class="text-ink-muted">{{ $attempt->events_count }}</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
-
-                                        @if ($session->status === 'berjalan' && $attempt->status === 'berjalan')
-                                            <form
-                                                method="POST"
-                                                action="{{ route('admin.sessions.attempts.finish', [$session, $attempt]) }}"
-                                                onsubmit="return confirm('Kumpulkan pekerjaan peserta ini sekarang? Nilai dihitung dari jawaban yang sudah tersimpan.')"
-                                            >
-                                                @csrf
-                                                <button type="submit" class="btn btn-secondary px-3 whitespace-nowrap">Kumpulkan</button>
-                                            </form>
-                                        @endif
-
-                                        @if (in_array($session->status, ['lobby', 'berjalan'], true))
-                                            <form
-                                                method="POST"
-                                                action="{{ route('admin.sessions.attempts.kick', [$session, $attempt]) }}"
-                                                onsubmit="return confirm('Keluarkan peserta ini dari sesi? Jawaban yang sudah tersimpan ikut terhapus dan peserta tidak bisa bergabung lagi.')"
-                                            >
-                                                @csrf
-                                                <button type="submit" class="btn btn-soft-danger px-3 whitespace-nowrap">Keluarkan</button>
-                                            </form>
-                                        @endif
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
+    <section class="mt-6 card" id="monitor-peserta" aria-labelledby="peserta-sesi">
+        @include('admin.sessions._peserta')
     </section>
 
     @if ($session->mode === 'serempak' && $soalAktif !== null)
@@ -401,5 +264,39 @@
             <p class="mt-3 whitespace-pre-line text-lg text-ink">{{ $soalAktif->question->teks }}</p>
             <p class="mt-2 text-base text-ink-muted">Durasi {{ $soalAktif->question->durasi_detik }} detik. Jawaban benar tidak ditampilkan di sini agar layar admin tetap aman saat dibagikan.</p>
         </section>
+    @endif
+
+    @if (in_array($session->status, ['lobby', 'berjalan'], true))
+        <script>
+            (() => {
+                const url = @json(route('admin.sessions.monitor', $session));
+                const bagian = {
+                    status: document.getElementById('monitor-status'),
+                    peserta: document.getElementById('monitor-peserta'),
+                };
+                let terakhir = null;
+
+                const perbarui = async () => {
+                    if (document.hidden) return;
+
+                    try {
+                        const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+                        if (!res.ok || res.redirected) return;
+
+                        const data = await res.json();
+                        const kunci = data.status + data.peserta;
+                        if (kunci === terakhir) return;
+
+                        terakhir = kunci;
+                        bagian.status.innerHTML = data.status;
+                        bagian.peserta.innerHTML = data.peserta;
+                    } catch (e) {
+                        // Jaringan putus sesaat. Putaran berikutnya mencoba lagi.
+                    }
+                };
+
+                setInterval(perbarui, 5000);
+            })();
+        </script>
     @endif
 </x-layouts.admin>
