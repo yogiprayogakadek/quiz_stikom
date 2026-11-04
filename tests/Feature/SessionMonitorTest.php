@@ -74,6 +74,54 @@ class SessionMonitorTest extends TestCase
         $this->assertSame(1, $peringatan['jumlah_pelanggaran']);
     }
 
+    public function test_peserta_belum_gabung_tidak_bisa_memulai_mengerjakan(): void
+    {
+        [$session, $attempt, $peserta] = $this->sesiAcakMenungguAttempt();
+
+        $response = $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->post("/sesi/{$session->id}/mulai");
+
+        $response->assertRedirect(route('peserta.dashboard'));
+        $response->assertSessionHasErrors('gabung');
+
+        $attempt->refresh();
+        $this->assertSame('menunggu', $attempt->status);
+        $this->assertNull($attempt->mulai_at);
+    }
+
+    public function test_peserta_harus_gabung_dulu_sebelum_mulai_mengerjakan(): void
+    {
+        [$session, $attempt, $peserta] = $this->sesiAcakMenungguAttempt();
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->post("/sesi/{$session->id}/gabung")
+            ->assertRedirect(route('peserta.dashboard'));
+
+        $this->assertNotNull($attempt->fresh()->bergabung_at);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->post("/sesi/{$session->id}/mulai")
+            ->assertRedirect(route('peserta.attempt.show', $attempt));
+
+        $this->assertSame('berjalan', $attempt->fresh()->status);
+        $this->assertSame(1, $attempt->attemptQuestions()->count());
+    }
+
+    public function test_dashboard_menyembunyikan_attempt_yang_belum_digabung(): void
+    {
+        [$session, , $peserta] = $this->sesiAcakMenungguAttempt();
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->getJson('/dashboard/state')
+            ->assertOk()
+            ->assertJsonPath('sesi_tersedia.0.id', $session->id)
+            ->assertJsonPath('sesi_tersedia.0.attempt', null);
+    }
+
     /**
      * @return array{0: User, 1: QuizSession, 2: Attempt, 3: User, 4: User}
      */
@@ -138,6 +186,7 @@ class SessionMonitorTest extends TestCase
             'status' => 'berjalan',
             'mulai_at' => now()->getTimestampMs(),
             'batas_akhir_at' => now()->addHour()->getTimestampMs(),
+            'bergabung_at' => now(),
         ]);
 
         AttemptQuestion::create([
@@ -157,5 +206,65 @@ class SessionMonitorTest extends TestCase
         ]);
 
         return [$admin, $session, $attempt, $peserta, $lain];
+    }
+
+    /**
+     * Sesi acak yang sudah berjalan, dengan attempt yang disiapkan admin
+     * (status menunggu) tetapi pesertanya belum menekan Gabung.
+     *
+     * @return array{0: QuizSession, 1: Attempt, 2: User}
+     */
+    private function sesiAcakMenungguAttempt(): array
+    {
+        $admin = User::create([
+            'nama' => 'Admin',
+            'username' => 'admin-uji',
+            'password' => Hash::make('rahasia'),
+            'role' => 'admin',
+            'current_session_token' => 'token-admin',
+        ]);
+
+        $peserta = User::create([
+            'nama' => 'Peserta Uji',
+            'username' => 'peserta-uji',
+            'password' => Hash::make('rahasia'),
+            'role' => 'peserta',
+            'current_session_token' => 'token-peserta',
+        ]);
+
+        $question = Question::create([
+            'teks' => 'Ibu kota Indonesia?',
+            'durasi_detik' => 60,
+        ]);
+
+        Option::create([
+            'question_id' => $question->id,
+            'teks' => 'Jakarta',
+            'is_correct' => true,
+        ]);
+
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Uji',
+            'created_by' => $admin->id,
+        ]);
+
+        $quiz->questions()->attach($question->id);
+
+        $session = QuizSession::create([
+            'quiz_id' => $quiz->id,
+            'nama' => 'Sesi Uji',
+            'mode' => 'acak',
+            'status' => 'berjalan',
+            'display_token' => 'token-uji',
+            'created_by' => $admin->id,
+        ]);
+
+        $attempt = Attempt::create([
+            'user_id' => $peserta->id,
+            'quiz_session_id' => $session->id,
+            'status' => 'menunggu',
+        ]);
+
+        return [$session, $attempt, $peserta];
     }
 }

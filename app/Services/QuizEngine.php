@@ -26,14 +26,14 @@ class QuizEngine
 {
     public function gabung(QuizSession $session, User $user): Attempt
     {
-        return DB::transaction(function () use ($session, $user) {
+        $attempt = DB::transaction(function () use ($session, $user) {
             $session = QuizSession::lockForUpdate()->findOrFail($session->id);
 
             $attempt = Attempt::where('user_id', $user->id)
                 ->where('quiz_session_id', $session->id)
                 ->first();
 
-            if ($attempt !== null) {
+            if ($attempt !== null && $attempt->sudahBergabung()) {
                 return $attempt;
             }
 
@@ -55,17 +55,23 @@ class QuizEngine
                 ]);
             }
 
-            if ($session->isPenuh()) {
-                throw ValidationException::withMessages([
-                    'gabung' => 'Kuota peserta sesi ini sudah penuh.',
+            if ($attempt === null) {
+                if ($session->isPenuh()) {
+                    throw ValidationException::withMessages([
+                        'gabung' => 'Kuota peserta sesi ini sudah penuh.',
+                    ]);
+                }
+
+                $attempt = Attempt::create([
+                    'user_id' => $user->id,
+                    'quiz_session_id' => $session->id,
+                    'status' => 'menunggu',
                 ]);
             }
 
-            return Attempt::create([
-                'user_id' => $user->id,
-                'quiz_session_id' => $session->id,
-                'status' => 'menunggu',
-            ]);
+            $attempt->update(['bergabung_at' => now()]);
+
+            return $attempt;
         });
 
         $fresh = $session->fresh();

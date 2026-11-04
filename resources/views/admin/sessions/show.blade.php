@@ -345,6 +345,11 @@
                                     <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
                                         {{ ucfirst($attempt->status) }}
                                     </span>
+                                    @if (! $attempt->sudahBergabung())
+                                        <div class="mt-2">
+                                            <span class="pill pill-sun">Belum bergabung</span>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
                                 <td class="font-mono">{{ $attempt->skor_total }}</td>

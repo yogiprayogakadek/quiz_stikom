@@ -38,7 +38,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null) {
+        if ($attempt === null || ! $attempt->sudahBergabung()) {
             return redirect()->route('peserta.dashboard')
                 ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
         }
@@ -69,7 +69,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null) {
+        if ($attempt === null || ! $attempt->sudahBergabung()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 
@@ -140,7 +140,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null) {
+        if ($attempt === null || ! $attempt->sudahBergabung()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 

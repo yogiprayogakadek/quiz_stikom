@@ -16,6 +16,7 @@ class Attempt extends Model
         'mulai_at',
         'batas_akhir_at',
         'selesai_at',
+        'bergabung_at',
         'jumlah_benar',
         'skor_total',
     ];
@@ -26,9 +27,19 @@ class Attempt extends Model
             'mulai_at' => 'integer',
             'batas_akhir_at' => 'integer',
             'selesai_at' => 'integer',
+            'bergabung_at' => 'datetime',
             'jumlah_benar' => 'integer',
             'skor_total' => 'integer',
         ];
+    }
+
+    /**
+     * Admin bisa menyiapkan attempt lebih awal, tapi peserta baru dianggap ikut
+     * setelah menekan Gabung sendiri.
+     */
+    public function sudahBergabung(): bool
+    {
+        return $this->bergabung_at !== null;
     }
 
     public function user(): BelongsTo

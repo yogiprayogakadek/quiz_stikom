@@ -26,7 +26,7 @@ class AttemptController extends Controller
             ->where('quiz_session_id', $session)
             ->first();
 
-        if ($attempt === null) {
+        if ($attempt === null || ! $attempt->sudahBergabung()) {
             return redirect()->route('peserta.dashboard')
                 ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
         }
@@ -47,6 +47,11 @@ class AttemptController extends Controller
     public function show(Attempt $attempt, QuizEngine $engine): View|RedirectResponse
     {
         abort_unless($attempt->user_id === request()->user()->id, 403);
+
+        if (! $attempt->sudahBergabung()) {
+            return redirect()->route('peserta.dashboard')
+                ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
+        }
 
         $attempt->load('quizSession.quiz');
 
@@ -104,6 +109,10 @@ class AttemptController extends Controller
     public function answer(StoreAnswerRequest $request, Attempt $attempt, QuizEngine $engine): JsonResponse
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
+
+        if (! $attempt->sudahBergabung()) {
+            return response()->json(['message' => 'Gabung sesi terlebih dahulu.'], 403);
+        }
 
         $attempt->load('quizSession');
 

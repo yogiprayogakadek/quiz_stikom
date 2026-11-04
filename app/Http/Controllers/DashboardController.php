@@ -58,6 +58,7 @@ class DashboardController extends Controller
 
         $attempts = Attempt::with('quizSession.quiz')
             ->where('user_id', $user->id)
+            ->whereNotNull('bergabung_at')
             ->orderByDesc('updated_at')
             ->get();
 
@@ -83,6 +84,7 @@ class DashboardController extends Controller
 
         $attempts = Attempt::with('quizSession.quiz')
             ->where('user_id', $user->id)
+            ->whereNotNull('bergabung_at')
             ->orderByDesc('updated_at')
             ->get();
 
