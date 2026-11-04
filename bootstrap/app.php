@@ -15,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Aplikasi berada di belakang reverse proxy (edge TLS provider). Tanpa ini
+        // Request::ip() selalu berisi IP proxy, sehingga rate limit login 5/menit
+        // berlaku untuk seluruh peserta sekaligus, bukan per pengguna.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             EnsureSingleSession::class,
             EnsurePasswordChanged::class,

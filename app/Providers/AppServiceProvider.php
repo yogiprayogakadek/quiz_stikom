@@ -6,6 +6,7 @@ use App\Models\Attempt;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -17,6 +18,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // TLS diterminasi di edge, jadi request ke PHP selalu http. Paksa https
+        // hanya kalau APP_URL memang https, supaya redirect dan asset tidak
+        // diturunkan ke http.
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
+
         RateLimiter::for('login', function (Request $request) {
             $username = mb_strtolower((string) $request->input('username'));
 
