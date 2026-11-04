@@ -10,6 +10,7 @@ class StoreSessionRequest extends FormRequest
     {
         return [
             'quiz_id' => ['required', 'integer', 'exists:quizzes,id'],
+            'kelas_id' => ['nullable', 'integer', 'exists:kelas,id'],
             'nama' => ['required', 'string', 'max:160'],
             'mode' => ['required', 'in:acak,serempak'],
             'acak_opsi' => ['boolean'],

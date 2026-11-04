@@ -43,6 +43,13 @@ class QuizEngine
                 ]);
             }
 
+            if ($session->kelas_id !== null
+                && ! $session->kelas->peserta()->where('users.id', $user->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'gabung' => 'Anda belum bergabung ke kelas '.$session->kelas->nama.'. Masukkan PIN kelas di dashboard.',
+                ]);
+            }
+
             if (! $session->isUserAllowed($user)) {
                 throw ValidationException::withMessages([
                     'gabung' => 'Anda tidak terdaftar sebagai peserta yang diizinkan untuk sesi ini.',

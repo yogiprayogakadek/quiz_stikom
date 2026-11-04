@@ -26,13 +26,32 @@
             <select id="quiz_id" name="quiz_id" class="input" required>
                 <option value="">Pilih kuis</option>
                 @foreach ($quizzes as $kuis)
-                    <option value="{{ $kuis->id }}" @selected((int) old('quiz_id', $session?->quiz_id) === $kuis->id)>
+                    <option value="{{ $kuis->id }}" @selected((int) old('quiz_id', $session?->quiz_id ?? request('quiz_id')) === $kuis->id)>
                         {{ $kuis->judul }} ({{ $kuis->questions_count }} soal)
                     </option>
                 @endforeach
             </select>
         @endif
         @error('quiz_id') <p class="field-error">{{ $message }}</p> @enderror
+    </div>
+
+    <div>
+        <label for="kelas_id" class="label">Kelas</label>
+        @if ($terkunci)
+            <input type="hidden" name="kelas_id" value="{{ $session->kelas_id }}">
+            <select id="kelas_id" class="input" disabled>
+                <option>{{ $session->kelas?->nama ?? 'Terbuka untuk semua peserta' }}</option>
+            </select>
+        @else
+            <select id="kelas_id" name="kelas_id" class="input">
+                <option value="">Terbuka untuk semua peserta</option>
+                @foreach ($kelas as $k)
+                    <option value="{{ $k->id }}" @selected((int) old('kelas_id', $session?->kelas_id ?? request('kelas_id')) === $k->id)>{{ $k->nama }}</option>
+                @endforeach
+            </select>
+            <p class="help mt-2">Sesi kelas hanya tampil untuk anggota kelas itu.</p>
+        @endif
+        @error('kelas_id') <p class="field-error">{{ $message }}</p> @enderror
     </div>
 
     <div>

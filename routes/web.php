@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuizController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\Peserta\AttemptController;
+use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,6 +59,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('questions/template', [QuestionController::class, 'template'])->name('questions.template');
     Route::resource('questions', QuestionController::class)->except(['show']);
     Route::resource('quizzes', QuizController::class)->except(['show']);
+    Route::resource('classes', KelasController::class)->except(['show', 'create'])->parameters(['classes' => 'kelas']);
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');
@@ -79,6 +82,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
 Route::middleware(['auth', 'role:peserta'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'peserta'])->name('peserta.dashboard');
     Route::get('/dashboard/state', [DashboardController::class, 'pesertaState'])->name('peserta.dashboard.state');
+
+    Route::post('/dashboard/kelas/gabung', [PesertaKelasController::class, 'join'])
+        ->middleware('throttle:10,1')
+        ->name('peserta.kelas.join');
 
     Route::post('/sesi/{session}/gabung', [PesertaSessionController::class, 'join'])->name('peserta.session.join');
     Route::get('/sesi/{session}/kerjakan', [PesertaSessionController::class, 'play'])->name('peserta.session.play');

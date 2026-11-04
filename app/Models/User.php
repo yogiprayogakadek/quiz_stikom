@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -53,6 +54,11 @@ class User extends Authenticatable
     public function attempts(): HasMany
     {
         return $this->hasMany(Attempt::class);
+    }
+
+    public function kelas(): BelongsToMany
+    {
+        return $this->belongsToMany(Kelas::class, 'kelas_user')->withTimestamps();
     }
 
     public function createdSessions(): HasMany

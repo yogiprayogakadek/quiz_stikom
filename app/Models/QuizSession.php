@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,6 +12,7 @@ class QuizSession extends Model
 {
     protected $fillable = [
         'quiz_id',
+        'kelas_id',
         'nama',
         'mode',
         'acak_opsi',
@@ -53,6 +55,24 @@ class QuizSession extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function kelas(): BelongsTo
+    {
+        return $this->belongsTo(Kelas::class);
+    }
+
+    /**
+     * Sesi tanpa kelas terbuka untuk semua peserta. Sesi kelas hanya untuk anggotanya.
+     */
+    public function scopeUntukPeserta(Builder $query, User $user): Builder
+    {
+        return $query->where(function (Builder $q) use ($user) {
+            $q->whereNull('kelas_id')
+                ->orWhereIn('kelas_id', function ($sub) use ($user) {
+                    $sub->select('kelas_id')->from('kelas_user')->where('user_id', $user->id);
+                });
+        });
     }
 
     public function attempts(): HasMany

@@ -45,9 +45,12 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        $sesiTersedia = QuizSession::with(['quiz' => fn ($q) => $q->withCount('questions')])
+        $kelasSaya = $user->kelas()->withCount(['quizzes', 'sessions'])->orderBy('nama')->get();
+
+        $sesiTersedia = QuizSession::with(['kelas', 'quiz' => fn ($q) => $q->withCount('questions')])
             ->withCount('attempts')
             ->whereIn('status', ['lobby', 'berjalan'])
+            ->untukPeserta($user)
             ->where(function ($query) use ($user) {
                 $query->whereDoesntHave('allowedParticipants')
                     ->orWhereHas('allowedParticipants', fn ($q) => $q->where('users.id', $user->id));
@@ -64,16 +67,17 @@ class DashboardController extends Controller
 
         $sesiList = $this->formatSesi($sesiTersedia, $attempts);
 
-        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList'));
+        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya'));
     }
 
     public function pesertaState(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $sesiTersedia = QuizSession::with(['quiz' => fn ($q) => $q->withCount('questions')])
+        $sesiTersedia = QuizSession::with(['kelas', 'quiz' => fn ($q) => $q->withCount('questions')])
             ->withCount('attempts')
             ->whereIn('status', ['lobby', 'berjalan'])
+            ->untukPeserta($user)
             ->where(function ($query) use ($user) {
                 $query->whereDoesntHave('allowedParticipants')
                     ->orWhereHas('allowedParticipants', fn ($q) => $q->where('users.id', $user->id));
@@ -104,6 +108,7 @@ class DashboardController extends Controller
             return [
                 'id' => $sesi->id,
                 'nama' => $sesi->nama,
+                'kelas_nama' => $sesi->kelas?->nama,
                 'mode' => $sesi->mode,
                 'status' => $sesi->status,
                 'quiz_judul' => $sesi->quiz->judul,

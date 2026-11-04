@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSessionRequest;
 use App\Http\Requests\UpdateSessionRequest;
 use App\Models\Attempt;
+use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
@@ -40,8 +41,9 @@ class SessionController extends Controller
     public function create(): View
     {
         $quizzes = Quiz::withCount('questions')->orderBy('judul')->get();
+        $kelas = Kelas::orderBy('nama')->get();
 
-        return view('admin.sessions.create', compact('quizzes'));
+        return view('admin.sessions.create', compact('quizzes', 'kelas'));
     }
 
     public function store(StoreSessionRequest $request): RedirectResponse
@@ -50,6 +52,7 @@ class SessionController extends Controller
 
         $session = QuizSession::create([
             'quiz_id' => $data['quiz_id'],
+            'kelas_id' => $data['kelas_id'] ?? null,
             'nama' => $data['nama'],
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
@@ -62,18 +65,22 @@ class SessionController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        if ($session->kelas_id !== null) {
+            $session->allowedParticipants()->sync($session->kelas->peserta()->pluck('users.id')->all());
+        }
+
         return redirect()->route('admin.sessions.show', $session)->with('sukses', 'Sesi dibuat. Buka lobby saat peserta siap bergabung.');
     }
 
     public function show(QuizSession $session): View
     {
-        $session->load('quiz');
+        $session->load('quiz', 'kelas');
 
         $data = $this->dataMonitor($session);
 
-        $allParticipants = User::where('role', 'peserta')
-            ->orderBy('nama')
-            ->get();
+        $allParticipants = $session->kelas_id !== null
+            ? $session->kelas->peserta()->orderBy('nama')->get()
+            : User::where('role', 'peserta')->orderBy('nama')->get();
 
         $allowedParticipantIds = $session->allowedParticipants()->pluck('users.id')->all();
 
@@ -141,24 +148,29 @@ class SessionController extends Controller
     public function edit(QuizSession $session): View
     {
         $quizzes = Quiz::withCount('questions')->orderBy('judul')->get();
+        $kelas = Kelas::orderBy('nama')->get();
 
-        return view('admin.sessions.edit', compact('session', 'quizzes'));
+        return view('admin.sessions.edit', compact('session', 'quizzes', 'kelas'));
     }
 
     public function update(UpdateSessionRequest $request, QuizSession $session): RedirectResponse
     {
         $data = $request->validated();
+        $kelasLama = $session->kelas_id;
 
         if ($session->status !== 'draft') {
-            if ((int) $data['quiz_id'] !== $session->quiz_id || $data['mode'] !== $session->mode) {
+            if ((int) $data['quiz_id'] !== $session->quiz_id
+                || $data['mode'] !== $session->mode
+                || (int) ($data['kelas_id'] ?? 0) !== (int) $kelasLama) {
                 throw ValidationException::withMessages([
-                    'mode' => 'Mode dan kuis terkunci karena sesi sudah keluar dari status draft.',
+                    'mode' => 'Mode, kuis, dan kelas terkunci karena sesi sudah keluar dari status draft.',
                 ]);
             }
         }
 
         $session->update([
             'quiz_id' => $data['quiz_id'],
+            'kelas_id' => $data['kelas_id'] ?? null,
             'nama' => $data['nama'],
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
@@ -167,6 +179,12 @@ class SessionController extends Controller
             'max_peserta' => $data['max_peserta'] ?? null,
             'jeda_detik' => $data['jeda_detik'],
         ]);
+
+        if ((int) $session->kelas_id !== (int) $kelasLama) {
+            $session->allowedParticipants()->sync(
+                $session->kelas_id === null ? [] : $session->kelas->peserta()->pluck('users.id')->all()
+            );
+        }
 
         return redirect()->route('admin.sessions.show', $session)->with('sukses', 'Pengaturan sesi diperbarui.');
     }

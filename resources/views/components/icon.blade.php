@@ -109,6 +109,11 @@
         @case('star')
             <path d="m12 4 2.3 4.8 5.2.7-3.8 3.7.9 5.2-4.6-2.5-4.6 2.5.9-5.2L4.5 9.5l5.2-.7Z" />
             @break
+        @case('kelas')
+            <path d="M3 8.5 12 5l9 3.5-9 3.5-9-3.5Z" />
+            <path d="M7 10.8V16c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-5.2" />
+            <path d="M21 8.5V14" />
+            @break
         @default
             <circle cx="12" cy="12" r="8" />
     @endswitch

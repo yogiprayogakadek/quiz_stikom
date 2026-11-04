@@ -132,6 +132,37 @@
             </button>
         </div>
 
+        <section aria-labelledby="kelas-saya">
+            <div class="flex items-center justify-between gap-3">
+                <h2 id="kelas-saya" class="text-2xl">Kelas saya</h2>
+                <span class="pill pill-neutral">{{ $kelasSaya->count() }} kelas</span>
+            </div>
+
+            @if ($kelasSaya->isEmpty())
+                <p class="mt-3 text-base text-ink-muted">Belum ada kelas. Masukkan PIN kelas dari admin untuk bergabung.</p>
+            @else
+                <div class="mt-4 grid gap-5 md:grid-cols-2">
+                    @foreach ($kelasSaya as $kelas)
+                        <article class="card">
+                            <h3 class="text-xl font-bold text-ink">{{ $kelas->nama }}</h3>
+                            <p class="mt-1 text-base text-ink-muted">
+                                {{ $kelas->quizzes_count }} kuis · {{ $kelas->sessions_count }} sesi
+                            </p>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('peserta.kelas.join') }}" class="card mt-4">
+                @csrf
+                <label for="pin" class="label">Gabung kelas dengan PIN</label>
+                <div class="flex flex-col gap-3 sm:flex-row">
+                    <input id="pin" name="pin" type="text" class="input sm:max-w-xs" required maxlength="12" autocomplete="off" placeholder="PIN dari admin">
+                    <button type="submit" class="btn btn-primary">Gabung kelas</button>
+                </div>
+            </form>
+        </section>
+
         <section aria-labelledby="sesi-tersedia">
             <div class="flex items-center justify-between gap-3">
                 <h2 id="sesi-tersedia" class="text-2xl">Sesi yang dibuka</h2>
@@ -171,6 +202,11 @@
                                 class="pill pill-neutral"
                                 x-text="sesi.max_peserta !== null ? (sesi.attempts_count + '/' + sesi.max_peserta + ' peserta') : (sesi.attempts_count + ' peserta')"
                             ></span>
+
+                            <!-- Kelas -->
+                            <template x-if="sesi.kelas_nama">
+                                <span class="pill pill-neutral" x-text="sesi.kelas_nama"></span>
+                            </template>
                         </div>
 
                         <h3 class="mt-4 text-2xl font-bold text-ink" x-text="sesi.nama"></h3>

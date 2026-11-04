@@ -32,6 +32,11 @@ class Quiz extends Model
         return $this->hasMany(QuizSession::class);
     }
 
+    public function kelas(): BelongsToMany
+    {
+        return $this->belongsToMany(Kelas::class, 'kelas_quiz')->withTimestamps();
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
