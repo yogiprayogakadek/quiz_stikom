@@ -1,0 +1,6 @@
+teks,opsi_a,opsi_b,opsi_c,opsi_d,opsi_e,jawaban_benar,durasi_detik,pembahasan
+"Ibu kota negara Indonesia saat ini adalah?","Jakarta","Bandung","Surabaya","Medan","",A,30,"Jakarta merupakan ibu kota negara Indonesia."
+"Berapakah hasil dari 15 dikalikan 4?","45","50","60","65","",C,20,"15 x 4 = 60."
+"Komponen komputer yang berfungsi sebagai otak pemrosesan data adalah?","RAM","CPU","Harddisk","Power Supply","",B,30,"Central Processing Unit (CPU) bertugas memproses seluruh instruksi komputer."
+"Manakah di bawah ini yang merupakan contoh bahasa pemrograman berorientasi objek?","HTML","CSS","Java","SQL","",C,30,"Java adalah bahasa pemrograman yang berbasis OOP (Object-Oriented Programming)."
+"Protokol default yang digunakan untuk browsing web secara aman adalah?","HTTP","HTTPS","FTP","SSH","",B,25,"HTTPS menggunakan enkripsi SSL/TLS untuk keamanan."
