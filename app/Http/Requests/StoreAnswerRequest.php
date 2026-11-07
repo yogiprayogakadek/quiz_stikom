@@ -10,7 +10,8 @@ class StoreAnswerRequest extends FormRequest
     {
         return [
             'question_id' => ['required', 'integer', 'exists:questions,id'],
-            'option_id' => ['required', 'integer', 'exists:options,id'],
+            'option_id' => ['nullable', 'integer', 'exists:options,id'],
+            'jawaban_teks' => ['nullable', 'string', 'max:5000'],
         ];
     }
 
@@ -18,7 +19,7 @@ class StoreAnswerRequest extends FormRequest
     {
         return [
             'question_id.required' => 'Soal tidak dikenali.',
-            'option_id.required' => 'Pilih salah satu jawaban.',
+            'jawaban_teks.max' => 'Jawaban essay maksimal 5000 karakter.',
         ];
     }
 }

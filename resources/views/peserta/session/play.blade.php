@@ -35,7 +35,14 @@
                 this.pasangPengawas();
             },
             async muat() {
-                const hasil = await window.kuisFetch(config.stateUrl);
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.stateUrl);
+                } catch (e) {
+                    this.memuat = false;
+                    this.error = 'Koneksi terputus. Mencoba memuat status kembali...';
+                    return;
+                }
                 this.memuat = false;
                 if (!hasil.ok || !hasil.data) {
                     if (hasil.status === 404 || hasil.status === 403) {
@@ -79,17 +86,22 @@
                 }
                 this.menyimpan = true;
                 this.pesan = '';
-                const hasil = await window.kuisFetch(config.answerUrl, {
-                    method: 'POST',
-                    body: { question_id: this.state.soal.id, option_id: opsi.id }
-                });
-                this.menyimpan = false;
-                if (hasil.ok) {
-                    this.state.soal.jawaban_option_id = opsi.id;
-                    this.state.sudah_menjawab = hasil.data.sudah_menjawab;
-                    return;
+                try {
+                    const hasil = await window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: this.state.soal.id, option_id: opsi.id }
+                    });
+                    this.menyimpan = false;
+                    if (hasil.ok) {
+                        this.state.soal.jawaban_option_id = opsi.id;
+                        this.state.sudah_menjawab = hasil.data.sudah_menjawab;
+                        return;
+                    }
+                    this.pesan = hasil.data?.message ?? 'Jawaban gagal dikirim. Coba lagi.';
+                } catch (e) {
+                    this.menyimpan = false;
+                    this.pesan = 'Koneksi terputus saat mengirim jawaban. Periksa internet Anda.';
                 }
-                this.pesan = hasil.data?.message ?? 'Jawaban gagal dikirim. Coba lagi.';
             },
             async masukLayarPenuh() {
                 const el = document.documentElement;
@@ -170,6 +182,22 @@
                     .listen('.SesiSelesai', () => {
                         this.berhenti = true;
                         this.batalkanToleransi();
+                        window.location.href = config.resultUrl;
+                    });
+
+                // Notifikasi instan untuk aksi personal admin
+                const userChannel = 'session-user.' + {{ $session->id }} + '.' + {{ auth()->id() }};
+                echo.channel(userChannel)
+                    .listen('.PesertaDikeluarkan', (data) => {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        alert(data.pesan || 'Kamu telah dikeluarkan dari sesi oleh pengajar.');
+                        window.location.href = '{{ route("peserta.dashboard", ["dikeluarkan" => 1]) }}';
+                    })
+                    .listen('.PesertaDipaksaKumpul', (data) => {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        alert(data.pesan || 'Pekerjaanmu telah dikumpulkan oleh pengajar.');
                         window.location.href = config.resultUrl;
                     });
             },
@@ -300,32 +328,41 @@
 
         <template x-if="state && state.status === 'berjalan' && state.fase === 'soal_terbuka' && state.soal">
             <section class="space-y-5">
-                <div class="flex flex-col gap-3 rounded-card border border-outline bg-page p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <p class="text-sm font-bold text-ink-muted">Soal</p>
-                        <p class="font-display text-2xl font-bold text-ink">
-                            <span x-text="state.soal.urutan"></span> dari <span x-text="state.soal.total_soal"></span>
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="pill pill-leaf" x-text="state.sudah_menjawab + ' dari ' + state.total_peserta + ' sudah menjawab'"></span>
-                        <div class="text-right">
-                            <p class="text-sm font-bold text-ink-muted">Sisa waktu</p>
-                            <p class="timer text-3xl" x-bind:class="sisa <= 10 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
+                <div class="exam-bar -mx-4 px-4 py-3 sm:-mx-6 sm:px-6">
+                    <div class="mx-auto flex max-w-6xl flex-col gap-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-baseline gap-2">
+                                <p class="text-sm font-bold text-ink-muted">Soal</p>
+                                <p class="font-display text-2xl font-bold text-ink">
+                                    <span x-text="state.soal.urutan"></span><span class="text-ink-muted"> / </span><span x-text="state.soal.total_soal"></span>
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="text-right">
+                                    <p class="text-xs font-bold text-ink-muted">Sisa waktu</p>
+                                    <p class="timer text-2xl" x-bind:class="sisa <= 10 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
+                                </div>
+                                <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
+                                    <x-icon name="eye" :size="20" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="exam-progress" role="progressbar" aria-label="Progres soal" aria-valuemin="0" aria-valuemax="100" x-bind:aria-valuenow="state.soal.total_soal ? Math.round(state.soal.urutan / state.soal.total_soal * 100) : 0">
+                            <span x-bind:style="'width: ' + (state.soal.total_soal ? Math.round(state.soal.urutan / state.soal.total_soal * 100) : 0) + '%'"></span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <span class="font-bold text-ink-muted" x-text="state.sudah_menjawab + ' dari ' + state.total_peserta + ' peserta sudah menjawab'"></span>
+                            <span class="exam-status" aria-live="polite" x-text="menyimpan ? 'Mengirim jawaban...' : (state.soal.jawaban_option_id ? 'Tersimpan' : '')"></span>
                         </div>
                     </div>
                 </div>
 
                 <div class="card">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <span class="pill pill-brand" x-text="'Soal ' + state.soal.urutan + ' dari ' + state.soal.total_soal"></span>
-                        <button type="button" class="btn btn-ghost" x-on:click="masukLayarPenuh()">
-                            <x-icon name="eye" :size="20" />
-                            Layar penuh
-                        </button>
-                    </div>
+                    <span class="pill pill-brand">Pilihan ganda</span>
 
-                    <h2 id="teks-soal-serempak" class="mt-3 text-2xl leading-snug" x-text="state.soal.teks"></h2>
+                    <h2 id="teks-soal-serempak" class="mt-4 max-w-[65ch] whitespace-pre-line text-2xl leading-snug text-ink sm:text-3xl" x-text="state.soal.teks"></h2>
 
                     <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
                         <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">
@@ -337,13 +374,15 @@
                                 x-bind:disabled="menyimpan"
                             >
                                 <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
-                                <span x-text="opsi.teks"></span>
+                                <span class="tile-text" x-text="opsi.teks"></span>
+                                <span class="tile-check" aria-hidden="true">
+                                    <x-icon name="check" :size="20" />
+                                </span>
                             </button>
                         </template>
                     </div>
 
                     <p class="mt-4 text-base text-ink-muted">Jawaban bisa diubah sampai soal ditutup. Tombol yang dipilih berarti tersimpan.</p>
-                    <p x-show="menyimpan" x-cloak class="mt-2 text-sm font-bold text-ink-muted">Mengirim jawaban...</p>
                 </div>
             </section>
         </template>

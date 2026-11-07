@@ -88,6 +88,7 @@ class QuizEngine
             \Illuminate\Support\Facades\Log::warning('Broadcast display error: ' . $e->getMessage());
         }
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_joined']);
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'peserta_joined', 'user_id' => $user->id]);
 
         return $attempt;
     }
@@ -145,23 +146,67 @@ class QuizEngine
                 return $attempt;
             }
 
-            $totalSoal = $attempt->attemptQuestions()->count();
-
-            $benar = Answer::query()
-                ->where('answers.attempt_id', $attempt->id)
-                ->join('options', 'options.id', '=', 'answers.option_id')
-                ->where('options.is_correct', true)
-                ->count();
+            $this->hitungSkorAcak($attempt);
 
             $attempt->update([
                 'status' => 'selesai',
                 'selesai_at' => now()->getTimestampMs(),
-                'jumlah_benar' => $benar,
-                'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
             ]);
 
             return $attempt->fresh();
         });
+    }
+
+    /**
+     * Hitung poin Mode Acak dari bobot soal dan jawaban tersimpan.
+     * PG otomatis, essay memakai skor yang sudah dinilai admin.
+     */
+    public function hitungSkorAcak(Attempt $attempt): Attempt
+    {
+        $attempt->loadMissing('attemptQuestions.question');
+
+        $answers = $attempt->answers()->with('option')->get()->keyBy('question_id');
+        $poin = 0;
+        $maksimal = 0;
+        $benar = 0;
+
+        foreach ($attempt->attemptQuestions as $attemptQuestion) {
+            $question = $attemptQuestion->question;
+
+            if ($question === null) {
+                continue;
+            }
+
+            $bobot = max(1, (int) $question->bobot);
+            $maksimal += $bobot;
+            $jawaban = $answers->get($question->id);
+
+            if ($question->isEssay()) {
+                $poin += max(0, min($bobot, (int) ($jawaban?->skor ?? 0)));
+
+                continue;
+            }
+
+            $tepat = $jawaban?->option?->is_correct === true;
+
+            if ($tepat) {
+                $poin += $bobot;
+                $benar++;
+            }
+
+            if ($jawaban !== null && $jawaban->skor !== ($tepat ? $bobot : 0)) {
+                $jawaban->update(['skor' => $tepat ? $bobot : 0]);
+            }
+        }
+
+        $attempt->update([
+            'jumlah_benar' => $benar,
+            'poin_total' => $poin,
+            'poin_maksimal' => $maksimal,
+            'skor_total' => $maksimal > 0 ? (int) round($poin / $maksimal * 100) : 0,
+        ]);
+
+        return $attempt->fresh();
     }
 
     /**
@@ -227,6 +272,12 @@ class QuizEngine
             if ($questions->isEmpty()) {
                 throw ValidationException::withMessages([
                     'sesi' => 'Kuis ini belum punya soal.',
+                ]);
+            }
+
+            if ($session->mode === 'serempak' && $questions->contains(fn (Question $q) => $q->isEssay())) {
+                throw ValidationException::withMessages([
+                    'sesi' => 'Soal essay hanya didukung di Mode Acak.',
                 ]);
             }
 
@@ -481,19 +532,11 @@ class QuizEngine
 
     private function hitungSelesaiAcakTerkunci(Attempt $attempt): void
     {
-        $totalSoal = $attempt->attemptQuestions()->count();
-
-        $benar = Answer::query()
-            ->where('answers.attempt_id', $attempt->id)
-            ->join('options', 'options.id', '=', 'answers.option_id')
-            ->where('options.is_correct', true)
-            ->count();
+        $this->hitungSkorAcak($attempt);
 
         $attempt->update([
             'status' => 'selesai',
             'selesai_at' => now()->getTimestampMs(),
-            'jumlah_benar' => $benar,
-            'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
         ]);
     }
 
@@ -775,6 +818,7 @@ class QuizEngine
         $soalTerendah = Question::withTrashed()
             ->with('options')
             ->whereIn('id', $soalIds)
+            ->where('tipe', 'pilihan_ganda')
             ->get()
             ->map(function (Question $question) use ($session) {
                 $peserta = AttemptQuestion::query()
@@ -846,6 +890,8 @@ class QuizEngine
         return [
             'id' => $question->id,
             'teks' => $question->teks,
+            'tipe' => $question->tipe,
+            'bobot' => $question->bobot,
             'durasi_detik' => $question->durasi_detik,
             'opsi' => $options->map(fn (Option $o) => ['id' => $o->id, 'teks' => $o->teks])->all(),
             'jawaban_option_id' => $answer?->option_id,

@@ -13,8 +13,11 @@ class Answer extends Model
         'attempt_id',
         'question_id',
         'option_id',
+        'jawaban_teks',
         'waktu_jawab_ms',
         'skor',
+        'dinilai_at',
+        'dinilai_oleh',
         'answered_at',
     ];
 
@@ -23,6 +26,8 @@ class Answer extends Model
         return [
             'waktu_jawab_ms' => 'integer',
             'skor' => 'integer',
+            'dinilai_at' => 'datetime',
+            'dinilai_oleh' => 'integer',
             'answered_at' => 'datetime',
         ];
     }

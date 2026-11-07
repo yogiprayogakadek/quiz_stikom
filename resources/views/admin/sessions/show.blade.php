@@ -270,6 +270,7 @@
         <script>
             (() => {
                 const url = @json(route('admin.sessions.monitor', $session));
+                const sessionId = {{ $session->id }};
                 const bagian = {
                     status: document.getElementById('monitor-status'),
                     peserta: document.getElementById('monitor-peserta'),
@@ -288,13 +289,34 @@
                         if (kunci === terakhir) return;
 
                         terakhir = kunci;
-                        bagian.status.innerHTML = data.status;
-                        bagian.peserta.innerHTML = data.peserta;
+                        if (bagian.status) bagian.status.innerHTML = data.status;
+                        if (bagian.peserta) bagian.peserta.innerHTML = data.peserta;
                     } catch (e) {
                         // Jaringan putus sesaat. Putaran berikutnya mencoba lagi.
                     }
                 };
 
+                // Real-time WebSocket via Reverb
+                const pasangEcho = () => {
+                    if (typeof window.buatEcho !== 'function') return;
+                    const echo = window.buatEcho();
+                    if (!echo) return;
+
+                    echo.channel('session-monitor.' + sessionId)
+                        .listen('.SessionMonitorUpdated', () => {
+                            perbarui();
+                        });
+
+                    echo.channel('quiz-sessions')
+                        .listen('.SesiStatusUpdated', (data) => {
+                            if (data.session_id === sessionId) {
+                                perbarui();
+                            }
+                        });
+                };
+
+                pasangEcho();
+                // Polling cadangan (fallback jika koneksi WebSocket terganggu)
                 setInterval(perbarui, 5000);
             })();
         </script>

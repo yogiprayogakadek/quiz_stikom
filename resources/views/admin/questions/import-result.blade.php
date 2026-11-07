@@ -1,7 +1,12 @@
+@php
+    $ruteIndex = isset($quiz) ? route('admin.quizzes.questions.index', $quiz) : route('admin.quizzes.index');
+    $ruteImporLain = isset($quiz) ? route('admin.quizzes.questions.import', $quiz) : route('admin.quizzes.index');
+@endphp
+
 <x-layouts.admin judul="Ringkasan impor soal" keterangan="Periksa hasil impor soal CSV di bawah ini.">
     <x-slot:aksi>
-        <a href="{{ route('admin.questions.index') }}" class="btn btn-secondary">Buka bank soal</a>
-        <a href="{{ route('admin.questions.import') }}" class="btn btn-ghost">Impor file lain</a>
+        <a href="{{ $ruteIndex }}" class="btn btn-secondary">Lihat soal kuis</a>
+        <a href="{{ $ruteImporLain }}" class="btn btn-ghost">Impor file lain</a>
     </x-slot:aksi>
 
     <div class="grid gap-5 sm:grid-cols-2">
@@ -10,7 +15,7 @@
             <p class="display-number mt-2 text-5xl text-ink">{{ $ringkasan['berhasil'] }}</p>
             @if (!empty($ringkasan['quiz_nama']))
                 <p class="mt-2 text-sm text-leaf-deep">
-                    Ditautkan langsung ke kuis: <strong>{{ $ringkasan['quiz_nama'] }}</strong>
+                    Ditautkan ke kuis: <strong>{{ $ringkasan['quiz_nama'] }}</strong>
                 </p>
             @endif
         </div>
@@ -52,7 +57,7 @@
                                         <span class="pill pill-coral">Dilewati</span>
                                     @endif
                                 </td>
-                                <td class="text-sm text-ink-muted">{{ $baris['alasan'] ?? 'Tersimpan ke bank soal.' }}</td>
+                                <td class="text-sm text-ink-muted">{{ $baris['alasan'] ?? 'Tersimpan ke kuis.' }}</td>
                             </tr>
                         @endforeach
                     </tbody>

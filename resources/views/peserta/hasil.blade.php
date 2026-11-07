@@ -4,6 +4,8 @@
         ? ($total_soal > 0 ? (int) round($attempt->skor_total / ($total_soal * 1000) * 100) : 0)
         : (int) $attempt->skor_total;
     $bintang = $persen >= 90 ? 3 : ($persen >= 70 ? 2 : 1);
+    $essayBelum = $rincian->where('tipe', 'essay')->whereNull('dinilai_at')->count();
+    $adaEssay = $rincian->contains(fn ($baris) => $baris['tipe'] === 'essay');
 @endphp
 
 <x-layouts.peserta :judul="'Hasil '.$session->nama" :keterangan="$session->quiz->judul">
@@ -24,6 +26,8 @@
 
             @if ($mode === 'serempak')
                 <p class="mt-1 text-base text-ink-muted">Setara {{ $persen }}% dari poin maksimum {{ $total_soal * 1000 }}.</p>
+            @elseif ($attempt->poin_maksimal > 0)
+                <p class="mt-1 text-base text-ink-muted">Poin {{ $attempt->poin_total }} dari {{ $attempt->poin_maksimal }}.</p>
             @endif
 
             <div class="mt-5 flex items-center justify-center gap-2" aria-label="{{ $bintang }} dari 3 bintang">
@@ -38,7 +42,7 @@
 
             <div class="mt-5 grid grid-cols-2 gap-3">
                 <div class="rounded-2xl bg-leaf-soft p-4">
-                    <p class="text-sm font-bold text-leaf-deep">Jawaban benar</p>
+                    <p class="text-sm font-bold text-leaf-deep">{{ $adaEssay ? 'Pilihan ganda benar' : 'Jawaban benar' }}</p>
                     <p class="font-mono text-3xl font-bold text-ink">{{ $attempt->jumlah_benar }}</p>
                 </div>
                 <div class="rounded-2xl bg-surface p-4">
@@ -61,6 +65,13 @@
                 <p class="mt-3 text-base text-ink-muted">
                     Pembahasan aktif. Periksa jawaban benar dan alasan di bawah, lalu diskusikan dengan guru bila perlu.
                 </p>
+            @endif
+
+            @if ($essayBelum > 0)
+                <div class="mt-4 rounded-2xl bg-sun-soft px-4 py-3">
+                    <p class="font-bold text-ink">{{ $essayBelum }} jawaban essay menunggu penilaian.</p>
+                    <p class="mt-1 text-sm text-ink-muted">Poin di atas masih sementara dan belum termasuk nilai essay. Nilai akhir diperbarui setelah admin menilai.</p>
+                </div>
             @endif
 
             <dl class="mt-5 space-y-3 text-base">
@@ -92,11 +103,9 @@
                             <th scope="col">No</th>
                             <th scope="col">Soal</th>
                             <th scope="col">Jawaban Anda</th>
-                            <th scope="col">Jawaban benar</th>
+                            <th scope="col">Kunci / jawaban benar</th>
                             <th scope="col">Hasil</th>
-                            @if ($mode === 'serempak')
-                                <th scope="col">Poin</th>
-                            @endif
+                            <th scope="col">Poin</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -105,14 +114,33 @@
                                 <td class="font-mono">{{ $baris['urutan'] }}</td>
                                 <td>
                                     <p class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 160) }}</p>
+                                    <p class="mt-1 text-sm text-ink-muted">{{ $baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda' }} · Bobot {{ $baris['bobot'] }}</p>
                                     @if ($baris['pembahasan'])
                                         <p class="mt-1 text-base text-ink-muted">{{ $baris['pembahasan'] }}</p>
                                     @endif
                                 </td>
-                                <td>{{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}</td>
-                                <td>{{ $baris['jawaban_benar'] ?? '-' }}</td>
                                 <td>
-                                    @if ($baris['benar'])
+                                    @if ($baris['tipe'] === 'essay')
+                                        <p class="whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
+                                    @else
+                                        {{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($baris['tipe'] === 'essay')
+                                        <p class="whitespace-pre-line text-ink-muted">{{ $baris['jawaban_benar'] ?: '-' }}</p>
+                                    @else
+                                        {{ $baris['jawaban_benar'] ?? '-' }}
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($baris['tipe'] === 'essay')
+                                        @if ($baris['dinilai_at'])
+                                            <span class="pill pill-leaf">Dinilai</span>
+                                        @else
+                                            <span class="pill pill-sun">Menunggu penilaian</span>
+                                        @endif
+                                    @elseif ($baris['benar'])
                                         <span class="pill pill-leaf">
                                             <x-icon name="check" :size="14" />
                                             Benar
@@ -124,14 +152,33 @@
                                         </span>
                                     @endif
                                 </td>
-                                @if ($mode === 'serempak')
-                                    <td class="font-mono">{{ $baris['skor'] }}</td>
-                                @endif
+                                <td class="font-mono">
+                                    @if ($mode === 'acak')
+                                        {{ $baris['skor'] }} / {{ $baris['bobot'] }}
+                                    @else
+                                        {{ $baris['skor'] }}
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
                 </table>
             </div>
         </section>
+    @endif
+    @if ($adaEssay)
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                if (typeof window.buatEcho !== 'function') return;
+                const echo = window.buatEcho();
+                if (!echo) return;
+
+                const userChannel = 'session-user.' + {{ $session->id }} + '.' + {{ auth()->id() }};
+                echo.channel(userChannel)
+                    .listen('.EssayDinilai', () => {
+                        window.location.reload();
+                    });
+            });
+        </script>
     @endif
 </x-layouts.peserta>

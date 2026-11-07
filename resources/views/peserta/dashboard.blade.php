@@ -107,11 +107,29 @@
         })"
         class="space-y-6"
     >
-        @if (request()->boolean('dikeluarkan'))
-            <x-alert jenis="warning">
-                Sesi ini sudah tidak tersedia untukmu. Kalau kamu masih seharusnya mengerjakan, hubungi pengajar.
-            </x-alert>
-        @endif
+        <!-- Welcome Hero Banner Peserta -->
+        <div class="relative overflow-hidden rounded-panel border border-brand/20 bg-gradient-to-br from-brand-soft/70 via-page to-surface p-6 sm:p-8 shadow-lift">
+            <div class="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <div class="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-xs font-bold text-brand-deep mb-2 border border-brand/20">
+                        <span class="inline-block h-2 w-2 rounded-full bg-leaf animate-pulse"></span>
+                        Portal Peserta Aktif
+                    </div>
+                    <h2 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Halo, {{ auth()->user()->nama }} 👋</h2>
+                    <p class="mt-1 text-sm sm:text-base text-ink-muted">Pilih sesi ujian yang sedang dibuka atau masuk ke kelas untuk melihat materi kuis.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="rounded-2xl border border-outline bg-page/90 backdrop-blur px-4 py-2.5 text-center shadow-sm">
+                        <p class="text-xs font-semibold text-ink-muted">Kelas Diikuti</p>
+                        <p class="text-xl font-extrabold text-brand-deep">{{ $kelasSaya->count() }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-outline bg-page/90 backdrop-blur px-4 py-2.5 text-center shadow-sm">
+                        <p class="text-xs font-semibold text-ink-muted">Sesi Tersedia</p>
+                        <p class="text-xl font-extrabold text-leaf-deep" x-text="sesiList.length">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Notifikasi Real-time Banner -->
         <div
@@ -326,7 +344,7 @@
                             <div class="flex items-center gap-3">
                                 @if ($attempt->status === 'selesai')
                                     <span class="pill {{ $sesi->mode === 'serempak' ? 'pill-sun' : 'pill-leaf' }}">
-                                        {{ $sesi->mode === 'serempak' ? $attempt->skor_total.' poin' : $attempt->skor_total.' nilai' }}
+                                        {{ $sesi->mode === 'serempak' ? $attempt->skor_total.' poin' : 'Nilai '.$attempt->skor_total }}
                                     </span>
                                 @endif
                                 @if ($tautan)

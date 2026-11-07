@@ -53,17 +53,21 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::post('participants/{participant}/reset-password', [ParticipantController::class, 'resetPassword'])
         ->name('participants.reset-password');
 
-    Route::get('questions/import', [QuestionController::class, 'importForm'])->name('questions.import');
-    Route::post('questions/import', [QuestionController::class, 'import'])->name('questions.import.store');
-    Route::get('questions/import/result', [QuestionController::class, 'importResult'])->name('questions.import.result');
+    Route::get('quizzes/{quiz}/questions/template', [QuestionController::class, 'template'])->name('quizzes.questions.template');
+    Route::get('quizzes/{quiz}/questions/import', [QuestionController::class, 'importForm'])->name('quizzes.questions.import');
+    Route::post('quizzes/{quiz}/questions/import', [QuestionController::class, 'import'])->name('quizzes.questions.import.store');
+    Route::get('quizzes/{quiz}/questions/import/result', [QuestionController::class, 'importResult'])->name('quizzes.questions.import.result');
+    Route::resource('quizzes.questions', QuestionController::class);
+
+    // Backward-compatible question routes (redirects / fallback if needed)
     Route::get('questions/template', [QuestionController::class, 'template'])->name('questions.template');
-    Route::resource('questions', QuestionController::class)->except(['show']);
     Route::resource('quizzes', QuizController::class)->except(['show']);
     Route::resource('classes', KelasController::class)->except(['show', 'create'])->parameters(['classes' => 'kelas']);
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');
     Route::get('attempts/{attempt}', [ReportController::class, 'attempt'])->name('reports.attempt');
+    Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
 
     Route::resource('sessions', AdminSessionController::class);

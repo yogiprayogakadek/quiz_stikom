@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
+use App\Models\Kelas;
 use App\Models\Question;
 use App\Models\Quiz;
 use Illuminate\Http\RedirectResponse;
@@ -16,62 +17,63 @@ class QuizController extends Controller
 {
     public function index(): View
     {
-        $quizzes = Quiz::withCount(['questions', 'sessions'])
+        $quizzes = Quiz::with('kelas')
+            ->withCount(['questions', 'sessions'])
             ->orderByDesc('created_at')
             ->paginate(12);
 
         return view('admin.quizzes.index', compact('quizzes'));
     }
 
-    public function create(): View
+    public function create(): View|RedirectResponse
     {
-        $questions = Question::with('options')->orderBy('teks')->get();
+        $kelasList = Kelas::orderBy('nama')->get();
 
-        return view('admin.quizzes.create', compact('questions'));
+        if ($kelasList->isEmpty()) {
+            return redirect()->route('admin.classes.index')
+                ->withErrors(['kelas' => 'Buat kelas terlebih dahulu sebelum membuat kuis.']);
+        }
+
+        return view('admin.quizzes.create', compact('kelasList'));
     }
 
     public function store(StoreQuizRequest $request): RedirectResponse
     {
         $data = $request->validated();
 
-        DB::transaction(function () use ($data) {
-            $quiz = Quiz::create([
+        $quiz = DB::transaction(function () use ($data) {
+            return Quiz::create([
+                'kelas_id' => $data['kelas_id'],
                 'judul' => $data['judul'],
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
                 'created_by' => request()->user()->id,
             ]);
-
-            $quiz->questions()->sync($data['question_ids']);
         });
 
-        return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis dibuat.');
+        return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Kuis dibuat. Silakan tambahkan soal untuk kuis ini.');
     }
 
     public function edit(Quiz $quiz): View
     {
-        $quiz->load('questions');
-        $questions = Question::with('options')->orderBy('teks')->get();
+        $kelasList = Kelas::orderBy('nama')->get();
 
-        return view('admin.quizzes.edit', compact('quiz', 'questions'));
+        return view('admin.quizzes.edit', compact('quiz', 'kelasList'));
     }
 
     public function update(UpdateQuizRequest $request, Quiz $quiz): RedirectResponse
     {
         if ($quiz->sessions()->whereIn('status', ['lobby', 'berjalan'])->exists()) {
             return redirect()->route('admin.quizzes.index')
-                ->withErrors(['kuis' => 'Kuis ini dipakai sesi yang sedang berjalan, jadi soal dan pengaturannya tidak bisa diubah.']);
+                ->withErrors(['kuis' => 'Kuis ini dipakai sesi yang sedang berjalan, jadi pengaturannya tidak bisa diubah.']);
         }
 
         $data = $request->validated();
 
-        DB::transaction(function () use ($quiz, $data) {
-            $quiz->update([
-                'judul' => $data['judul'],
-                'jumlah_soal' => $data['jumlah_soal'] ?? null,
-            ]);
-
-            $quiz->questions()->sync($data['question_ids']);
-        });
+        $quiz->update([
+            'kelas_id' => $data['kelas_id'],
+            'judul' => $data['judul'],
+            'jumlah_soal' => $data['jumlah_soal'] ?? null,
+        ]);
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis diperbarui.');
     }

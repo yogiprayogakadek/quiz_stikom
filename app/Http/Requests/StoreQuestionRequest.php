@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreQuestionRequest extends FormRequest
 {
@@ -10,17 +11,24 @@ class StoreQuestionRequest extends FormRequest
     {
         return [
             'teks' => ['required', 'string', 'max:2000'],
+            'tipe' => ['required', Rule::in(['pilihan_ganda', 'essay'])],
+            'bobot' => ['required', 'integer', 'min:1', 'max:1000'],
             'durasi_detik' => ['required', 'integer', 'min:5', 'max:300'],
             'pembahasan' => ['nullable', 'string', 'max:5000'],
-            'opsi' => ['required', 'array', 'min:2', 'max:6'],
-            'opsi.*.teks' => ['required', 'string', 'max:500'],
-            'correct' => ['required', 'integer', 'min:0', 'max:5'],
+            'kunci_essay' => ['nullable', 'string', 'max:5000'],
+            'opsi' => ['required_if:tipe,pilihan_ganda', 'array', 'min:2', 'max:6'],
+            'opsi.*.teks' => ['required_if:tipe,pilihan_ganda', 'string', 'max:500'],
+            'correct' => ['required_if:tipe,pilihan_ganda', 'integer', 'min:0', 'max:5'],
         ];
     }
 
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            if ($this->input('tipe') !== 'pilihan_ganda') {
+                return;
+            }
+
             $jumlah = count($this->input('opsi', []));
             $correct = (int) $this->input('correct', -1);
 
@@ -34,6 +42,11 @@ class StoreQuestionRequest extends FormRequest
     {
         return [
             'teks.required' => 'Teks soal wajib diisi.',
+            'tipe.required' => 'Tipe soal wajib dipilih.',
+            'tipe.in' => 'Tipe soal tidak dikenali.',
+            'bobot.required' => 'Bobot soal wajib diisi.',
+            'bobot.min' => 'Bobot minimal 1.',
+            'bobot.max' => 'Bobot maksimal 1000.',
             'durasi_detik.required' => 'Durasi soal wajib diisi.',
             'durasi_detik.min' => 'Durasi minimal 5 detik.',
             'durasi_detik.max' => 'Durasi maksimal 300 detik.',

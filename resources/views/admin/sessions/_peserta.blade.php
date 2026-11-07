@@ -34,7 +34,13 @@
                             @endif
                         </td>
                         <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
-                        <td class="font-mono">{{ $attempt->skor_total }}</td>
+                        <td class="font-mono">
+                            @if ($session->mode === 'acak' && $attempt->poin_maksimal > 0)
+                                {{ $attempt->poin_total }}/{{ $attempt->poin_maksimal }}
+                            @else
+                                {{ $attempt->skor_total }}
+                            @endif
+                        </td>
                         <td>
                             @if ($attempt->events_count >= 3)
                                 <span class="pill pill-coral">Perlu ditinjau</span>

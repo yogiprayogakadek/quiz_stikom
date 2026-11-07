@@ -174,6 +174,12 @@ class SessionController extends Controller
             return response()->json(['message' => 'Ini bukan soal yang sedang terbuka.'], 422);
         }
 
+        $attemptQuestion->loadMissing('question');
+
+        if ($attemptQuestion->question?->isEssay()) {
+            return response()->json(['message' => 'Soal essay hanya didukung di Mode Acak.'], 422);
+        }
+
         $optionId = (int) $request->input('option_id');
 
         if (! in_array($optionId, array_map('intval', $attemptQuestion->urutan_opsi_json), true)) {
@@ -201,6 +207,11 @@ class SessionController extends Controller
         }
 
         $engine->siarkanDisplayTerbatas($session);
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+            'action' => 'answer_submitted',
+            'user_id' => $attempt->user_id,
+            'question_id' => $attemptQuestion->question_id,
+        ]);
 
         return response()->json([
             'ok' => true,
@@ -233,10 +244,13 @@ class SessionController extends Controller
 
             return [
                 'teks' => $question->teks,
+                'tipe' => $question->tipe,
+                'bobot' => $question->bobot,
                 'jawaban_saya' => $jawabanSaya?->option?->teks,
                 'jawaban_benar' => $tampilkan ? $benar?->teks : null,
                 'pembahasan' => $tampilkan ? $question->pembahasan : null,
                 'benar' => $jawabanSaya?->option?->is_correct === true,
+                'dinilai_at' => null,
                 'skor' => $jawabanSaya?->skor ?? 0,
                 'urutan' => $aq->urutan,
             ];

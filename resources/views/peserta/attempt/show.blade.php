@@ -4,7 +4,16 @@
             questions: config.questions,
             index: 0,
             jawaban: config.jawaban,
+            jawabanTeks: config.jawabanTeks,
+            teksTersimpan: { ...config.jawabanTeks },
+            statusTeks: {},
+            janjiTeks: {},
+            timerTeks: {},
             menyimpan: false,
+            sedangSinkron: false,
+            antreanOffline: [],
+            isOnline: navigator.onLine ?? true,
+            storageKey: 'kuis_antrean_attempt_' + config.attemptId,
             pesan: '',
             peringatan: '',
             jumlahKejadian: 0,
@@ -23,10 +32,34 @@
                 return this.questions[this.index] ?? null;
             },
             get terjawab() {
-                return Object.values(this.jawaban).filter((nilai) => nilai !== null && nilai !== undefined).length;
+                return this.questions.filter((soal) => this.sudahDijawab(soal)).length;
             },
             get belum() {
                 return this.questions.length - this.terjawab;
+            },
+            get statusTeksAktif() {
+                if (this.current?.tipe !== 'essay') {
+                    return '';
+                }
+
+                return {
+                    menunggu: 'Menunggu disimpan',
+                    menyimpan: 'Menyimpan...',
+                    tersimpan: 'Tersimpan otomatis',
+                    offline: 'Tersimpan lokal (offline)',
+                    gagal: 'Gagal menyimpan'
+                }[this.statusTeks[this.current.id]] ?? '';
+            },
+            sudahDijawab(soal) {
+                if (soal.tipe === 'essay') {
+                    return (this.jawabanTeks[soal.id] ?? '').trim() !== '';
+                }
+
+                return this.jawaban[soal.id] !== null && this.jawaban[soal.id] !== undefined;
+            },
+            pindah(nomor) {
+                this.index = Math.max(0, Math.min(this.questions.length - 1, nomor));
+                this.$nextTick(() => this.$refs.kartuSoal?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             },
             get isFullscreen() {
                 return Boolean(
@@ -37,9 +70,153 @@
                 );
             },
             init() {
+                this.muatAntreanLokal();
                 this.mulaiTimer();
                 this.pasangPengawas();
+                this.pasangDeteksiKoneksi();
+                this.pasangEcho();
                 setInterval(() => this.cekStatus(), 5000);
+            },
+            pasangEcho() {
+                if (typeof window.buatEcho !== 'function') return;
+                const echo = window.buatEcho();
+                if (!echo) return;
+
+                const userChannel = 'session-user.' + config.sessionId + '.' + config.userId;
+                echo.channel(userChannel)
+                    .listen('.PesertaDikeluarkan', (data) => {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        alert(data.pesan || 'Kamu telah dikeluarkan dari sesi oleh pengajar.');
+                        window.location.href = config.dashboardUrl + '?dikeluarkan=1';
+                    })
+                    .listen('.PesertaDipaksaKumpul', (data) => {
+                        this.berhenti = true;
+                        this.batalkanToleransi();
+                        alert(data.pesan || 'Pekerjaanmu telah dikumpulkan oleh pengajar.');
+                        window.location.href = config.resultUrl;
+                    });
+            },
+            muatAntreanLokal() {
+                try {
+                    const raw = localStorage.getItem(this.storageKey);
+                    if (raw) {
+                        this.antreanOffline = JSON.parse(raw);
+                        // Pulihkan jawaban lokal jika ada di antrean
+                        for (const item of this.antreanOffline) {
+                            if (item.tipe === 'essay') {
+                                this.jawabanTeks[item.question_id] = item.jawaban_teks;
+                                this.statusTeks[item.question_id] = 'offline';
+                            } else if (item.option_id) {
+                                this.jawaban[item.question_id] = item.option_id;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    this.antreanOffline = [];
+                }
+
+                if (navigator.onLine && this.antreanOffline.length > 0) {
+                    this.prosesAntrean();
+                }
+            },
+            simpanAntreanKeStorage() {
+                try {
+                    if (this.antreanOffline.length === 0) {
+                        localStorage.removeItem(this.storageKey);
+                    } else {
+                        localStorage.setItem(this.storageKey, JSON.stringify(this.antreanOffline));
+                    }
+                } catch (e) {
+                    // local storage full or unavailable
+                }
+            },
+            tambahAntrean(item) {
+                // Hapus entry lama untuk soal yang sama agar tidak menumpuk
+                this.antreanOffline = this.antreanOffline.filter((q) => q.question_id !== item.question_id);
+                this.antreanOffline.push(item);
+                this.simpanAntreanKeStorage();
+            },
+            pasangDeteksiKoneksi() {
+                window.addEventListener('online', () => {
+                    this.isOnline = true;
+                    this.peringatan = 'Koneksi internet terhubung kembali. Mengirim antrean jawaban ke server...';
+                    this.prosesAntrean();
+                });
+                window.addEventListener('offline', () => {
+                    this.isOnline = false;
+                    this.peringatan = 'Koneksi internet terputus. Jawaban akan disimpan di perangkat (offline) dan disinkronkan saat terhubung kembali.';
+                });
+            },
+            async prosesAntrean() {
+                if (this.sedangSinkron || this.antreanOffline.length === 0) {
+                    return;
+                }
+                this.sedangSinkron = true;
+
+                while (this.antreanOffline.length > 0) {
+                    if (!navigator.onLine) {
+                        this.isOnline = false;
+                        break;
+                    }
+
+                    const item = this.antreanOffline[0];
+                    const body = { question_id: item.question_id };
+                    if (item.tipe === 'essay') {
+                        body.jawaban_teks = item.jawaban_teks;
+                    } else {
+                        body.option_id = item.option_id;
+                    }
+
+                    try {
+                        const res = await window.kuisFetch(config.answerUrl, {
+                            method: 'POST',
+                            body: body
+                        });
+
+                        if (res.ok) {
+                            this.antreanOffline.shift();
+                            this.simpanAntreanKeStorage();
+                            if (item.tipe === 'essay') {
+                                this.teksTersimpan[item.question_id] = item.jawaban_teks;
+                                this.statusTeks[item.question_id] = 'tersimpan';
+                            }
+                        } else if (res.status === 403 && res.data?.selesai) {
+                            this.berhenti = true;
+                            window.location.href = config.resultUrl;
+                            break;
+                        } else if (res.status === 419) {
+                            // Sesi CSRF kedaluwarsa, arahkan peserta reload
+                            this.pesan = 'Sesi login telah kedaluwarsa. Halaman akan dimuat ulang...';
+                            setTimeout(() => window.location.reload(), 1500);
+                            break;
+                        } else if (res.status === 429) {
+                            // Rate limit server: jeda 1.5 detik lalu ulangi item yang sama
+                            await new Promise((r) => setTimeout(r, 1500));
+                            continue;
+                        } else if (res.status >= 500) {
+                            // Server error sementara, jangan buang jawaban: tunggu 2 detik lalu ulangi
+                            await new Promise((r) => setTimeout(r, 2000));
+                            break;
+                        } else {
+                            // Kesalahan validasi data client (422 dll)
+                            this.antreanOffline.shift();
+                            this.simpanAntreanKeStorage();
+                        }
+                    } catch (err) {
+                        // Jaringan putus saat request
+                        this.isOnline = false;
+                        break;
+                    }
+
+                    // Jeda 750ms per request agar antrean database teratur dan di bawah batas throttle (90 req/menit)
+                    await new Promise((r) => setTimeout(r, 750));
+                }
+
+                this.sedangSinkron = false;
+                if (this.antreanOffline.length === 0 && this.peringatan.includes('Mengirim antrean')) {
+                    this.peringatan = '';
+                }
             },
             format(n) {
                 const menit = Math.floor(n / 60);
@@ -69,18 +246,39 @@
             async simpan(soal, opsi, sebelumnya) {
                 this.menyimpan = true;
                 this.pesan = '';
-                const hasil = await window.kuisFetch(config.answerUrl, {
-                    method: 'POST',
-                    body: { question_id: soal.id, option_id: opsi.id }
-                });
+
+                if (!navigator.onLine) {
+                    this.menyimpan = false;
+                    this.tambahAntrean({
+                        question_id: soal.id,
+                        option_id: opsi.id,
+                        tipe: 'pilihan_ganda',
+                        waktu: Date.now()
+                    });
+                    return;
+                }
+
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: soal.id, option_id: opsi.id }
+                    });
+                } catch (e) {
+                    // Jaringan bermasalah, simpan ke antrean lokal
+                    this.menyimpan = false;
+                    this.tambahAntrean({
+                        question_id: soal.id,
+                        option_id: opsi.id,
+                        tipe: 'pilihan_ganda',
+                        waktu: Date.now()
+                    });
+                    return;
+                }
+
                 this.menyimpan = false;
                 if (hasil.ok) {
                     return;
-                }
-                if (sebelumnya === null) {
-                    delete this.jawaban[soal.id];
-                } else {
-                    this.jawaban[soal.id] = sebelumnya;
                 }
                 if (hasil.status === 403) {
                     this.pesan = hasil.data?.message ?? 'Jawaban tidak diterima. Waktu mungkin sudah habis.';
@@ -90,21 +288,186 @@
                     }
                     return;
                 }
-                this.pesan = hasil.data?.message ?? 'Jawaban gagal disimpan. Coba pilih lagi.';
+                // Jika error server umum, simpan ke antrean offline
+                this.tambahAntrean({
+                    question_id: soal.id,
+                    option_id: opsi.id,
+                    tipe: 'pilihan_ganda',
+                    waktu: Date.now()
+                });
             },
-            akhiri(paksa = false) {
+            ubahTeks(soal, nilai) {
                 if (this.berhenti) {
                     return;
                 }
-                if (paksa) {
-                    this.kirimSelesai();
+                this.jawabanTeks[soal.id] = nilai;
+                this.statusTeks[soal.id] = 'menunggu';
+                clearTimeout(this.timerTeks[soal.id]);
+                this.timerTeks[soal.id] = setTimeout(() => this.simpanTeks(soal), 800);
+            },
+            async simpanTeks(soal) {
+                if (!soal || soal.tipe !== 'essay' || this.berhenti) {
+                    return true;
+                }
+
+                if (this.janjiTeks[soal.id]) {
+                    await this.janjiTeks[soal.id];
+
+                    if ((this.jawabanTeks[soal.id] ?? '') === (this.teksTersimpan[soal.id] ?? '')) {
+                        return true;
+                    }
+                }
+
+                const nilai = this.jawabanTeks[soal.id] ?? '';
+
+                if (nilai === (this.teksTersimpan[soal.id] ?? '')) {
+                    this.statusTeks[soal.id] = nilai === '' ? '' : 'tersimpan';
+                    return true;
+                }
+
+                if (!navigator.onLine) {
+                    this.statusTeks[soal.id] = 'offline';
+                    this.tambahAntrean({
+                        question_id: soal.id,
+                        jawaban_teks: nilai,
+                        tipe: 'essay',
+                        waktu: Date.now()
+                    });
+                    return true;
+                }
+
+                this.statusTeks[soal.id] = 'menyimpan';
+                let hasil;
+
+                try {
+                    const janji = window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: soal.id, jawaban_teks: nilai }
+                    });
+                    this.janjiTeks[soal.id] = janji;
+                    hasil = await janji;
+                } catch {
+                    delete this.janjiTeks[soal.id];
+                    this.statusTeks[soal.id] = 'offline';
+                    this.tambahAntrean({
+                        question_id: soal.id,
+                        jawaban_teks: nilai,
+                        tipe: 'essay',
+                        waktu: Date.now()
+                    });
+                    return true;
+                }
+
+                delete this.janjiTeks[soal.id];
+
+                if (hasil.ok) {
+                    this.teksTersimpan[soal.id] = nilai;
+                    this.statusTeks[soal.id] = 'tersimpan';
+
+                    return true;
+                }
+
+                if (hasil.status === 403) {
+                    this.statusTeks[soal.id] = 'gagal';
+                    this.pesan = hasil.data?.message ?? 'Jawaban essay tidak diterima. Waktu mungkin sudah habis.';
+                    if (hasil.data?.selesai) {
+                        this.berhenti = true;
+                        window.location.href = config.resultUrl;
+                    }
+
+                    return false;
+                }
+
+                // Error jaringan / temporary server, simpan offline
+                this.statusTeks[soal.id] = 'offline';
+                this.tambahAntrean({
+                    question_id: soal.id,
+                    jawaban_teks: nilai,
+                    tipe: 'essay',
+                    waktu: Date.now()
+                });
+
+                return true;
+            },
+            async simpanSemuaTeks() {
+                for (const soal of this.questions.filter((item) => item.tipe === 'essay')) {
+                    clearTimeout(this.timerTeks[soal.id]);
+
+                    if (!(await this.simpanTeks(soal))) {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
+            async pastikanAntreanTersinkron() {
+                if (this.antreanOffline.length > 0) {
+                    if (!navigator.onLine) {
+                        this.pesan = 'Ada ' + this.antreanOffline.length + ' jawaban tersimpan di perangkat. Harap hubungkan internet Anda kembali untuk menyinkronkan jawaban ke server sebelum menyelesaikan ujian.';
+                        return false;
+                    }
+                    this.pesan = 'Menyinkronkan ' + this.antreanOffline.length + ' jawaban ke server...';
+                    await this.prosesAntrean();
+                    if (this.antreanOffline.length > 0) {
+                        this.pesan = 'Masih ada jawaban yang belum tersinkron ke server. Mohon tunggu beberapa saat.';
+                        return false;
+                    }
+                }
+                return true;
+            },
+            async akhiri(paksa = false) {
+                if (this.berhenti) {
                     return;
                 }
+
+                if (paksa) {
+                    await Promise.race([
+                        this.simpanSemuaTeks(),
+                        new Promise((resolve) => setTimeout(resolve, 1200))
+                    ]);
+                    if (navigator.onLine && this.antreanOffline.length > 0) {
+                        await Promise.race([
+                            this.prosesAntrean(),
+                            new Promise((resolve) => setTimeout(resolve, 2000))
+                        ]);
+                    }
+                    this.kirimSelesai();
+
+                    return;
+                }
+
                 if (this.belum > 0) {
                     this.konfirmasiSelesai = true;
                     this.$nextTick(() => this.$refs.tombolKembali?.focus());
+
                     return;
                 }
+
+                const tersimpan = await this.simpanSemuaTeks();
+                if (!tersimpan) {
+                    this.pesan = 'Masih ada jawaban essay yang belum tersimpan. Periksa koneksi lalu coba lagi.';
+                    return;
+                }
+
+                const sinkron = await this.pastikanAntreanTersinkron();
+                if (!sinkron) {
+                    return;
+                }
+
+                this.kirimSelesai();
+            },
+            async kumpulkanSekarang() {
+                const tersimpan = await this.simpanSemuaTeks();
+                if (!tersimpan) {
+                    this.pesan = 'Masih ada jawaban essay yang belum tersimpan. Periksa koneksi lalu coba lagi.';
+                    return;
+                }
+
+                const sinkron = await this.pastikanAntreanTersinkron();
+                if (!sinkron) {
+                    return;
+                }
+
                 this.kirimSelesai();
             },
             tutupKonfirmasi() {
@@ -121,6 +484,9 @@
                 this.konfirmasiSelesai = false;
                 this.berhenti = true;
                 this.batalkanToleransi();
+                try {
+                    localStorage.removeItem(this.storageKey);
+                } catch (e) {}
                 document.getElementById('form-selesai').submit();
             },
             async cekStatus() {
@@ -290,10 +656,15 @@
     <div
         id="area-kuis"
         x-data="kuisAcak({
+            attemptId: {{ $attempt->id }},
             questions: {{ Illuminate\Support\Js::from($questions) }},
             jawaban: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_option_id']])->filter()->all()) }},
+            jawabanTeks: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_teks'] ?? ''])->all()) }},
             serverNow: {{ $server_now }},
             batasAkhir: {{ $attempt->batas_akhir_at }},
+            sessionId: {{ $session->id }},
+            userId: {{ auth()->id() }},
+            attemptId: {{ $attempt->id }},
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
             statusUrl: '{{ route('peserta.attempt.status', $attempt) }}',
@@ -302,24 +673,59 @@
         })"
         class="space-y-5"
     >
-        <div class="flex flex-col gap-3 rounded-card border border-outline bg-page p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex items-center gap-3">
-                <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-brand-deep">
-                    <x-icon name="clock" :size="22" />
-                </span>
-                <div>
-                    <p class="text-sm font-bold text-ink-muted">Sisa waktu</p>
-                    <p class="timer text-3xl" x-bind:class="sisa <= 30 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
-                </div>
-            </div>
+        <div class="exam-bar -mx-4 px-4 py-3 sm:-mx-6 sm:px-6">
+            <div class="mx-auto flex max-w-6xl flex-col gap-2">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-baseline gap-2">
+                        <p class="text-sm font-bold text-ink-muted">Soal</p>
+                        <p class="font-display text-2xl font-bold text-ink">
+                            <span x-text="index + 1">1</span><span class="text-ink-muted"> / </span><span x-text="questions.length"></span>
+                        </p>
+                    </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="pill pill-leaf" x-text="'Terjawab ' + terjawab + ' dari ' + questions.length"></span>
-                <button type="button" class="btn btn-secondary" x-on:click="masukLayarPenuh()">
-                    <x-icon name="eye" :size="20" />
-                    Layar penuh
-                </button>
-                <button type="button" class="btn btn-primary" x-ref="tombolSelesai" x-on:click="akhiri(false)">Selesai</button>
+                    <div class="flex items-center gap-2">
+                        <div class="text-right">
+                            <p class="text-xs font-bold text-ink-muted">Sisa waktu</p>
+                            <p class="timer text-2xl" x-bind:class="sisa <= 30 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
+                        </div>
+                        <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
+                            <x-icon name="eye" :size="20" />
+                        </button>
+                        <button type="button" class="btn btn-primary" x-ref="tombolSelesai" x-on:click="akhiri(false)">Selesai</button>
+                    </div>
+                </div>
+
+                <div
+                    class="exam-progress"
+                    role="progressbar"
+                    aria-label="Progres jawaban"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    x-bind:aria-valuenow="questions.length ? Math.round(terjawab / questions.length * 100) : 0"
+                >
+                    <span x-bind:style="'width: ' + (questions.length ? Math.round(terjawab / questions.length * 100) : 0) + '%'"></span>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-ink-muted"><span x-text="terjawab"></span> dari <span x-text="questions.length"></span> terjawab</span>
+                        <template x-if="!isOnline">
+                            <span class="pill pill-coral text-xs">Offline</span>
+                        </template>
+                        <template x-if="antreanOffline.length > 0">
+                            <button
+                                type="button"
+                                class="pill pill-sun text-xs hover:underline cursor-pointer"
+                                x-on:click="prosesAntrean()"
+                                x-bind:disabled="sedangSinkron"
+                                title="Klik untuk sinkronkan sekarang"
+                            >
+                                <span x-text="antreanOffline.length + ' tersimpan lokal (sinkronkan)'"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <span class="exam-status" aria-live="polite" x-text="sedangSinkron ? 'Menyinkronkan ke server...' : (menyimpan ? 'Menyimpan jawaban...' : statusTeksAktif)"></span>
+                </div>
             </div>
         </div>
 
@@ -332,39 +738,66 @@
             <p x-text="pesan"></p>
         </div>
 
-        <div x-show="menyimpan" x-cloak class="text-sm font-bold text-ink-muted">Menyimpan jawaban...</div>
-
         <template x-if="current">
-            <section class="card" aria-labelledby="teks-soal">
+            <section x-ref="kartuSoal" class="card scroll-mt-32" aria-labelledby="teks-soal">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <span class="pill pill-brand" x-text="'Soal ' + (index + 1) + ' dari ' + questions.length"></span>
-                    <span class="text-sm text-ink-subtle">Pilih satu jawaban. Jawaban tersimpan saat diklik.</span>
+                    <span class="pill pill-brand" x-text="current.tipe === 'essay' ? 'Essay · maks ' + current.bobot : 'Pilihan ganda'"></span>
+                    <button type="button" class="btn btn-ghost px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen">
+                        <x-icon name="eye" :size="20" />
+                        <span class="hidden sm:inline">Layar penuh</span>
+                    </button>
                 </div>
 
-                <h2 id="teks-soal" class="mt-4 text-2xl leading-snug" x-text="current.teks"></h2>
+                <h2 id="teks-soal" class="mt-4 max-w-[65ch] whitespace-pre-line text-2xl leading-snug text-ink sm:text-3xl" x-text="current.teks"></h2>
 
-                <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal">
-                    <template x-for="(opsi, opsiIndex) in current.opsi" :key="opsi.id">
-                        <button
-                            type="button"
-                            class="tile"
-                            x-bind:aria-pressed="jawaban[current.id] === opsi.id ? 'true' : 'false'"
-                            x-bind:disabled="menyimpan"
-                            x-on:click="pilih(current, opsi)"
-                        >
-                            <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
-                            <span x-text="opsi.teks"></span>
-                        </button>
-                    </template>
-                </div>
+                <template x-if="current.tipe === 'essay'">
+                    <div class="mt-5">
+                        <label for="jawaban-essay" class="label">Jawaban Anda</label>
+                        <textarea
+                            id="jawaban-essay"
+                            class="input min-h-[12rem] resize-y"
+                            maxlength="5000"
+                            x-bind:disabled="berhenti"
+                            x-bind:value="jawabanTeks[current.id] ?? ''"
+                            x-on:input="ubahTeks(current, $event.target.value)"
+                            x-on:blur="simpanTeks(current)"
+                            placeholder="Tulis jawaban lengkap di sini"
+                        ></textarea>
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">
+                            <span x-text="(jawabanTeks[current.id] ?? '').length + ' / 5000 karakter'"></span>
+                            <span x-text="statusTeksAktif"></span>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="current.tipe !== 'essay'">
+                    <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal">
+                        <p class="text-base text-ink-muted">Pilih satu jawaban. Jawaban tersimpan saat diklik.</p>
+                        <template x-for="(opsi, opsiIndex) in current.opsi" :key="opsi.id">
+                            <button
+                                type="button"
+                                class="tile"
+                                x-bind:aria-pressed="jawaban[current.id] === opsi.id ? 'true' : 'false'"
+                                x-bind:disabled="menyimpan"
+                                x-on:click="pilih(current, opsi)"
+                            >
+                                <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
+                                <span class="tile-text" x-text="opsi.teks"></span>
+                                <span class="tile-check" aria-hidden="true">
+                                    <x-icon name="check" :size="20" />
+                                </span>
+                            </button>
+                        </template>
+                    </div>
+                </template>
 
                 <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex gap-2">
-                        <button type="button" class="btn btn-secondary" x-on:click="index = Math.max(0, index - 1)" x-bind:disabled="index === 0">
+                        <button type="button" class="btn btn-secondary" x-on:click="pindah(index - 1)" x-bind:disabled="index === 0">
                             <x-icon name="arrow-left" :size="20" />
                             Sebelumnya
                         </button>
-                        <button type="button" class="btn btn-secondary" x-on:click="index = Math.min(questions.length - 1, index + 1)" x-bind:disabled="index === questions.length - 1">
+                        <button type="button" class="btn btn-secondary" x-on:click="pindah(index + 1)" x-bind:disabled="index === questions.length - 1">
                             Berikutnya
                         </button>
                     </div>
@@ -380,10 +813,10 @@
                     <button
                         type="button"
                         class="flex h-12 items-center justify-center rounded-xl border-2 font-mono text-base font-bold"
-                        x-bind:class="nomor === index ? 'border-brand bg-brand text-white' : (jawaban[soal.id] ? 'border-leaf bg-leaf-soft text-leaf-deep' : 'border-outline bg-page text-ink-muted')"
+                        x-bind:class="nomor === index ? 'border-brand bg-brand text-white' : (sudahDijawab(soal) ? 'border-leaf bg-leaf-soft text-leaf-deep' : 'border-outline bg-page text-ink-muted')"
                         x-bind:aria-current="nomor === index ? 'true' : 'false'"
-                        x-bind:aria-label="'Soal ' + (nomor + 1) + (jawaban[soal.id] ? ', sudah dijawab' : ', belum dijawab')"
-                        x-on:click="index = nomor"
+                        x-bind:aria-label="'Soal ' + (nomor + 1) + (sudahDijawab(soal) ? ', sudah dijawab' : ', belum dijawab')"
+                        x-on:click="pindah(nomor)"
                         x-text="nomor + 1"
                     ></button>
                 </template>
@@ -500,7 +933,7 @@
                 </div>
 
                 <p id="isi-konfirmasi-selesai" class="mt-4 text-base leading-relaxed text-ink-muted">
-                    Soal yang tidak dijawab dihitung salah. Kamu masih bisa menutup dialog ini dan melanjutkan mengerjakan selama waktu tersisa.
+                    Soal pilihan ganda yang tidak dijawab dihitung salah, essay kosong bernilai 0. Kamu masih bisa menutup dialog ini dan melanjutkan mengerjakan selama waktu tersisa.
                 </p>
 
                 <dl class="mt-4 grid grid-cols-2 gap-3">
@@ -531,7 +964,7 @@
                     <button
                         type="button"
                         class="btn btn-primary flex-1"
-                        x-on:click="kirimSelesai()"
+                        x-on:click="kumpulkanSekarang()"
                     >
                         Kumpulkan sekarang
                     </button>

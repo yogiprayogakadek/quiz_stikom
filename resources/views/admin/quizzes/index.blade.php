@@ -1,4 +1,4 @@
-<x-layouts.admin judul="Kuis" keterangan="Kuis adalah kumpulan soal yang dipakai di sesi.">
+<x-layouts.admin judul="Kuis" keterangan="Setiap kuis memiliki soalnya sendiri yang dipakai di sesi.">
     <x-slot:aksi>
         <a href="{{ route('admin.quizzes.create') }}" class="btn btn-primary">
             <x-icon name="plus" :size="20" />
@@ -18,11 +18,12 @@
             @foreach ($quizzes as $kuis)
                 <article class="card card-hover">
                     <div class="flex flex-wrap items-center gap-2">
-                        <span class="pill pill-brand">{{ $kuis->questions_count }} soal di pool</span>
+                        @if ($kuis->kelas)
+                            <span class="pill pill-brand font-bold">{{ $kuis->kelas->nama }}</span>
+                        @endif
+                        <span class="pill pill-neutral">{{ $kuis->questions_count }} soal</span>
                         @if ($kuis->jumlah_soal !== null)
-                            <span class="pill pill-sun">{{ $kuis->jumlah_soal }} soal dipakai</span>
-                        @else
-                            <span class="pill pill-neutral">Semua soal dipakai</span>
+                            <span class="pill pill-sun">{{ $kuis->jumlah_soal }} dipakai</span>
                         @endif
                     </div>
 
@@ -30,7 +31,11 @@
                     <p class="mt-1 text-base text-ink-muted">{{ $kuis->sessions_count }} sesi memakai kuis ini.</p>
 
                     <div class="mt-4 flex flex-wrap gap-2">
-                        <a href="{{ route('admin.quizzes.edit', $kuis) }}" class="btn btn-secondary">Edit</a>
+                        <a href="{{ route('admin.quizzes.questions.index', $kuis) }}" class="btn btn-primary">
+                            <x-icon name="pencil" :size="18" />
+                            Kelola soal ({{ $kuis->questions_count }})
+                        </a>
+                        <a href="{{ route('admin.quizzes.edit', $kuis) }}" class="btn btn-secondary">Edit kuis</a>
                         @if ($kuis->sessions_count === 0)
                             <form method="POST" action="{{ route('admin.quizzes.destroy', $kuis) }}" onsubmit="return confirm('Hapus kuis ini?')">
                                 @csrf

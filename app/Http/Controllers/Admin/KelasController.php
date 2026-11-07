@@ -79,7 +79,11 @@ class KelasController extends Controller
         DB::transaction(function () use ($kelas, $data) {
             $kelas->update(['nama' => $data['nama'], 'pin' => $data['pin']]);
             $kelas->peserta()->sync($data['peserta_ids'] ?? []);
-            $kelas->quizzes()->sync($data['quiz_ids'] ?? []);
+
+            $selectedQuizIds = $data['quiz_ids'] ?? [];
+            if (! empty($selectedQuizIds)) {
+                Quiz::whereIn('id', $selectedQuizIds)->update(['kelas_id' => $kelas->id]);
+            }
         });
 
         return back()->with('sukses', 'Kelas diperbarui.');

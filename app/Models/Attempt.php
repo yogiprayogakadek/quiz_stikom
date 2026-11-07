@@ -19,6 +19,8 @@ class Attempt extends Model
         'bergabung_at',
         'jumlah_benar',
         'skor_total',
+        'poin_total',
+        'poin_maksimal',
     ];
 
     protected function casts(): array
@@ -30,6 +32,8 @@ class Attempt extends Model
             'bergabung_at' => 'datetime',
             'jumlah_benar' => 'integer',
             'skor_total' => 'integer',
+            'poin_total' => 'integer',
+            'poin_maksimal' => 'integer',
         ];
     }
 

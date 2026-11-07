@@ -26,8 +26,12 @@
             <select id="quiz_id" name="quiz_id" class="input" required>
                 <option value="">Pilih kuis</option>
                 @foreach ($quizzes as $kuis)
-                    <option value="{{ $kuis->id }}" @selected((int) old('quiz_id', $session?->quiz_id ?? request('quiz_id')) === $kuis->id)>
-                        {{ $kuis->judul }} ({{ $kuis->questions_count }} soal)
+                    <option
+                        value="{{ $kuis->id }}"
+                        @selected((int) old('quiz_id', $session?->quiz_id ?? request('quiz_id')) === $kuis->id)
+                        @disabled($kuis->questions_count === 0)
+                    >
+                        {{ $kuis->judul }} ({{ $kuis->questions_count }} soal){{ $kuis->questions_count === 0 ? ' - belum ada soal' : '' }}
                     </option>
                 @endforeach
             </select>

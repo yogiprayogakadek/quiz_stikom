@@ -10,7 +10,7 @@
         </a>
     </x-slot:aksi>
 
-    <div class="grid gap-5 sm:grid-cols-3">
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div class="card">
             <p class="text-base font-bold text-ink-muted">Peserta</p>
             <p class="display-number mt-2 text-5xl">{{ $totalAttempt }}</p>
@@ -23,6 +23,11 @@
             <p class="text-base font-bold text-ink-muted">Perlu ditinjau</p>
             <p class="display-number mt-2 text-5xl">{{ $perluTinjau }}</p>
             <p class="mt-2 text-sm text-ink-muted">Peserta dengan 3 kejadian atau lebih. Tidak ada diskualifikasi otomatis.</p>
+        </div>
+        <div class="card {{ $essayBelumDinilai > 0 ? 'border-sun bg-sun-soft' : '' }}">
+            <p class="text-base font-bold text-ink-muted">Essay belum dinilai</p>
+            <p class="display-number mt-2 text-5xl">{{ $essayBelumDinilai }}</p>
+            <p class="mt-2 text-sm text-ink-muted">Jawaban essay yang menunggu penilaian manual admin.</p>
         </div>
     </div>
 
@@ -50,8 +55,8 @@
                             <th scope="col">Nama</th>
                             <th scope="col">Username</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Benar</th>
-                            <th scope="col">Skor</th>
+                            <th scope="col">PG benar</th>
+                            <th scope="col">Poin / nilai</th>
                             <th scope="col">Jawaban</th>
                             <th scope="col">Kejadian</th>
                             <th scope="col">Aksi</th>
@@ -66,9 +71,19 @@
                                     <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
                                         {{ ucfirst($attempt->status) }}
                                     </span>
+                                    @if ($attempt->essay_belum_dinilai > 0)
+                                        <span class="pill pill-sun mt-1 block w-fit">Essay belum dinilai</span>
+                                    @endif
                                 </td>
                                 <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
-                                <td class="font-mono">{{ $attempt->skor_total }}</td>
+                                <td class="font-mono">
+                                    @if ($session->mode === 'acak' && $attempt->poin_maksimal > 0)
+                                        {{ $attempt->poin_total }}/{{ $attempt->poin_maksimal }}
+                                        <span class="block text-sm text-ink-muted">Nilai {{ $attempt->skor_total }}</span>
+                                    @else
+                                        {{ $attempt->skor_total }}
+                                    @endif
+                                </td>
                                 <td class="font-mono">{{ $attempt->answers_count }}</td>
                                 <td>
                                     @if ($attempt->events_count >= 3)
@@ -89,11 +104,18 @@
     </section>
 
     <section class="mt-6 card" aria-labelledby="persentase-soal">
-        <h2 id="persentase-soal" class="text-2xl">Persentase benar per soal</h2>
-        <p class="mt-1 text-base text-ink-muted">Diurutkan dari soal tersulit. Penyebut mengikuti jumlah peserta yang benar-benar menerima soal tersebut.</p>
+        <h2 id="persentase-soal" class="text-2xl">Persentase benar soal pilihan ganda</h2>
+        <p class="mt-1 text-base text-ink-muted">Diurutkan dari soal tersulit. Penyebut mengikuti jumlah peserta yang benar-benar menerima soal tersebut. Essay dinilai manual dan tidak masuk statistik ini.</p>
+
+        @if ($essayBelumDinilai > 0)
+            <div class="mt-4 rounded-2xl bg-sun-soft px-4 py-3">
+                <p class="text-base font-bold text-ink">{{ $essayBelumDinilai }} jawaban essay belum dinilai.</p>
+                <p class="mt-1 text-sm text-ink-muted">Buka detail peserta untuk memberi nilai essay. Poin attempt akan dihitung ulang setelah disimpan.</p>
+            </div>
+        @endif
 
         @if ($statistikSoal === [])
-            <p class="mt-4 text-base text-ink-muted">Belum ada data jawaban.</p>
+            <p class="mt-4 text-base text-ink-muted">Belum ada data jawaban pilihan ganda.</p>
         @else
             <ul class="mt-4 space-y-4">
                 @foreach ($statistikSoal as $stat)

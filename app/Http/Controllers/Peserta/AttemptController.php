@@ -91,8 +91,11 @@ class AttemptController extends Controller
                 'id' => $question->id,
                 'urutan' => $aq->urutan,
                 'teks' => $question->teks,
+                'tipe' => $question->tipe,
+                'bobot' => $question->bobot,
                 'opsi' => $opsi,
                 'jawaban_option_id' => $jawaban->get($question->id)?->option_id,
+                'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
             ];
         })->values()->all();
 
@@ -134,31 +137,83 @@ class AttemptController extends Controller
         }
 
         $questionId = (int) $request->input('question_id');
-        $optionId = (int) $request->input('option_id');
 
-        $attemptQuestion = $attempt->attemptQuestions()->where('question_id', $questionId)->first();
+        $attemptQuestion = $attempt->attemptQuestions()
+            ->where('question_id', $questionId)
+            ->with('question')
+            ->first();
 
         if ($attemptQuestion === null) {
             return response()->json(['message' => 'Soal ini bukan bagian dari attempt Anda.'], 422);
+        }
+
+        $question = $attemptQuestion->question;
+        $now = now()->getTimestampMs();
+        $waktuJawab = max(0, $now - (int) $attempt->mulai_at);
+
+        if ($question->isEssay()) {
+            if ($request->filled('option_id')) {
+                return response()->json(['message' => 'Soal essay tidak memakai opsi jawaban.'], 422);
+            }
+
+            $teks = trim((string) $request->input('jawaban_teks', ''));
+
+            if ($teks === '') {
+                Answer::where('attempt_id', $attempt->id)
+                    ->where('question_id', $questionId)
+                    ->delete();
+            } else {
+                Answer::updateOrCreate(
+                    ['attempt_id' => $attempt->id, 'question_id' => $questionId],
+                    [
+                        'option_id' => null,
+                        'jawaban_teks' => $teks,
+                        'waktu_jawab_ms' => $waktuJawab,
+                        'skor' => 0,
+                        'dinilai_at' => null,
+                        'dinilai_oleh' => null,
+                        'answered_at' => now(),
+                    ]
+                );
+            }
+
+            $engine->siarkanDisplayTerbatas($attempt->quizSession);
+
+            return response()->json([
+                'ok' => true,
+                'question_id' => $questionId,
+                'jawaban_teks' => $teks,
+                'answered_count' => $attempt->answers()->count(),
+            ]);
+        }
+
+        $optionId = (int) $request->input('option_id');
+
+        if ($optionId <= 0) {
+            return response()->json(['message' => 'Pilih salah satu jawaban.'], 422);
         }
 
         if (! in_array($optionId, array_map('intval', $attemptQuestion->urutan_opsi_json), true)) {
             return response()->json(['message' => 'Opsi tidak sesuai dengan urutan soal Anda.'], 422);
         }
 
-        $now = now()->getTimestampMs();
-
         Answer::updateOrCreate(
             ['attempt_id' => $attempt->id, 'question_id' => $questionId],
             [
                 'option_id' => $optionId,
-                'waktu_jawab_ms' => max(0, $now - (int) $attempt->mulai_at),
+                'jawaban_teks' => null,
+                'waktu_jawab_ms' => $waktuJawab,
                 'skor' => 0,
                 'answered_at' => now(),
             ]
         );
 
         $engine->siarkanDisplayTerbatas($attempt->quizSession);
+        \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+            'action' => 'answer_submitted',
+            'user_id' => $attempt->user_id,
+            'question_id' => $questionId,
+        ]);
 
         return response()->json([
             'ok' => true,
@@ -177,6 +232,10 @@ class AttemptController extends Controller
         if ($attempt->quizSession->mode === 'acak') {
             $engine->selesaikanAcak($attempt);
             $engine->siarkanDisplay($attempt->quizSession->fresh());
+            \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+                'action' => 'attempt_selesai',
+                'user_id' => $attempt->user_id,
+            ]);
         }
 
         return redirect()->route('peserta.attempt.result', $attempt);
@@ -279,13 +338,19 @@ class AttemptController extends Controller
             $question = $aq->question;
             $jawabanSaya = $jawaban->get($question->id);
             $benar = $question->correctOption();
+            $essay = $question->isEssay();
 
             return [
                 'teks' => $question->teks,
-                'jawaban_saya' => $jawabanSaya?->option?->teks,
-                'jawaban_benar' => $tampilkan ? $benar?->teks : null,
+                'tipe' => $question->tipe,
+                'bobot' => $question->bobot,
+                'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $jawabanSaya?->option?->teks,
+                'jawaban_benar' => $essay
+                    ? ($tampilkan ? $question->kunci_essay : null)
+                    : ($tampilkan ? $benar?->teks : null),
                 'pembahasan' => $tampilkan ? $question->pembahasan : null,
-                'benar' => $jawabanSaya?->option?->is_correct === true,
+                'benar' => $essay ? null : ($jawabanSaya?->option?->is_correct === true),
+                'dinilai_at' => $essay ? $jawabanSaya?->dinilai_at : null,
                 'skor' => $jawabanSaya?->skor ?? 0,
                 'urutan' => $aq->urutan,
             ];

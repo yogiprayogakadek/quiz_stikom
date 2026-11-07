@@ -18,19 +18,21 @@
                 Kolom password boleh kosong. Password kosong akan dibuat otomatis 8 karakter.
             </p>
 
-            <form method="POST" action="{{ route('admin.participants.import.store') }}" enctype="multipart/form-data" class="mt-5 space-y-4">
-                @csrf
-                <div>
-                    <label for="file" class="label">File CSV</label>
-                    <input id="file" name="file" type="file" accept=".csv,text/csv" class="input py-2" required @error('file') aria-invalid="true" @enderror>
-                    @error('file') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
+            <x-import-progress>
+                <form method="POST" action="{{ route('admin.participants.import.store') }}" enctype="multipart/form-data" class="mt-5 space-y-4" @submit="handleSubmit($event)">
+                    @csrf
+                    <div>
+                        <label for="file" class="label">File CSV</label>
+                        <input id="file" name="file" type="file" accept=".csv,text/csv" class="input py-2" required @change="handleFileSelect($event)" @error('file') aria-invalid="true" @enderror>
+                        @error('file') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
 
-                <button type="submit" class="btn btn-primary">
-                    <x-icon name="upload" :size="20" />
-                    Impor sekarang
-                </button>
-            </form>
+                    <button type="submit" class="btn btn-primary" :disabled="uploading">
+                        <x-icon name="upload" :size="20" />
+                        <span x-text="uploading ? 'Mengimpor...' : 'Impor sekarang'">Impor sekarang</span>
+                    </button>
+                </form>
+            </x-import-progress>
 
             <div class="mt-6 rounded-2xl bg-surface p-4 text-base text-ink-muted">
                 <p class="font-bold text-ink">Yang terjadi saat impor</p>

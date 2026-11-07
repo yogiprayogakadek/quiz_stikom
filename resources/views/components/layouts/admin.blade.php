@@ -101,16 +101,16 @@
                 </div>
             </header>
 
-            <main id="utama" class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <h1 class="text-3xl lg:text-4xl">{{ $judul }}</h1>
+            <main id="utama" class="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-outline pb-6">
+                    <div class="min-w-0 flex-1">
+                        <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl lg:text-4xl">{{ $judul }}</h1>
                         @if ($keterangan)
-                            <p class="mt-2 max-w-2xl text-base text-ink-muted">{{ $keterangan }}</p>
+                            <p class="mt-1.5 max-w-2xl text-sm sm:text-base text-ink-muted leading-relaxed">{{ $keterangan }}</p>
                         @endif
                     </div>
                     @isset($aksi)
-                        <div class="flex flex-wrap gap-3">{{ $aksi }}</div>
+                        <div class="flex flex-wrap items-center gap-2.5 sm:shrink-0">{{ $aksi }}</div>
                     @endisset
                 </div>
 

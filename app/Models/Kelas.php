@@ -22,9 +22,9 @@ class Kelas extends Model
         return $this->belongsToMany(User::class, 'kelas_user')->withTimestamps();
     }
 
-    public function quizzes(): BelongsToMany
+    public function quizzes(): HasMany
     {
-        return $this->belongsToMany(Quiz::class, 'kelas_quiz')->withTimestamps();
+        return $this->hasMany(Quiz::class);
     }
 
     public function sessions(): HasMany

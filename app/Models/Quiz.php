@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Quiz extends Model
 {
     protected $fillable = [
+        'kelas_id',
         'judul',
         'jumlah_soal',
         'created_by',
@@ -18,13 +19,14 @@ class Quiz extends Model
     protected function casts(): array
     {
         return [
+            'kelas_id' => 'integer',
             'jumlah_soal' => 'integer',
         ];
     }
 
-    public function questions(): BelongsToMany
+    public function questions(): HasMany
     {
-        return $this->belongsToMany(Question::class, 'quiz_questions');
+        return $this->hasMany(Question::class);
     }
 
     public function sessions(): HasMany
@@ -32,9 +34,9 @@ class Quiz extends Model
         return $this->hasMany(QuizSession::class);
     }
 
-    public function kelas(): BelongsToMany
+    public function kelas(): BelongsTo
     {
-        return $this->belongsToMany(Kelas::class, 'kelas_quiz')->withTimestamps();
+        return $this->belongsTo(Kelas::class);
     }
 
     public function creator(): BelongsTo

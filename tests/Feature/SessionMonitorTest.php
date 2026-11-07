@@ -339,7 +339,13 @@ class SessionMonitorTest extends TestCase
             'current_session_token' => 'token-peserta',
         ]);
 
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Uji',
+            'created_by' => $admin->id,
+        ]);
+
         $question = Question::create([
+            'quiz_id' => $quiz->id,
             'teks' => 'Ibu kota Indonesia?',
             'durasi_detik' => 60,
         ]);
@@ -349,13 +355,6 @@ class SessionMonitorTest extends TestCase
             'teks' => 'Jakarta',
             'is_correct' => true,
         ]);
-
-        $quiz = Quiz::create([
-            'judul' => 'Kuis Uji',
-            'created_by' => $admin->id,
-        ]);
-
-        $quiz->questions()->attach($question->id);
 
         $session = QuizSession::create([
             'quiz_id' => $quiz->id,
@@ -405,7 +404,13 @@ class SessionMonitorTest extends TestCase
             'role' => 'peserta',
         ]);
 
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Serempak Uji',
+            'created_by' => $admin->id,
+        ]);
+
         $question = Question::create([
+            'quiz_id' => $quiz->id,
             'teks' => 'Ibu kota Indonesia?',
             'durasi_detik' => 60,
         ]);
@@ -421,13 +426,6 @@ class SessionMonitorTest extends TestCase
             'teks' => 'Bandung',
             'is_correct' => false,
         ]);
-
-        $quiz = Quiz::create([
-            'judul' => 'Kuis Serempak Uji',
-            'created_by' => $admin->id,
-        ]);
-
-        $quiz->questions()->attach($question->id);
 
         $session = QuizSession::create([
             'quiz_id' => $quiz->id,

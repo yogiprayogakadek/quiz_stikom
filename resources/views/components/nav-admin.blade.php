@@ -5,8 +5,7 @@
         ['rute' => 'admin.dashboard', 'aktif' => 'admin.dashboard', 'label' => 'Dashboard', 'ikon' => 'home'],
         ['rute' => 'admin.participants.index', 'aktif' => 'admin.participants.*', 'label' => 'Peserta', 'ikon' => 'users'],
         ['rute' => 'admin.classes.index', 'aktif' => 'admin.classes.*', 'label' => 'Kelas', 'ikon' => 'kelas'],
-        ['rute' => 'admin.questions.index', 'aktif' => 'admin.questions.*', 'label' => 'Bank soal', 'ikon' => 'pencil'],
-        ['rute' => 'admin.quizzes.index', 'aktif' => 'admin.quizzes.*', 'label' => 'Kuis', 'ikon' => 'book'],
+        ['rute' => 'admin.quizzes.index', 'aktif' => ['admin.quizzes.*'], 'label' => 'Kuis & Soal', 'ikon' => 'book'],
         ['rute' => 'admin.sessions.index', 'aktif' => 'admin.sessions.*', 'label' => 'Sesi', 'ikon' => 'play'],
     ];
 @endphp

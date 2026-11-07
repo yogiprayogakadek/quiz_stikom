@@ -17,11 +17,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuestionController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, ?Quiz $quiz = null): View
     {
         $cari = trim((string) $request->query('q'));
 
-        $questions = Question::withCount('options')
+        $query = $quiz ? $quiz->questions() : Question::query();
+
+        $questions = $query->withCount('options')
             ->when($cari !== '', fn ($q) => $q->where('teks', 'like', "%{$cari}%"))
             ->orderByDesc('created_at')
             ->paginate(12)
@@ -33,48 +35,77 @@ class QuestionController extends Controller
             ->pluck('id')
             ->all();
 
-        return view('admin.questions.index', compact('questions', 'cari', 'terkunci'));
+        return view('admin.questions.index', compact('questions', 'cari', 'terkunci', 'quiz'));
     }
 
-    public function create(): View
+    public function create(?Quiz $quiz = null): View
     {
-        return view('admin.questions.create');
+        return view('admin.questions.create', compact('quiz'));
     }
 
-    public function store(StoreQuestionRequest $request): RedirectResponse
+    public function store(StoreQuestionRequest $request, ?Quiz $quiz = null): RedirectResponse
     {
         $data = $request->validated();
 
-        DB::transaction(function () use ($data) {
+        DB::transaction(function () use ($data, $quiz) {
             $question = Question::create([
+                'quiz_id' => $quiz?->id,
                 'teks' => $data['teks'],
+                'tipe' => $data['tipe'],
+                'bobot' => $data['bobot'],
                 'durasi_detik' => $data['durasi_detik'],
                 'pembahasan' => $data['pembahasan'] ?? null,
+                'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
             ]);
 
-            $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+            if ($data['tipe'] === 'pilihan_ganda') {
+                $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+            }
         });
 
-        return redirect()->route('admin.questions.index')->with('sukses', 'Soal ditambahkan.');
+        if ($quiz) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal kuis ditambahkan.');
+        }
+
+        return redirect()->route('admin.quizzes.index')->with('sukses', 'Soal ditambahkan.');
     }
 
-    public function edit(Question $question): View|RedirectResponse
+    public function edit(?Quiz $quiz, Question $question): View|RedirectResponse
     {
+        // Parameter normalization if called as single resource
+        if ($question->id === null && $quiz instanceof Question) {
+            $question = $quiz;
+            $quiz = $question->quiz;
+        }
+
+        if ($quiz && (int) $question->quiz_id !== (int) $quiz->id) {
+            abort(404);
+        }
+
         if ($question->isLocked()) {
-            return redirect()->route('admin.questions.index')
-                ->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
+            $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+            return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
         }
 
         $question->load('options');
 
-        return view('admin.questions.edit', compact('question'));
+        return view('admin.questions.edit', compact('question', 'quiz'));
     }
 
-    public function update(UpdateQuestionRequest $request, Question $question): RedirectResponse
+    public function update(UpdateQuestionRequest $request, ?Quiz $quiz, Question $question): RedirectResponse
     {
+        if ($question->id === null && $quiz instanceof Question) {
+            $question = $quiz;
+            $quiz = $question->quiz;
+        }
+
+        if ($quiz && (int) $question->quiz_id !== (int) $quiz->id) {
+            abort(404);
+        }
+
         if ($question->isLocked()) {
-            return redirect()->route('admin.questions.index')
-                ->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
+            $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+            return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
         }
 
         $data = $request->validated();
@@ -82,27 +113,50 @@ class QuestionController extends Controller
         DB::transaction(function () use ($question, $data) {
             $question->update([
                 'teks' => $data['teks'],
+                'tipe' => $data['tipe'],
+                'bobot' => $data['bobot'],
                 'durasi_detik' => $data['durasi_detik'],
                 'pembahasan' => $data['pembahasan'] ?? null,
+                'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
             ]);
 
             $question->options()->delete();
-            $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+
+            if ($data['tipe'] === 'pilihan_ganda') {
+                $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+            }
         });
 
-        return redirect()->route('admin.questions.index')->with('sukses', 'Soal diperbarui.');
+        if ($quiz) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal diperbarui.');
+        }
+
+        return redirect()->route('admin.quizzes.index')->with('sukses', 'Soal diperbarui.');
     }
 
-    public function destroy(Question $question): RedirectResponse
+    public function destroy(?Quiz $quiz, Question $question): RedirectResponse
     {
+        if ($question->id === null && $quiz instanceof Question) {
+            $question = $quiz;
+            $quiz = $question->quiz;
+        }
+
+        if ($quiz && (int) $question->quiz_id !== (int) $quiz->id) {
+            abort(404);
+        }
+
         if ($question->isLocked()) {
-            return redirect()->route('admin.questions.index')
-                ->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa dihapus.']);
+            $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+            return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa dihapus.']);
         }
 
         $question->delete();
 
-        return redirect()->route('admin.questions.index')->with('sukses', 'Soal dihapus.');
+        if ($quiz) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal dihapus.');
+        }
+
+        return redirect()->route('admin.quizzes.index')->with('sukses', 'Soal dihapus.');
     }
 
     private function simpanOpsi(Question $question, array $opsi, int $correct): void
@@ -115,14 +169,14 @@ class QuestionController extends Controller
         }
     }
 
-    public function importForm(): View
+    public function importForm(?Quiz $quiz = null): View
     {
         $quizzes = Quiz::orderBy('judul')->get();
 
-        return view('admin.questions.import', compact('quizzes'));
+        return view('admin.questions.import', compact('quizzes', 'quiz'));
     }
 
-    public function import(Request $request): RedirectResponse
+    public function import(Request $request, ?Quiz $quiz = null): RedirectResponse
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:2048'],
@@ -134,7 +188,9 @@ class QuestionController extends Controller
             'quiz_id.exists' => 'Kuis yang dipilih tidak ditemukan.',
         ]);
 
-        $quiz = $request->filled('quiz_id') ? Quiz::find($request->quiz_id) : null;
+        if (! $quiz && $request->filled('quiz_id')) {
+            $quiz = Quiz::find($request->quiz_id);
+        }
 
         $handle = fopen($request->file('file')->getRealPath(), 'r');
         if ($handle === false) {
@@ -161,6 +217,8 @@ class QuestionController extends Controller
         };
 
         $colTeks = $cariKolom(['teks', 'soal', 'pertanyaan']);
+        $colTipe = $cariKolom(['tipe', 'jenis']);
+        $colBobot = $cariKolom(['bobot', 'nilai_maksimal', 'poin']);
         $colA = $cariKolom(['opsi_a', 'pilihan_a', 'opsi a', 'a']);
         $colB = $cariKolom(['opsi_b', 'pilihan_b', 'opsi b', 'b']);
         $colC = $cariKolom(['opsi_c', 'pilihan_c', 'opsi c', 'c']);
@@ -168,13 +226,14 @@ class QuestionController extends Controller
         $colE = $cariKolom(['opsi_e', 'pilihan_e', 'opsi e', 'e']);
         $colF = $cariKolom(['opsi_f', 'pilihan_f', 'opsi f', 'f']);
         $colKunci = $cariKolom(['jawaban_benar', 'kunci', 'kunci_jawaban', 'jawaban']);
+        $colKunciEssay = $cariKolom(['kunci_essay', 'kunci esai', 'jawaban_essay']);
         $colDurasi = $cariKolom(['durasi_detik', 'durasi']);
         $colPembahasan = $cariKolom(['pembahasan', 'penjelasan']);
 
-        if ($colTeks === false || $colA === false || $colB === false || $colKunci === false) {
+        if ($colTeks === false) {
             fclose($handle);
             throw ValidationException::withMessages([
-                'file' => 'Header CSV minimal harus memuat kolom: teks, opsi_a, opsi_b, dan jawaban_benar.',
+                'file' => 'Header CSV minimal harus memuat kolom teks.',
             ]);
         }
 
@@ -189,7 +248,16 @@ class QuestionController extends Controller
             }
 
             $teks = trim((string) ($row[$colTeks] ?? ''));
-            $kunci = trim((string) ($row[$colKunci] ?? ''));
+            $tipeRaw = $colTipe !== false ? Str::lower(trim((string) ($row[$colTipe] ?? ''))) : '';
+            $tipe = match ($tipeRaw) {
+                '', 'pilihan_ganda', 'pilihan ganda', 'pg' => 'pilihan_ganda',
+                'essay', 'esai' => 'essay',
+                default => null,
+            };
+            $bobotRaw = $colBobot !== false ? trim((string) ($row[$colBobot] ?? '')) : '';
+            $bobot = ($bobotRaw !== '' && is_numeric($bobotRaw)) ? (int) $bobotRaw : 1;
+            $kunci = $colKunci !== false ? trim((string) ($row[$colKunci] ?? '')) : '';
+            $kunciEssay = $colKunciEssay !== false ? trim((string) ($row[$colKunciEssay] ?? '')) : '';
             $durasiRaw = $colDurasi !== false ? trim((string) ($row[$colDurasi] ?? '')) : '';
             $durasi = ($durasiRaw !== '' && is_numeric($durasiRaw)) ? (int) $durasiRaw : 30;
             $pembahasan = $colPembahasan !== false ? trim((string) ($row[$colPembahasan] ?? '')) : null;
@@ -214,37 +282,47 @@ class QuestionController extends Controller
             }
 
             $alasan = null;
+            $correctIndex = null;
 
-            if ($teks === '') {
+            if ($tipe === null) {
+                $alasan = "Tipe soal '{$tipeRaw}' tidak dikenali. Gunakan pilihan_ganda atau essay.";
+            } elseif ($teks === '') {
                 $alasan = 'Teks soal kosong.';
             } elseif (mb_strlen($teks) > 2000) {
                 $alasan = 'Teks soal melebihi 2000 karakter.';
-            } elseif (count($rawOptions) < 2) {
-                $alasan = 'Minimal harus memiliki 2 pilihan jawaban (opsi_a dan opsi_b).';
+            } elseif ($bobot < 1 || $bobot > 1000) {
+                $alasan = 'Bobot soal harus antara 1 sampai 1000.';
             } elseif ($durasi < 5 || $durasi > 300) {
                 $alasan = 'Durasi soal harus antara 5 sampai 300 detik.';
-            } else {
-                $correctIndex = null;
-                $kunciUpper = Str::upper($kunci);
-                $hurufKeys = array_keys($rawOptions);
-                $opsiValues = array_values($rawOptions);
-
-                if (isset($rawOptions[$kunciUpper])) {
-                    $correctIndex = array_search($kunciUpper, $hurufKeys, true);
-                } elseif (is_numeric($kunci) && (int) $kunci >= 1 && (int) $kunci <= count($rawOptions)) {
-                    $correctIndex = ((int) $kunci) - 1;
+            } elseif ($tipe === 'pilihan_ganda') {
+                if ($colA === false || $colB === false || $colKunci === false) {
+                    $alasan = 'Soal pilihan ganda butuh kolom opsi_a, opsi_b, dan jawaban_benar.';
+                } elseif (count($rawOptions) < 2) {
+                    $alasan = 'Minimal harus memiliki 2 pilihan jawaban (opsi_a dan opsi_b).';
                 } else {
-                    foreach ($opsiValues as $idx => $val) {
-                        if (Str::lower($val) === Str::lower($kunci)) {
-                            $correctIndex = $idx;
-                            break;
+                    $kunciUpper = Str::upper($kunci);
+                    $hurufKeys = array_keys($rawOptions);
+                    $opsiValues = array_values($rawOptions);
+
+                    if (isset($rawOptions[$kunciUpper])) {
+                        $correctIndex = array_search($kunciUpper, $hurufKeys, true);
+                    } elseif (is_numeric($kunci) && (int) $kunci >= 1 && (int) $kunci <= count($rawOptions)) {
+                        $correctIndex = ((int) $kunci) - 1;
+                    } else {
+                        foreach ($opsiValues as $idx => $val) {
+                            if (Str::lower($val) === Str::lower($kunci)) {
+                                $correctIndex = $idx;
+                                break;
+                            }
                         }
                     }
-                }
 
-                if ($correctIndex === null || $correctIndex === false) {
-                    $alasan = "Kunci jawaban '{$kunci}' tidak cocok dengan opsi yang tersedia (".implode(', ', $hurufKeys).').';
+                    if ($correctIndex === null || $correctIndex === false) {
+                        $alasan = "Kunci jawaban '{$kunci}' tidak cocok dengan opsi yang tersedia (".implode(', ', $hurufKeys).').';
+                    }
                 }
+            } elseif (mb_strlen($kunciEssay) > 5000) {
+                $alasan = 'Kunci essay melebihi 5000 karakter.';
             }
 
             if ($alasan !== null) {
@@ -257,30 +335,33 @@ class QuestionController extends Controller
                 continue;
             }
 
-            DB::transaction(function () use ($teks, $durasi, $pembahasan, $rawOptions, $correctIndex, $quiz) {
+            DB::transaction(function () use ($teks, $tipe, $bobot, $durasi, $pembahasan, $kunciEssay, $rawOptions, $correctIndex, $quiz) {
                 $question = Question::create([
+                    'quiz_id' => $quiz?->id,
                     'teks' => $teks,
+                    'tipe' => $tipe,
+                    'bobot' => $bobot,
                     'durasi_detik' => $durasi,
                     'pembahasan' => $pembahasan !== '' ? $pembahasan : null,
+                    'kunci_essay' => $tipe === 'essay' && $kunciEssay !== '' ? $kunciEssay : null,
                 ]);
 
-                $index = 0;
-                foreach ($rawOptions as $huruf => $teksOpsi) {
-                    $question->options()->create([
-                        'teks' => $teksOpsi,
-                        'is_correct' => $index === $correctIndex,
-                    ]);
-                    $index++;
-                }
-
-                if ($quiz) {
-                    $quiz->questions()->syncWithoutDetaching([$question->id]);
+                if ($tipe === 'pilihan_ganda') {
+                    $index = 0;
+                    foreach ($rawOptions as $teksOpsi) {
+                        $question->options()->create([
+                            'teks' => $teksOpsi,
+                            'is_correct' => $index === $correctIndex,
+                        ]);
+                        $index++;
+                    }
                 }
             });
 
             $hasil[] = [
                 'baris' => $baris,
                 'teks' => Str::limit($teks, 80),
+                'tipe' => $tipe,
                 'status' => 'berhasil',
                 'alasan' => null,
             ];
@@ -292,31 +373,35 @@ class QuestionController extends Controller
             'berhasil' => count(array_filter($hasil, fn ($h) => $h['status'] === 'berhasil')),
             'gagal' => count(array_filter($hasil, fn ($h) => $h['status'] === 'gagal')),
             'baris' => $hasil,
+            'quiz_id' => $quiz?->id,
             'quiz_nama' => $quiz?->judul,
         ];
 
-        return redirect()->route('admin.questions.import.result')->with('impor_hasil', $ringkasan);
+        if ($quiz) {
+            return redirect()->route('admin.quizzes.questions.import.result', $quiz)->with('impor_hasil', $ringkasan);
+        }
+
+        return redirect()->route('admin.quizzes.index')->with('impor_hasil', $ringkasan);
     }
 
-    public function importResult(Request $request): View|RedirectResponse
+    public function importResult(Request $request, ?Quiz $quiz = null): View|RedirectResponse
     {
         $ringkasan = $request->session()->pull('impor_hasil');
 
         if ($ringkasan === null) {
-            return redirect()->route('admin.questions.import');
+            return $quiz ? redirect()->route('admin.quizzes.questions.import', $quiz) : redirect()->route('admin.quizzes.index');
         }
 
-        return view('admin.questions.import-result', compact('ringkasan'));
+        return view('admin.questions.import-result', compact('ringkasan', 'quiz'));
     }
 
     public function template(): StreamedResponse
     {
-        $isi = "teks,opsi_a,opsi_b,opsi_c,opsi_d,opsi_e,jawaban_benar,durasi_detik,pembahasan\n"
-            ."\"Ibu kota negara Indonesia saat ini adalah?\",\"Jakarta\",\"Bandung\",\"Surabaya\",\"Medan\",\"\",A,30,\"Jakarta merupakan ibu kota negara Indonesia.\"\n"
-            ."\"Berapakah hasil dari 15 dikalikan 4?\",\"45\",\"50\",\"60\",\"65\",\"\",C,20,\"15 x 4 = 60.\"\n"
-            ."\"Komponen komputer yang berfungsi sebagai otak pemrosesan data adalah?\",\"RAM\",\"CPU\",\"Harddisk\",\"Power Supply\",\"\",B,30,\"Central Processing Unit (CPU) bertugas memproses seluruh instruksi komputer.\"\n"
-            ."\"Manakah di bawah ini yang merupakan contoh bahasa pemrograman berorientasi objek?\",\"HTML\",\"CSS\",\"Java\",\"SQL\",\"\",C,30,\"Java adalah bahasa pemrograman yang berbasis OOP (Object-Oriented Programming).\"\n"
-            ."\"Protokol default yang digunakan untuk browsing web secara aman adalah?\",\"HTTP\",\"HTTPS\",\"FTP\",\"SSH\",\"\",B,25,\"HTTPS menggunakan enkripsi SSL/TLS untuk keamanan.\"\n";
+        $isi = "teks,tipe,bobot,opsi_a,opsi_b,opsi_c,opsi_d,opsi_e,jawaban_benar,durasi_detik,pembahasan,kunci_essay\n"
+            ."\"Ibu kota negara Indonesia saat ini adalah?\",\"pilihan_ganda\",1,\"Jakarta\",\"Bandung\",\"Surabaya\",\"Medan\",\"\",A,30,\"Jakarta merupakan ibu kota negara Indonesia.\",\n"
+            ."\"Berapakah hasil dari 15 dikalikan 4?\",\"pilihan_ganda\",1,\"45\",\"50\",\"60\",\"65\",\"\",C,20,\"15 x 4 = 60.\",\n"
+            ."\"Komponen komputer yang berfungsi sebagai otak pemrosesan data adalah?\",\"pilihan_ganda\",1,\"RAM\",\"CPU\",\"Harddisk\",\"Power Supply\",\"\",B,30,\"Central Processing Unit (CPU) bertugas memproses seluruh instruksi komputer.\",\n"
+            ."\"Jelaskan perbedaan HTTP dan HTTPS.\",\"essay\",10,,,,,,,60,\"HTTP tidak terenkripsi, HTTPS memakai TLS.\",\"HTTP mengirim data tanpa enkripsi. HTTPS memakai TLS sehingga data terenkripsi.\"\n";
 
         return response()->streamDownload(function () use ($isi) {
             echo $isi;

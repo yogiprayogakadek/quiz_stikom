@@ -13,12 +13,20 @@
             <p class="mt-1 text-base text-ink-muted">Username: <span class="font-mono">{{ $attempt->user?->username ?? '-' }}</span></p>
         </div>
         <div class="card">
-            <p class="text-base font-bold text-ink-muted">Jawaban benar</p>
+            <p class="text-base font-bold text-ink-muted">Jawaban pilihan ganda benar</p>
             <p class="display-number mt-2 text-5xl">{{ $attempt->jumlah_benar }}</p>
         </div>
         <div class="card">
-            <p class="text-base font-bold text-ink-muted">{{ $attempt->quizSession->mode === 'serempak' ? 'Poin' : 'Nilai' }}</p>
-            <p class="display-number mt-2 text-5xl">{{ $attempt->skor_total }}</p>
+            <p class="text-base font-bold text-ink-muted">{{ $attempt->quizSession->mode === 'serempak' ? 'Poin sesi' : 'Poin' }}</p>
+            @if ($attempt->quizSession->mode === 'serempak')
+                <p class="display-number mt-2 text-5xl">{{ $attempt->skor_total }}</p>
+            @elseif ($attempt->poin_maksimal > 0)
+                <p class="display-number mt-2 text-5xl">{{ $attempt->poin_total }}<span class="text-3xl text-ink-muted"> / {{ $attempt->poin_maksimal }}</span></p>
+                <p class="mt-1 text-base text-ink-muted">Nilai {{ $attempt->skor_total }}</p>
+            @else
+                <p class="display-number mt-2 text-5xl">{{ $attempt->skor_total }}</p>
+                <p class="mt-1 text-base text-ink-muted">Nilai</p>
+            @endif
         </div>
     </div>
 
@@ -85,7 +93,7 @@
                             <th scope="col">No</th>
                             <th scope="col">Soal</th>
                             <th scope="col">Jawaban peserta</th>
-                            <th scope="col">Jawaban benar</th>
+                            <th scope="col">Kunci / jawaban benar</th>
                             <th scope="col">Hasil</th>
                             <th scope="col">Poin soal</th>
                         </tr>
@@ -94,17 +102,40 @@
                         @foreach ($rincian as $baris)
                             <tr>
                                 <td class="font-mono">{{ $baris['urutan'] }}</td>
-                                <td class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 140) }}</td>
-                                <td>{{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}</td>
-                                <td>{{ $baris['jawaban_benar'] ?? '-' }}</td>
                                 <td>
-                                    @if ($baris['benar'])
+                                    <p class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 140) }}</p>
+                                    <p class="mt-1 text-sm text-ink-muted">
+                                        {{ $baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda' }} · Bobot {{ $baris['bobot'] }}
+                                    </p>
+                                </td>
+                                <td>
+                                    @if ($baris['tipe'] === 'essay')
+                                        <p class="whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
+                                    @else
+                                        {{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($baris['tipe'] === 'essay')
+                                        <p class="whitespace-pre-line text-ink-muted">{{ $baris['kunci_essay'] ?: '-' }}</p>
+                                    @else
+                                        {{ $baris['jawaban_benar'] ?? '-' }}
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($baris['tipe'] === 'essay')
+                                        @if ($baris['dinilai_at'])
+                                            <span class="pill pill-leaf">Dinilai</span>
+                                        @else
+                                            <span class="pill pill-sun">Belum dinilai</span>
+                                        @endif
+                                    @elseif ($baris['benar'])
                                         <span class="pill pill-leaf">Benar</span>
                                     @else
                                         <span class="pill pill-coral">Salah</span>
                                     @endif
                                 </td>
-                                <td class="font-mono">{{ $baris['skor'] }}</td>
+                                <td class="font-mono">{{ $baris['skor'] }} / {{ $baris['bobot'] }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -112,6 +143,59 @@
             </div>
         @endif
     </section>
+
+    @php($barisEssay = $rincian->where('tipe', 'essay'))
+    @if ($attempt->status === 'selesai' && $attempt->quizSession->mode === 'acak' && $barisEssay->isNotEmpty())
+        <section class="mt-6 card" aria-labelledby="nilai-essay">
+            <h2 id="nilai-essay" class="text-2xl">Penilaian essay</h2>
+            <p class="mt-1 text-base text-ink-muted">
+                Nilai essay dihitung 0 sampai bobot soal. Simpan untuk memperbarui poin dan nilai attempt.
+            </p>
+
+            @php($adaJawabanEssay = $barisEssay->contains(fn ($baris) => (string) $baris['jawaban_saya'] !== ''))
+
+            @if (! $adaJawabanEssay)
+                <p class="mt-4 text-base text-ink-muted">Peserta tidak menjawab soal essay mana pun.</p>
+            @else
+            <form method="POST" action="{{ route('admin.attempts.nilai', $attempt) }}" class="mt-4 space-y-4">
+                @csrf
+
+                @foreach ($barisEssay as $baris)
+                    <div class="rounded-xl border border-outline p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <p class="font-bold text-ink">Soal {{ $baris['urutan'] }} · maks {{ $baris['bobot'] }}</p>
+                            @if ($baris['dinilai_at'])
+                                <span class="pill pill-leaf">Sudah dinilai</span>
+                            @else
+                                <span class="pill pill-sun">Belum dinilai</span>
+                            @endif
+                        </div>
+                        <p class="mt-1 text-base text-ink-muted whitespace-pre-line">{{ \Illuminate\Support\Str::limit($baris['teks'], 240) }}</p>
+                        <p class="mt-3 whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
+
+                        <div class="mt-3 max-w-xs">
+                            <label for="nilai-{{ $baris['question_id'] }}" class="label">Nilai (0–{{ $baris['bobot'] }})</label>
+                            <input
+                                id="nilai-{{ $baris['question_id'] }}"
+                                name="nilai[{{ $baris['question_id'] }}]"
+                                type="number"
+                                min="0"
+                                max="{{ $baris['bobot'] }}"
+                                value="{{ old('nilai.'.$baris['question_id'], $baris['skor']) }}"
+                                class="input"
+                                @if (! $baris['jawaban_saya']) disabled @endif
+                                @error('nilai.'.$baris['question_id']) aria-invalid="true" @enderror
+                            >
+                            @error('nilai.'.$baris['question_id']) <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+                @endforeach
+
+                <button type="submit" class="btn btn-primary">Simpan penilaian</button>
+            </form>
+            @endif
+        </section>
+    @endif
 
     <section class="mt-6 card border-coral" aria-labelledby="reset-attempt">
         <h2 id="reset-attempt" class="text-2xl">Reset attempt</h2>

@@ -334,6 +334,8 @@ class SessionController extends Controller
         $fresh = $session->fresh();
         $engine->siarkanDisplay($fresh);
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'attempt_dikumpulkan']);
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'force_finish']);
+        \App\Events\PesertaDipaksaKumpul::safeDispatch($session->id, $attempt->user_id, $attempt->id);
 
         return back()->with('sukses', 'Pekerjaan ' . $nama . ' dikumpulkan. Nilai dihitung dari jawaban yang tersimpan.');
     }
@@ -380,6 +382,8 @@ class SessionController extends Controller
         $fresh = $session->fresh();
         $engine->siarkanDisplay($fresh);
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_dikeluarkan']);
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'kick', 'user_id' => $userId]);
+        \App\Events\PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
         return back()->with('sukses', $nama . ' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
     }

@@ -18,7 +18,6 @@ class KelasTest extends TestCase
     {
         $admin = $this->admin();
         $peserta = $this->peserta('anggota');
-        $quiz = Quiz::create(['judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => $admin->current_session_token])
@@ -26,6 +25,7 @@ class KelasTest extends TestCase
             ->assertRedirect();
 
         $kelas = Kelas::where('pin', '1234')->firstOrFail();
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => $admin->current_session_token])
@@ -52,9 +52,8 @@ class KelasTest extends TestCase
     {
         $admin = $this->admin();
         $peserta = $this->peserta('pin');
-        $kelas = Kelas::create(['nama' => 'Kelas PIN', 'pin' => 'AB12']);
-        $quiz = Quiz::create(['judul' => 'Kuis Kelas PIN', 'created_by' => $admin->id]);
-        $kelas->quizzes()->attach($quiz->id);
+        $kelas = Kelas::create(['nama' => 'Kelas PIN', 'pin' => 'AB12', 'created_by' => $admin->id]);
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Kelas PIN', 'created_by' => $admin->id]);
 
         $this->actingAs($peserta)
             ->withSession(['auth_token' => $peserta->current_session_token])
@@ -157,8 +156,8 @@ class KelasTest extends TestCase
         $admin = $this->admin();
         $anggota = $this->peserta('anggota');
         $luar = $this->peserta('luar');
-        $quiz = Quiz::create(['judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
-        $kelas = Kelas::create(['nama' => 'Kelas Sesi', 'pin' => 'KELAS1']);
+        $kelas = Kelas::create(['nama' => 'Kelas Sesi', 'pin' => 'KELAS1', 'created_by' => $admin->id]);
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
         $kelas->peserta()->attach($anggota->id);
 
         $this->actingAs($admin)
@@ -183,8 +182,8 @@ class KelasTest extends TestCase
 
     private function sesiKelas(User $admin, User $anggota): QuizSession
     {
-        $quiz = Quiz::create(['judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
-        $kelas = Kelas::create(['nama' => 'Kelas Sesi', 'pin' => 'KELAS1']);
+        $kelas = Kelas::create(['nama' => 'Kelas Sesi', 'pin' => 'KELAS1', 'created_by' => $admin->id]);
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Kelas', 'created_by' => $admin->id]);
         $kelas->peserta()->attach($anggota->id);
 
         return QuizSession::create([
