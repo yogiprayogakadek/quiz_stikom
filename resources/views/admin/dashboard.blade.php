@@ -52,7 +52,18 @@
             init() {
                 this.pasangAudio();
                 this.pasangReverb();
-                setInterval(() => this.sinkronUlang(), 30000);
+                // Polling ringan sebagai cadangan bila WebSocket belum terhubung.
+                setInterval(() => {
+                    if (! document.hidden) {
+                        this.sinkronUlang();
+                    }
+                }, 5000);
+
+                document.addEventListener('visibilitychange', () => {
+                    if (! document.hidden) {
+                        this.sinkronUlang();
+                    }
+                });
             },
 
             pasangAudio() {
@@ -101,10 +112,17 @@
                 } catch (e) {}
             },
 
-            pasangReverb() {
-                if (typeof window.buatEcho !== 'function') return;
+            pasangReverb(percobaan = 0) {
+                if (typeof window.buatEcho !== 'function') {
+                    if (percobaan < 40) {
+                        setTimeout(() => this.pasangReverb(percobaan + 1), 250);
+                    }
+                    return;
+                }
                 try {
                     const echo = window.buatEcho();
+                    if (! echo) return;
+
                     echo.channel('admin-dashboard')
                         .listen('.PesertaStatusLogin', (data) => {
                             if (data.status === 'login') {
