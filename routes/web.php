@@ -25,7 +25,7 @@ Route::get('/', function () {
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
-    Route::post('/login', [LoginController::class, 'login']);
+    Route::post('/login', [LoginController::class, 'login'])->name('login.store');
 });
 
 Route::middleware('auth')->group(function () {
@@ -44,6 +44,8 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'admin'])->name('dashboard');
+    Route::get('/dashboard/search', [DashboardController::class, 'adminSearch'])->name('dashboard.search');
+    Route::get('/dashboard/peserta-online', [DashboardController::class, 'pesertaOnline'])->name('dashboard.peserta-online');
 
     Route::get('participants/import', [ParticipantController::class, 'importForm'])->name('participants.import');
     Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import.store');
@@ -54,9 +56,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
         ->name('participants.reset-password');
 
     Route::get('quizzes/{quiz}/questions/template', [QuestionController::class, 'template'])->name('quizzes.questions.template');
+    Route::get('quizzes/{quiz}/questions/export', [QuestionController::class, 'export'])->name('quizzes.questions.export');
     Route::get('quizzes/{quiz}/questions/import', [QuestionController::class, 'importForm'])->name('quizzes.questions.import');
     Route::post('quizzes/{quiz}/questions/import', [QuestionController::class, 'import'])->name('quizzes.questions.import.store');
     Route::get('quizzes/{quiz}/questions/import/result', [QuestionController::class, 'importResult'])->name('quizzes.questions.import.result');
+    Route::get('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiForm'])->name('quizzes.questions.ai.form');
+    Route::post('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiGenerate'])->name('quizzes.questions.ai.generate');
+    Route::post('quizzes/{quiz}/questions/ai-store', [QuestionController::class, 'aiStore'])->name('quizzes.questions.ai.store');
     Route::resource('quizzes.questions', QuestionController::class);
 
     // Backward-compatible question routes (redirects / fallback if needed)
@@ -66,6 +72,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');
+    Route::get('sessions/{session}/laporan/berita-acara', [ReportController::class, 'beritaAcara'])->name('reports.berita-acara');
     Route::get('attempts/{attempt}', [ReportController::class, 'attempt'])->name('reports.attempt');
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
@@ -79,6 +86,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::post('sessions/{session}/lewati-soal', [AdminSessionController::class, 'skip'])->name('sessions.skip');
     Route::post('sessions/{session}/peserta/{attempt}/kumpulkan', [AdminSessionController::class, 'forceFinish'])
         ->name('sessions.attempts.finish');
+    Route::post('sessions/{session}/peserta/{attempt}/tambah-waktu', [AdminSessionController::class, 'addTime'])
+        ->name('sessions.attempts.add-time');
+    Route::post('sessions/{session}/peserta/{attempt}/reset', [AdminSessionController::class, 'resetAttempt'])
+        ->name('sessions.attempts.reset');
     Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
         ->name('sessions.attempts.kick');
 });

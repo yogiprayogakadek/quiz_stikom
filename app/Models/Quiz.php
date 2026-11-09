@@ -13,6 +13,7 @@ class Quiz extends Model
         'kelas_id',
         'judul',
         'jumlah_soal',
+        'acak_opsi',
         'created_by',
     ];
 
@@ -21,6 +22,7 @@ class Quiz extends Model
         return [
             'kelas_id' => 'integer',
             'jumlah_soal' => 'integer',
+            'acak_opsi' => 'boolean',
         ];
     }
 
@@ -49,5 +51,12 @@ class Quiz extends Model
         $total = $this->questions()->count();
 
         return $this->jumlah_soal === null ? $total : min($this->jumlah_soal, $total);
+    }
+
+    public function isLocked(): bool
+    {
+        return $this->sessions()
+            ->whereIn('status', ['lobby', 'berjalan', 'selesai'])
+            ->exists();
     }
 }

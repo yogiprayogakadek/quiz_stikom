@@ -7,12 +7,14 @@ use App\Http\Requests\StoreQuestionRequest;
 use App\Http\Requests\UpdateQuestionRequest;
 use App\Models\Question;
 use App\Models\Quiz;
+use App\Services\AiQuestionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuestionController extends Controller
@@ -395,6 +397,65 @@ class QuestionController extends Controller
         return view('admin.questions.import-result', compact('ringkasan', 'quiz'));
     }
 
+    public function export(Quiz $quiz): StreamedResponse
+    {
+        $questions = $quiz->questions()->with('options')->get();
+
+        return response()->streamDownload(function () use ($questions) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, [
+                'teks',
+                'tipe',
+                'bobot',
+                'opsi_a',
+                'opsi_b',
+                'opsi_c',
+                'opsi_d',
+                'opsi_e',
+                'jawaban_benar',
+                'durasi_detik',
+                'pembahasan',
+                'kunci_essay',
+            ]);
+
+            $labelHuruf = ['A', 'B', 'C', 'D', 'E'];
+
+            foreach ($questions as $q) {
+                $opsi = $q->options->values();
+                $opsiA = $opsi->get(0)?->teks ?? '';
+                $opsiB = $opsi->get(1)?->teks ?? '';
+                $opsiC = $opsi->get(2)?->teks ?? '';
+                $opsiD = $opsi->get(3)?->teks ?? '';
+                $opsiE = $opsi->get(4)?->teks ?? '';
+
+                $jawabanBenar = '';
+                if ($q->tipe !== 'essay') {
+                    $correctIndex = $opsi->search(fn ($o) => (bool) $o->is_correct);
+                    if ($correctIndex !== false && isset($labelHuruf[$correctIndex])) {
+                        $jawabanBenar = $labelHuruf[$correctIndex];
+                    }
+                }
+
+                fputcsv($out, [
+                    $q->teks,
+                    $q->tipe ?? 'pilihan_ganda',
+                    $q->bobot ?? 1,
+                    $opsiA,
+                    $opsiB,
+                    $opsiC,
+                    $opsiD,
+                    $opsiE,
+                    $jawabanBenar,
+                    $q->durasi_detik ?? 30,
+                    $q->pembahasan ?? '',
+                    $q->kunci_essay ?? '',
+                ]);
+            }
+
+            fclose($out);
+        }, 'soal-' . Str::slug($quiz->judul) . '.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     public function template(): StreamedResponse
     {
         $isi = "teks,tipe,bobot,opsi_a,opsi_b,opsi_c,opsi_d,opsi_e,jawaban_benar,durasi_detik,pembahasan,kunci_essay\n"
@@ -406,5 +467,118 @@ class QuestionController extends Controller
         return response()->streamDownload(function () use ($isi) {
             echo $isi;
         }, 'template-soal.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function aiForm(Request $request, Quiz $quiz, AiQuestionService $aiService): View|RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $refresh = $request->boolean('refresh');
+        $models = $aiService->getAvailableModels($refresh);
+
+        return view('admin.questions.ai-form', compact('quiz', 'models'));
+    }
+
+    public function aiGenerate(Request $request, Quiz $quiz, AiQuestionService $aiService): View|RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $validated = $request->validate([
+            'model' => ['required', 'string'],
+            'topik' => ['required', 'string', 'max:255'],
+            'rps_text' => ['required', 'string', 'max:15000'],
+            'jumlah_pg' => ['required', 'integer', 'min:0', 'max:50'],
+            'jumlah_essay' => ['required', 'integer', 'min:0', 'max:20'],
+            'level' => ['required', 'string'],
+        ], [
+            'topik.required' => 'Topik kajian wajib diisi.',
+            'rps_text.required' => 'Teks RPS / CPMK wajib diisi.',
+            'jumlah_pg.min' => 'Jumlah pilihan ganda minimal 0.',
+            'jumlah_essay.min' => 'Jumlah essay minimal 0.',
+        ]);
+
+        if ((int) $validated['jumlah_pg'] + (int) $validated['jumlah_essay'] < 1) {
+            return back()->withInput()->withErrors(['jumlah' => 'Pilih minimal 1 soal (pilihan ganda atau essay).']);
+        }
+
+        try {
+            $questions = $aiService->generateQuestions($validated);
+        } catch (RuntimeException $e) {
+            return back()->withInput()->withErrors(['ai_error' => $e->getMessage()]);
+        }
+
+        return view('admin.questions.ai-preview', [
+            'quiz' => $quiz,
+            'questions' => $questions,
+            'params' => $validated,
+        ]);
+    }
+
+    public function aiStore(Request $request, Quiz $quiz): RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $rawQuestions = $request->input('questions');
+        if (! is_array($rawQuestions) || empty($rawQuestions)) {
+            return back()->withErrors(['questions' => 'Tidak ada soal yang dikirim.']);
+        }
+
+        $savedCount = 0;
+
+        DB::transaction(function () use ($rawQuestions, $quiz, &$savedCount) {
+            foreach ($rawQuestions as $item) {
+                if (empty($item['selected'])) {
+                    continue;
+                }
+
+                $teks = trim((string) ($item['teks'] ?? ''));
+                if ($teks === '') {
+                    continue;
+                }
+
+                $tipe = ($item['tipe'] ?? '') === 'essay' ? 'essay' : 'pilihan_ganda';
+                $bobot = max(1, (int) ($item['bobot'] ?? ($tipe === 'essay' ? 5 : 1)));
+                $durasi = max(15, (int) ($item['durasi_detik'] ?? ($tipe === 'essay' ? 120 : 60)));
+                $pembahasan = isset($item['pembahasan']) && trim((string) $item['pembahasan']) !== ''
+                    ? trim((string) $item['pembahasan'])
+                    : null;
+                $kunciEssay = $tipe === 'essay' && isset($item['kunci_essay']) && trim((string) $item['kunci_essay']) !== ''
+                    ? trim((string) $item['kunci_essay'])
+                    : null;
+
+                $question = Question::create([
+                    'quiz_id' => $quiz->id,
+                    'teks' => $teks,
+                    'tipe' => $tipe,
+                    'bobot' => $bobot,
+                    'durasi_detik' => $durasi,
+                    'pembahasan' => $pembahasan,
+                    'kunci_essay' => $kunciEssay,
+                ]);
+
+                if ($tipe === 'pilihan_ganda' && isset($item['opsi']) && is_array($item['opsi'])) {
+                    $correctIndex = isset($item['correct']) ? (int) $item['correct'] : 0;
+                    $this->simpanOpsi($question, $item['opsi'], $correctIndex);
+                }
+
+                $savedCount++;
+            }
+        });
+
+        if ($savedCount === 0) {
+            return back()->withErrors(['soal' => 'Tidak ada soal yang dipilih untuk disimpan.']);
+        }
+
+        return redirect()->route('admin.quizzes.questions.index', $quiz)
+            ->with('sukses', "{$savedCount} soal berhasil digenerate dan ditambahkan ke kuis.");
     }
 }
