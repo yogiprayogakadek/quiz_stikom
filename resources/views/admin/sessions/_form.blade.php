@@ -2,7 +2,10 @@
     $terkunci = $session !== null && ! $session->isDraft();
     $modeAwal = old('mode', $session?->mode ?? 'acak');
     $acakOpsi = (bool) old('acak_opsi', $session?->acak_opsi ?? true);
-    $pembahasan = (bool) old('tampilkan_pembahasan', $session?->tampilkan_pembahasan ?? false);
+    $pembahasanMode = old(
+        'pembahasan_mode',
+        $session?->pembahasan_mode ?? ($session?->tampilkan_pembahasan ? 'terbuka' : 'tersembunyi')
+    );
     $leaderboard = (bool) old('leaderboard_live', $session?->leaderboard_live ?? true);
 @endphp
 
@@ -115,13 +118,16 @@
             </span>
         </label>
 
-        <label class="flex items-start gap-3 rounded-2xl border border-outline bg-page p-4">
-            <input type="checkbox" name="tampilkan_pembahasan" value="1" class="mt-1 h-5 w-5" @checked($pembahasan)>
-            <span>
-                <span class="block text-base font-bold text-ink">Tampilkan pembahasan</span>
-                <span class="block text-base text-ink-muted">Tampil setelah attempt selesai atau saat soal ditutup. Tidak pernah dikirim sebelum waktunya.</span>
-            </span>
-        </label>
+        <div class="rounded-2xl border border-outline bg-page p-4">
+            <label for="pembahasan_mode" class="label">Pembahasan</label>
+            <select id="pembahasan_mode" name="pembahasan_mode" class="input mt-2">
+                <option value="tersembunyi" @selected($pembahasanMode === 'tersembunyi')>Sembunyikan</option>
+                <option value="otomatis" @selected($pembahasanMode === 'otomatis')>Buka otomatis setelah semua peserta selesai</option>
+                <option value="terbuka" @selected($pembahasanMode === 'terbuka')>Buka sekarang</option>
+            </select>
+            <p class="help mt-2">Bisa diubah dari ruang kendali saat sesi berjalan. Tidak pernah dikirim sebelum waktunya.</p>
+            @error('pembahasan_mode') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
 
         <label class="flex items-start gap-3 rounded-2xl border border-outline bg-page p-4">
             <input type="checkbox" name="leaderboard_live" value="1" class="mt-1 h-5 w-5" @checked($leaderboard)>

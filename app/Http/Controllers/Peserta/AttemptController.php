@@ -301,7 +301,9 @@ class AttemptController extends Controller
                 ]);
             }
 
-            $engine->siarkanDisplay($attempt->quizSession->fresh());
+            $freshSession = $attempt->quizSession->fresh();
+            $engine->bukaPembahasanOtomatis($freshSession);
+            $engine->siarkanDisplay($freshSession);
         }
 
         $user = $request->user();
@@ -346,7 +348,7 @@ class AttemptController extends Controller
         $session = $attempt->quizSession;
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
-        $tampilkan = $session->tampilkan_pembahasan;
+        $tampilkan = $session->pembahasanTampil();
 
         $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban, $tampilkan) {
             $question = $aq->question;

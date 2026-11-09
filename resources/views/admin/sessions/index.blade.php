@@ -60,7 +60,9 @@
                         </div>
                         <div>
                             <dt class="text-ink-muted">Pembahasan</dt>
-                            <dd class="font-bold text-ink">{{ $sesi->tampilkan_pembahasan ? 'Tampil' : 'Tidak tampil' }}</dd>
+                            <dd class="font-bold text-ink">
+                                {{ ['terbuka' => 'Terbuka', 'otomatis' => 'Otomatis', 'tersembunyi' => 'Tersembunyi'][$sesi->pembahasanMode()] ?? 'Tersembunyi' }}
+                            </dd>
                         </div>
                     </dl>
 

@@ -90,6 +90,7 @@ class TrialQuizSeeder extends Seeder
                 'mode' => 'acak',
                 'acak_opsi' => true,
                 'tampilkan_pembahasan' => true,
+                'pembahasan_mode' => 'terbuka',
                 'leaderboard_live' => true,
                 'max_peserta' => null,
                 'jeda_detik' => 5,

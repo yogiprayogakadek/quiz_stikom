@@ -237,7 +237,7 @@ class SessionController extends Controller
 
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
-        $tampilkan = $session->tampilkan_pembahasan;
+        $tampilkan = $session->pembahasanTampil();
 
         $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban, $tampilkan) {
             $question = $aq->question;
@@ -298,7 +298,7 @@ class SessionController extends Controller
             'jawaban_saya' => $answer?->option?->teks,
             'benar' => $answer?->option?->is_correct === true,
             'skor_soal' => $answer?->skor ?? 0,
-            'pembahasan' => $session->tampilkan_pembahasan ? $question->pembahasan : null,
+            'pembahasan' => $session->pembahasanTampil() ? $question->pembahasan : null,
         ];
     }
 
@@ -348,7 +348,9 @@ class SessionController extends Controller
                     'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
                 ]);
 
-                $engine->siarkanDisplay($session->fresh());
+                $freshSession = $session->fresh();
+                $engine->bukaPembahasanOtomatis($freshSession);
+                $engine->siarkanDisplay($freshSession);
             }
         }
 

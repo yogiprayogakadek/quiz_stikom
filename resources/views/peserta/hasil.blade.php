@@ -166,19 +166,26 @@
             </div>
         </section>
     @endif
-    @if ($adaEssay)
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
-                if (typeof window.buatEcho !== 'function') return;
-                const echo = window.buatEcho();
-                if (!echo) return;
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof window.buatEcho !== 'function') return;
+            const echo = window.buatEcho();
+            if (!echo) return;
 
+            echo.channel('quiz-sessions')
+                .listen('.SesiStatusUpdated', (data) => {
+                    if (data.session_id === {{ $session->id }} && data.action === 'pembahasan_updated') {
+                        window.location.reload();
+                    }
+                });
+
+            @if ($adaEssay)
                 const userChannel = 'session-user.' + {{ $session->id }} + '.' + {{ auth()->id() }};
                 echo.channel(userChannel)
                     .listen('.EssayDinilai', () => {
                         window.location.reload();
                     });
-            });
-        </script>
-    @endif
+            @endif
+        });
+    </script>
 </x-layouts.peserta>

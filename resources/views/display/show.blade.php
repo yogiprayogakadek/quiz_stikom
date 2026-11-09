@@ -12,9 +12,42 @@
             peringatanList: [],
             peringatanDilihat: {},
             tampilkanSkor: localStorage.getItem('display_tampilkan_skor') !== 'false',
+            skorLimit: localStorage.getItem('display_skor_limit') || '5',
+            halamanSkor: 1,
             toggleSkor() {
                 this.tampilkanSkor = !this.tampilkanSkor;
                 localStorage.setItem('display_tampilkan_skor', this.tampilkanSkor);
+            },
+            setSkorLimit(nilai) {
+                this.skorLimit = nilai;
+                this.halamanSkor = 1;
+                localStorage.setItem('display_skor_limit', nilai);
+            },
+            get daftarSkor() {
+                const data = this.state?.leaderboard ?? this.state?.top5 ?? [];
+                return Array.isArray(data) ? data : [];
+            },
+            get skorPerHalaman() {
+                if (this.skorLimit === 'semua') {
+                    return Math.max(1, this.daftarSkor.length);
+                }
+                return Math.max(1, parseInt(this.skorLimit, 10) || 5);
+            },
+            get totalHalamanSkor() {
+                return Math.max(1, Math.ceil(this.daftarSkor.length / this.skorPerHalaman));
+            },
+            get halamanSkorAktif() {
+                return Math.min(Math.max(1, this.halamanSkor), this.totalHalamanSkor);
+            },
+            get leaderboardHalaman() {
+                const mulai = (this.halamanSkorAktif - 1) * this.skorPerHalaman;
+                return this.daftarSkor.slice(mulai, mulai + this.skorPerHalaman);
+            },
+            keHalamanSkor(arah) {
+                this.halamanSkor = Math.min(
+                    this.totalHalamanSkor,
+                    Math.max(1, this.halamanSkorAktif + arah)
+                );
             },
             init() {
                 this.muat();
@@ -147,6 +180,7 @@
             terapkan(data) {
                 const pertamaKali = this.state === null;
                 this.state = data;
+                this.halamanSkor = Math.min(Math.max(1, this.halamanSkor), this.totalHalamanSkor);
                 this.offset = Date.now() - data.server_now;
                 this.target = data.fase === 'jeda'
                     ? (data.ends_at ?? 0) + ((data.jeda_detik ?? 0) * 1000)
@@ -329,6 +363,21 @@
                     </template>
                 </button>
 
+                <label class="flex items-center gap-2 rounded-full border border-outline bg-surface px-4 py-2 text-sm font-semibold text-ink-muted">
+                    <span>Skor</span>
+                    <select
+                        x-model="skorLimit"
+                        @change="setSkorLimit(skorLimit)"
+                        class="bg-transparent font-bold text-ink focus:outline-none"
+                        aria-label="Jumlah skor yang ditampilkan"
+                    >
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="semua">Semua</option>
+                    </select>
+                </label>
+
                 <div class="text-right">
                     <p class="font-display text-2xl font-bold text-ink" x-text="state?.nama ?? 'Memuat...'"></p>
                     <p class="text-base text-ink-muted" x-text="state?.kuis ?? ''"></p>
@@ -391,11 +440,11 @@
                     </div>
 
                     <div class="rounded-panel border border-outline bg-page p-8">
-                        <h2 class="text-3xl">Peserta selesai teratas</h2>
+                        <h2 class="text-3xl">Papan skor sementara</h2>
 
-                        <template x-if="state.top5 && state.top5.length">
-                            <ol class="mt-6 space-y-3">
-                                <template x-for="baris in state.top5" :key="baris.posisi">
+                        <template x-if="daftarSkor.length">
+                            <ol class="mt-6 max-h-[24rem] space-y-3 overflow-y-auto pr-2">
+                                <template x-for="baris in leaderboardHalaman" :key="baris.posisi">
                                     <li class="flex items-center gap-4 rounded-2xl bg-surface px-5 py-4">
                                         <span class="display-number w-10 text-3xl text-brand-deep" x-text="baris.posisi"></span>
                                         <span class="flex-1 text-2xl font-bold text-ink" x-text="baris.nama"></span>
@@ -409,7 +458,7 @@
                             </ol>
                         </template>
 
-                        <template x-if="!state.top5 || state.top5.length === 0">
+                        <template x-if="daftarSkor.length === 0">
                             <p
                                 class="mt-6 text-xl text-ink-muted"
                                 x-text="state.leaderboard_live
@@ -417,6 +466,12 @@
                                     : 'Leaderboard live dimatikan untuk sesi ini. Skor tetap dihitung dan tersedia di laporan akhir.'"
                             ></p>
                         </template>
+
+                        <div x-show="totalHalamanSkor > 1" x-cloak class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
+                            <button type="button" @click="keHalamanSkor(-1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif <= 1">Sebelumnya</button>
+                            <span class="text-sm font-bold text-ink-muted" x-text="'Halaman ' + halamanSkorAktif + ' dari ' + totalHalamanSkor"></span>
+                            <button type="button" @click="keHalamanSkor(1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif >= totalHalamanSkor">Berikutnya</button>
+                        </div>
                     </div>
                 </section>
             </template>
@@ -451,6 +506,13 @@
                         <h1 class="mt-5 text-4xl text-ink">Jawaban benar</h1>
                         <p class="mt-3 text-3xl font-bold text-leaf-deep" x-text="state.jawaban_benar || '-'"></p>
 
+                        <template x-if="state.pembahasan">
+                            <div class="mt-6 rounded-2xl border border-outline bg-surface p-5">
+                                <p class="text-lg font-bold text-ink-muted">Pembahasan</p>
+                                <p class="mt-1 text-2xl text-ink" x-text="state.pembahasan"></p>
+                            </div>
+                        </template>
+
                         <h2 class="mt-8 text-2xl text-ink">Sebaran jawaban</h2>
                         <template x-if="state.distribusi && state.distribusi.length">
                             <ul class="mt-4 space-y-3">
@@ -473,10 +535,10 @@
                     </div>
 
                     <div class="rounded-panel border border-outline bg-surface p-8">
-                        <h2 class="text-3xl">Lima teratas sementara</h2>
-                        <template x-if="state.top5 && state.top5.length">
-                            <ol class="mt-5 space-y-3">
-                                <template x-for="baris in state.top5" :key="baris.posisi">
+                        <h2 class="text-3xl">Papan skor sementara</h2>
+                        <template x-if="daftarSkor.length">
+                            <ol class="mt-5 max-h-[24rem] space-y-3 overflow-y-auto pr-2">
+                                <template x-for="baris in leaderboardHalaman" :key="baris.posisi">
                                     <li class="flex items-center gap-4 rounded-2xl bg-page px-5 py-4">
                                         <span class="display-number w-10 text-3xl text-sun-deep" x-text="baris.posisi"></span>
                                         <span class="flex-1 text-2xl font-bold text-ink" x-text="baris.nama"></span>
@@ -489,7 +551,7 @@
                                 </template>
                             </ol>
                         </template>
-                        <template x-if="!state.top5 || state.top5.length === 0">
+                        <template x-if="daftarSkor.length === 0">
                             <p
                                 class="mt-5 text-xl text-ink-muted"
                                 x-text="state.leaderboard_live
@@ -497,6 +559,12 @@
                                     : 'Leaderboard live dimatikan untuk sesi ini. Skor tetap dihitung dan tersedia di laporan akhir.'"
                             ></p>
                         </template>
+
+                        <div x-show="totalHalamanSkor > 1" x-cloak class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-page px-4 py-3">
+                            <button type="button" @click="keHalamanSkor(-1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif <= 1">Sebelumnya</button>
+                            <span class="text-sm font-bold text-ink-muted" x-text="'Halaman ' + halamanSkorAktif + ' dari ' + totalHalamanSkor"></span>
+                            <button type="button" @click="keHalamanSkor(1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif >= totalHalamanSkor">Berikutnya</button>
+                        </div>
                     </div>
                 </section>
             </template>
@@ -511,9 +579,9 @@
                     <div class="grid gap-8 lg:grid-cols-[1.15fr_1fr]">
                         <div class="rounded-panel border border-outline bg-page p-8">
                             <h2 class="text-3xl">Leaderboard</h2>
-                            <template x-if="state.leaderboard && state.leaderboard.length">
+                            <template x-if="daftarSkor.length">
                                 <ol class="mt-5 max-h-[28rem] space-y-2 overflow-y-auto pr-2">
-                                    <template x-for="baris in state.leaderboard" :key="baris.posisi">
+                                    <template x-for="baris in leaderboardHalaman" :key="baris.posisi">
                                         <li class="flex items-center gap-4 rounded-2xl bg-surface px-5 py-3">
                                             <span class="display-number w-10 text-2xl text-brand-deep" x-text="baris.posisi"></span>
                                             <span class="flex-1 text-xl font-bold text-ink" x-text="baris.nama"></span>
@@ -526,9 +594,14 @@
                                     </template>
                                 </ol>
                             </template>
-                            <template x-if="!state.leaderboard || state.leaderboard.length === 0">
+                            <template x-if="daftarSkor.length === 0">
                                 <p class="mt-5 text-xl text-ink-muted">Tidak ada peserta yang menyelesaikan sesi ini.</p>
                             </template>
+                            <div x-show="totalHalamanSkor > 1" x-cloak class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
+                                <button type="button" @click="keHalamanSkor(-1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif <= 1">Sebelumnya</button>
+                                <span class="text-sm font-bold text-ink-muted" x-text="'Halaman ' + halamanSkorAktif + ' dari ' + totalHalamanSkor"></span>
+                                <button type="button" @click="keHalamanSkor(1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif >= totalHalamanSkor">Berikutnya</button>
+                            </div>
                         </div>
 
                         <div class="rounded-panel border border-outline bg-surface p-8">

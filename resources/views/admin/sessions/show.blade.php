@@ -115,6 +115,10 @@
         </section>
     </div>
 
+    <div class="mt-6" id="monitor-pembahasan">
+        @include('admin.sessions._pembahasan')
+    </div>
+
     @if (in_array($session->status, ['draft', 'lobby'], true))
         <section
             class="mt-6 card"
@@ -302,6 +306,7 @@
                 const sessionId = {{ $session->id }};
                 const bagian = {
                     status: document.getElementById('monitor-status'),
+                    pembahasan: document.getElementById('monitor-pembahasan'),
                     peserta: document.getElementById('monitor-peserta'),
                     proctoring: document.getElementById('proctoring-stream-list'),
                 };
@@ -317,11 +322,12 @@
                         if (!res.ok || res.redirected) return;
 
                         const data = await res.json();
-                        const kunci = data.status + data.peserta + data.proctoring;
+                        const kunci = data.status + data.pembahasan + data.peserta + data.proctoring;
                         if (kunci === terakhir) return;
 
                         terakhir = kunci;
                         if (bagian.status) bagian.status.innerHTML = data.status;
+                        if (bagian.pembahasan) bagian.pembahasan.innerHTML = data.pembahasan;
                         if (bagian.peserta) bagian.peserta.innerHTML = data.peserta;
                         if (bagian.proctoring) bagian.proctoring.innerHTML = data.proctoring;
                         if (proctoringCount) proctoringCount.textContent = data.proctoring_count;

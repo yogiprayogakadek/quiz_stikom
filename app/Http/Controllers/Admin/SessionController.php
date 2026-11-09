@@ -49,6 +49,8 @@ class SessionController extends Controller
     public function store(StoreSessionRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $pembahasanMode = $data['pembahasan_mode']
+            ?? ($request->boolean('tampilkan_pembahasan') ? 'terbuka' : 'tersembunyi');
 
         $session = QuizSession::create([
             'quiz_id' => $data['quiz_id'],
@@ -56,7 +58,8 @@ class SessionController extends Controller
             'nama' => $data['nama'],
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
-            'tampilkan_pembahasan' => $request->boolean('tampilkan_pembahasan'),
+            'tampilkan_pembahasan' => $pembahasanMode === 'terbuka',
+            'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
             'max_peserta' => $data['max_peserta'] ?? null,
             'jeda_detik' => $data['jeda_detik'],
@@ -108,6 +111,7 @@ class SessionController extends Controller
 
         return response()->json([
             'status' => view('admin.sessions._status', $data)->render(),
+            'pembahasan' => view('admin.sessions._pembahasan', $data)->render(),
             'peserta' => view('admin.sessions._peserta', $data)->render(),
             'proctoring' => view('admin.sessions._proctoring', $data)->render(),
             'proctoring_count' => $data['kejadianTerbaru']->count(),
@@ -152,6 +156,7 @@ class SessionController extends Controller
             'soalAktif' => $soalAktif,
             'sudahMenjawab' => $sudahMenjawab,
             'totalPeserta' => $attempts->whereNotNull('bergabung_at')->count(),
+            'pembahasanSelesai' => $attempts->whereNotNull('bergabung_at')->where('status', 'selesai')->count(),
             'onlineCount' => $attempts->filter(fn (Attempt $attempt) => $attempt->isOnline())->count(),
             'kejadianTerbaru' => $kejadianTerbaru,
         ];
@@ -180,13 +185,17 @@ class SessionController extends Controller
             }
         }
 
+        $pembahasanMode = $data['pembahasan_mode']
+            ?? ($request->boolean('tampilkan_pembahasan') ? 'terbuka' : 'tersembunyi');
+
         $session->update([
             'quiz_id' => $data['quiz_id'],
             'kelas_id' => $data['kelas_id'] ?? null,
             'nama' => $data['nama'],
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
-            'tampilkan_pembahasan' => $request->boolean('tampilkan_pembahasan'),
+            'tampilkan_pembahasan' => $pembahasanMode === 'terbuka',
+            'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
             'max_peserta' => $data['max_peserta'] ?? null,
             'jeda_detik' => $data['jeda_detik'],
@@ -199,6 +208,30 @@ class SessionController extends Controller
         }
 
         return redirect()->route('admin.sessions.show', $session)->with('sukses', 'Pengaturan sesi diperbarui.');
+    }
+
+    public function pembahasan(Request $request, QuizSession $session, QuizEngine $engine): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', 'in:tersembunyi,otomatis,terbuka'],
+        ]);
+
+        $session->update([
+            'pembahasan_mode' => $data['mode'],
+            'tampilkan_pembahasan' => $data['mode'] === 'terbuka',
+        ]);
+
+        $fresh = $session->fresh();
+        $engine->siarkanDisplay($fresh);
+        SesiStatusUpdated::safeDispatch($fresh, ['action' => 'pembahasan_updated']);
+
+        $label = match ($data['mode']) {
+            'terbuka' => 'Pembahasan dibuka sekarang.',
+            'otomatis' => 'Pembahasan akan dibuka setelah semua peserta selesai.',
+            default => 'Pembahasan disembunyikan.',
+        };
+
+        return back()->with('sukses', $label);
     }
 
     public function destroy(QuizSession $session): RedirectResponse

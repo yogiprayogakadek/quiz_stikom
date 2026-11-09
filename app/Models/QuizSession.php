@@ -17,6 +17,7 @@ class QuizSession extends Model
         'mode',
         'acak_opsi',
         'tampilkan_pembahasan',
+        'pembahasan_mode',
         'leaderboard_live',
         'max_peserta',
         'jeda_detik',
@@ -115,6 +116,37 @@ class QuizSession extends Model
     public function isDraft(): bool
     {
         return $this->status === 'draft';
+    }
+
+    public function pembahasanMode(): string
+    {
+        return $this->pembahasan_mode
+            ?: ($this->tampilkan_pembahasan ? 'terbuka' : 'tersembunyi');
+    }
+
+    public function semuaPesertaSelesai(): bool
+    {
+        if ($this->status === 'selesai') {
+            return true;
+        }
+
+        if (! $this->attempts()->whereNotNull('bergabung_at')->exists()) {
+            return false;
+        }
+
+        return ! $this->attempts()
+            ->whereNotNull('bergabung_at')
+            ->where('status', '!=', 'selesai')
+            ->exists();
+    }
+
+    public function pembahasanTampil(): bool
+    {
+        return match ($this->pembahasanMode()) {
+            'terbuka' => true,
+            'otomatis' => $this->semuaPesertaSelesai(),
+            default => false,
+        };
     }
 
     public function isModeTerkunci(): bool

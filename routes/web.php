@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
@@ -47,6 +48,15 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('/dashboard/search', [DashboardController::class, 'adminSearch'])->name('dashboard.search');
     Route::get('/dashboard/peserta-online', [DashboardController::class, 'pesertaOnline'])->name('dashboard.peserta-online');
 
+    Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
+    Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
+    Route::get('backups/{nama}', [BackupController::class, 'download'])
+        ->where('nama', '[A-Za-z0-9._-]+')
+        ->name('backups.download');
+    Route::delete('backups/{nama}', [BackupController::class, 'destroy'])
+        ->where('nama', '[A-Za-z0-9._-]+')
+        ->name('backups.destroy');
+
     Route::get('participants/import', [ParticipantController::class, 'importForm'])->name('participants.import');
     Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import.store');
     Route::get('participants/import/result', [ParticipantController::class, 'importResult'])->name('participants.import.result');
@@ -86,6 +96,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::post('sessions/{session}/peserta', [AdminSessionController::class, 'updateParticipants'])->name('sessions.participants.update');
     Route::get('sessions/{session}/monitor', [AdminSessionController::class, 'monitor'])->name('sessions.monitor');
     Route::post('sessions/{session}/tutup', [AdminSessionController::class, 'close'])->name('sessions.close');
+    Route::post('sessions/{session}/pembahasan', [AdminSessionController::class, 'pembahasan'])->name('sessions.pembahasan');
     Route::post('sessions/{session}/lewati-soal', [AdminSessionController::class, 'skip'])->name('sessions.skip');
     Route::post('sessions/{session}/peserta/{attempt}/kumpulkan', [AdminSessionController::class, 'forceFinish'])
         ->name('sessions.attempts.finish');

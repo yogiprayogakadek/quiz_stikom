@@ -143,7 +143,7 @@ class QuizEngine
 
     public function selesaikanAcak(Attempt $attempt): Attempt
     {
-        return DB::transaction(function () use ($attempt) {
+        $hasil = DB::transaction(function () use ($attempt) {
             $attempt = Attempt::lockForUpdate()->findOrFail($attempt->id);
 
             if ($attempt->status === 'selesai') {
@@ -163,6 +163,11 @@ class QuizEngine
 
             return $attempt->fresh();
         });
+
+        $hasil->loadMissing('quizSession');
+        $this->bukaPembahasanOtomatis($hasil->quizSession);
+
+        return $hasil;
     }
 
     /**
@@ -229,7 +234,7 @@ class QuizEngine
             return $this->selesaikanAcak($attempt);
         }
 
-        return DB::transaction(function () use ($attempt) {
+        $hasil = DB::transaction(function () use ($attempt) {
             $attempt = Attempt::lockForUpdate()->findOrFail($attempt->id);
 
             if ($attempt->status === 'selesai') {
@@ -245,6 +250,11 @@ class QuizEngine
 
             return $attempt->fresh();
         });
+
+        $hasil->loadMissing('quizSession');
+        $this->bukaPembahasanOtomatis($hasil->quizSession);
+
+        return $hasil;
     }
 
     public function tutupAttemptKedaluwarsa(): int
@@ -409,7 +419,7 @@ class QuizEngine
                 'urutan' => $urutan,
                 'total' => $session->sessionQuestions()->count(),
                 'jawaban_benar' => $benarOption?->teks,
-                'pembahasan' => $session->tampilkan_pembahasan ? $question->pembahasan : null,
+                'pembahasan' => $session->pembahasanTampil() ? $question->pembahasan : null,
                 'distribusi' => $distribusi,
                 'top5' => $session->leaderboard_live ? $top5 : [],
                 'jeda_detik' => $session->jeda_detik,
@@ -459,6 +469,11 @@ class QuizEngine
             $this->siarkanSoalDibuka($dibuka);
         }
 
+        if ($fresh->status === 'selesai') {
+            $this->bukaPembahasanOtomatis($fresh);
+            $fresh = $session->fresh();
+        }
+
         $this->siarkanDisplay($fresh);
 
         if ($fresh->status === 'selesai') {
@@ -489,6 +504,9 @@ class QuizEngine
         });
 
         $fresh = $session->fresh();
+        $this->bukaPembahasanOtomatis($fresh);
+        $fresh = $session->fresh();
+
         try {
             $this->siarkanDisplay($fresh);
         } catch (\Throwable $e) {
@@ -500,6 +518,27 @@ class QuizEngine
             \Illuminate\Support\Facades\Log::warning('Broadcast sesi selesai error: ' . $e->getMessage());
         }
         SesiStatusUpdated::safeDispatch($fresh);
+    }
+
+    public function bukaPembahasanOtomatis(QuizSession $session): void
+    {
+        if ($session === null) {
+            return;
+        }
+
+        $session = $session->fresh();
+
+        if ($session->pembahasanMode() !== 'otomatis' || ! $session->semuaPesertaSelesai()) {
+            return;
+        }
+
+        $session->update([
+            'pembahasan_mode' => 'terbuka',
+            'tampilkan_pembahasan' => true,
+        ]);
+
+        SesiStatusUpdated::safeDispatch($session, ['action' => 'pembahasan_updated']);
+        $this->siarkanDisplay($session);
     }
 
     private function tutupSesiTerkunci(QuizSession $session): void
@@ -640,7 +679,7 @@ class QuizEngine
         }
     }
 
-    public function leaderboard(QuizSession $session, int $limit = 5): array
+    public function leaderboard(QuizSession $session, ?int $limit = 5): array
     {
         return $session->attempts()
             ->bergabung()
@@ -648,7 +687,7 @@ class QuizEngine
             ->when($session->mode === 'serempak', fn ($q) => $q->where('status', '!=', 'menunggu'))
             ->orderByDesc('skor_total')
             ->orderBy('selesai_at')
-            ->limit($limit)
+            ->when($limit !== null, fn ($q) => $q->limit($limit))
             ->with('user')
             ->get()
             ->values()
@@ -707,6 +746,7 @@ class QuizEngine
         $attempts = $session->attempts()->bergabung()->get();
         $selesai = $attempts->where('status', 'selesai')->count();
         $terjawab = Answer::whereIn('attempt_id', $attempts->pluck('id'))->count();
+        $leaderboard = $session->leaderboard_live ? $this->leaderboard($session, null) : [];
 
         return $base + [
             'fase' => null,
@@ -714,7 +754,8 @@ class QuizEngine
             'selesai' => $selesai,
             'rata_terjawab' => $attempts->count() > 0 ? round($terjawab / $attempts->count(), 1) : 0,
             'leaderboard_live' => (bool) $session->leaderboard_live,
-            'top5' => $session->leaderboard_live ? $this->leaderboard($session) : [],
+            'top5' => array_slice($leaderboard, 0, 5),
+            'leaderboard' => $leaderboard,
         ];
     }
 
@@ -786,7 +827,10 @@ class QuizEngine
                     ->values()
                     ->all();
                 $data['jawaban_benar'] = $question->options->firstWhere('is_correct', true)?->teks;
-                $data['top5'] = $session->leaderboard_live ? $this->leaderboard($session) : [];
+                $leaderboard = $session->leaderboard_live ? $this->leaderboard($session, null) : [];
+                $data['top5'] = array_slice($leaderboard, 0, 5);
+                $data['leaderboard'] = $leaderboard;
+                $data['pembahasan'] = $session->pembahasanTampil() ? $question->pembahasan : null;
             }
         }
 

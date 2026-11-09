@@ -339,6 +339,13 @@
                         window.location.href = config.resultUrl;
                     });
 
+                echo.channel('quiz-sessions')
+                    .listen('.SesiStatusUpdated', (data) => {
+                        if (data.session_id === {{ $session->id }} && data.action === 'pembahasan_updated') {
+                            this.muat();
+                        }
+                    });
+
                 // Notifikasi instan untuk aksi personal admin
                 const userChannel = 'session-user.' + {{ $session->id }} + '.' + {{ auth()->id() }};
                 echo.channel(userChannel)

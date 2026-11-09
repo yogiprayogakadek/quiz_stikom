@@ -15,6 +15,7 @@ class StoreSessionRequest extends FormRequest
             'mode' => ['required', 'in:acak,serempak'],
             'acak_opsi' => ['boolean'],
             'tampilkan_pembahasan' => ['boolean'],
+            'pembahasan_mode' => ['nullable', 'in:tersembunyi,otomatis,terbuka'],
             'leaderboard_live' => ['boolean'],
             'max_peserta' => ['nullable', 'integer', 'min:1', 'max:10000'],
             'jeda_detik' => ['required', 'integer', 'min:1', 'max:60'],

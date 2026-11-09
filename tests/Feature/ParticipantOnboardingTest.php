@@ -61,6 +61,7 @@ class ParticipantOnboardingTest extends TestCase
 
         $this->assertSame('berjalan', $session->status);
         $this->assertTrue($session->tampilkan_pembahasan);
+        $this->assertSame('terbuka', $session->pembahasan_mode);
         $this->assertNotNull($session->display_token);
     }
 
