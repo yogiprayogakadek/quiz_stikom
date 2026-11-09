@@ -1,4 +1,4 @@
-<x-layouts.peserta :judul="$session->nama" :keterangan="'Mode Serempak · '.$session->quiz->judul">
+<x-layouts.peserta :judul="$session->nama" :keterangan="'Mode Serempak · '.$session->quiz->judul" :fokus="true">
     <script>
         window.kuisSerempak = (config) => ({
             state: null,

@@ -46,6 +46,7 @@ class PesertaStartSessionTest extends TestCase
             ->withSession(['auth_token' => 'token-peserta'])
             ->get(route('peserta.session.play', $session))
             ->assertOk()
+            ->assertDontSee('Kelas Saya')
             ->assertSee('Menunggu admin memulai');
     }
 

@@ -1,4 +1,4 @@
-<x-layouts.peserta :judul="$session->nama" :keterangan="'Mode Acak · '.$session->quiz->judul">
+<x-layouts.peserta :judul="$session->nama" :keterangan="'Mode Acak · '.$session->quiz->judul" :fokus="true">
     <script>
         window.kuisAcak = (config) => ({
             questions: config.questions,

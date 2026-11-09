@@ -132,6 +132,19 @@ class EssayTest extends TestCase
     /**
      * @return array{0: User, 1: User, 2: QuizSession, 3: Attempt, 4: Question, 5: Question, 6: Option}
      */
+    public function test_halaman_mengerjakan_soal_tanpa_sidebar_peserta(): void
+    {
+        [$admin, $peserta, $session, $attempt] = $this->buatAcakBerjalan();
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('Ibu kota Indonesia?')
+            ->assertDontSee('Kelas Saya')
+            ->assertDontSee('Portal Peserta');
+    }
+
     private function buatAcakBerjalan(bool $denganJawaban = true): array
     {
         $admin = User::create([

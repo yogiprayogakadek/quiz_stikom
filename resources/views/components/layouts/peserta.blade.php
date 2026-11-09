@@ -1,4 +1,4 @@
-@props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false])
+@props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false, 'fokus' => false])
 
 <!DOCTYPE html>
 <html lang="id">
@@ -24,32 +24,33 @@
 >
     <a href="#utama" class="skip-link">Lewati ke konten utama</a>
 
-    <!-- Mobile Slide-over Backdrop -->
-    <div
-        x-show="mobileNav"
-        x-cloak
-        x-transition.opacity.duration.300ms
-        class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
-        @click="mobileNav = false"
-        aria-hidden="true"
-    ></div>
+    @unless ($fokus)
+        <!-- Mobile Slide-over Backdrop -->
+        <div
+            x-show="mobileNav"
+            x-cloak
+            x-transition.opacity.duration.300ms
+            class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
+            @click="mobileNav = false"
+            aria-hidden="true"
+        ></div>
 
-    <!-- Mobile Slide-over Navigation Drawer -->
-    <div
-        x-show="mobileNav"
-        x-cloak
-        x-transition:enter="transition ease-out duration-300 transform"
-        x-transition:enter-start="-translate-x-full"
-        x-transition:enter-end="translate-x-0"
-        x-transition:leave="transition ease-in duration-200 transform"
-        x-transition:leave-start="translate-x-0"
-        x-transition:leave-end="-translate-x-full"
-        id="menu-peserta"
-        class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col justify-between bg-white border-r border-slate-200/80 p-5 shadow-2xl lg:hidden font-sans"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Menu navigasi peserta"
-    >
+        <!-- Mobile Slide-over Navigation Drawer -->
+        <div
+            x-show="mobileNav"
+            x-cloak
+            x-transition:enter="transition ease-out duration-300 transform"
+            x-transition:enter-start="-translate-x-full"
+            x-transition:enter-end="translate-x-0"
+            x-transition:leave="transition ease-in duration-200 transform"
+            x-transition:leave-start="translate-x-0"
+            x-transition:leave-end="-translate-x-full"
+            id="menu-peserta"
+            class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col justify-between bg-white border-r border-slate-200/80 p-5 shadow-2xl lg:hidden font-sans"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu navigasi peserta"
+        >
         <div>
             <div class="flex items-center justify-between pb-4 border-b border-slate-100">
                 <a href="{{ route('peserta.dashboard') }}" class="flex items-center gap-3">
@@ -107,9 +108,11 @@
             </form>
         </div>
     </div>
+    @endunless
 
     {{-- Unified Full-Screen Layout Shell --}}
     <div class="min-h-screen w-full bg-[#f8fafc] flex flex-col lg:flex-row font-sans">
+        @unless ($fokus)
         {{-- Left Sidebar Desktop (Collapsible: Icon-Only w-20 or Full w-64/w-72) --}}
         <aside
             class="hidden lg:flex lg:flex-col lg:justify-between lg:h-screen lg:sticky lg:top-0 bg-white border-r border-slate-200/80 p-5 flex-shrink-0 transition-all duration-300 ease-in-out"
@@ -193,10 +196,14 @@
                 </form>
             </div>
         </aside>
+        @endunless
 
         {{-- Main Content Canvas Full Page --}}
         <main id="utama" class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 xl:p-10 overflow-y-auto">
-            @if ($canvas)
+            @if ($fokus)
+                <x-flash-pesan class="mb-5" />
+                {{ $slot }}
+            @elseif ($canvas)
                 <x-flash-pesan class="mb-5" />
                 {{ $slot }}
             @else
