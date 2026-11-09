@@ -197,6 +197,7 @@
         {{-- Main Content Canvas Full Page --}}
         <main id="utama" class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 xl:p-10 overflow-y-auto">
             @if ($canvas)
+                <x-flash-pesan class="mb-5" />
                 {{ $slot }}
             @else
                 {{-- Standard Subpage Header with Single Hamburger Toggle --}}
@@ -244,21 +245,7 @@
                     </div>
 
                     {{-- Flash Messages & Error Alerts --}}
-                    <div class="mt-5 space-y-3">
-                        @if (session('sukses'))
-                            <x-alert jenis="success">{{ session('sukses') }}</x-alert>
-                        @endif
-
-                        @if ($errors->any())
-                            <x-alert jenis="error">
-                                <ul class="space-y-1">
-                                    @foreach ($errors->all() as $pesan)
-                                        <li>{{ $pesan }}</li>
-                                    @endforeach
-                                </ul>
-                            </x-alert>
-                        @endif
-                    </div>
+                    <x-flash-pesan class="mt-5" />
                 </div>
 
                 {{-- Subpage Slot --}}

@@ -104,9 +104,17 @@ class QuizEngine
 
             $session = $attempt->quizSession;
 
-            if ($session->mode !== 'acak' || $session->status !== 'berjalan') {
+            if ($session->mode !== 'acak') {
                 throw ValidationException::withMessages([
-                    'attempt' => 'Sesi belum berjalan atau bukan Mode Acak.',
+                    'attempt' => 'Sesi ini bukan Mode Acak.',
+                ]);
+            }
+
+            if ($session->status !== 'berjalan') {
+                throw ValidationException::withMessages([
+                    'attempt' => $session->status === 'selesai'
+                        ? 'Sesi ini sudah selesai. Hubungi admin untuk sesi berikutnya.'
+                        : 'Sesi belum dimulai oleh admin. Mohon tunggu hingga admin memulai sesi.',
                 ]);
             }
 

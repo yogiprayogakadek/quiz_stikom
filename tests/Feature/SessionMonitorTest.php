@@ -232,6 +232,33 @@ class SessionMonitorTest extends TestCase
     /**
      * @return array{0: User, 1: QuizSession, 2: Attempt, 3: User, 4: User}
      */
+    public function test_monitor_admin_menampilkan_pelanggaran_di_halaman_dan_polling(): void
+    {
+        [$admin, $session, $attempt, $peserta] = $this->sesiAcakBerjalan();
+
+        AttemptEvent::create([
+            'attempt_id' => $attempt->id,
+            'tipe' => 'tab_hidden',
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.sessions.show', $session))
+            ->assertOk()
+            ->assertSee('Membuka tab lain / tab disembunyikan')
+            ->assertSee($peserta->nama);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->getJson(route('admin.sessions.monitor', $session));
+
+        $response->assertOk();
+        $this->assertSame(1, $response->json('proctoring_count'));
+        $this->assertStringContainsString('Membuka tab lain / tab disembunyikan', $response->json('proctoring'));
+        $this->assertStringContainsString($peserta->nama, $response->json('proctoring'));
+    }
+
     private function sesiAcakBerjalan(): array
     {
         $admin = User::create([

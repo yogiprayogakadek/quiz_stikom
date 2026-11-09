@@ -65,7 +65,7 @@ class AttemptController extends Controller
 
         if ($attempt->status === 'menunggu') {
             return redirect()->route('peserta.dashboard')
-                ->withErrors(['attempt' => 'Sesi belum dimulai oleh admin.']);
+                ->withErrors(['attempt' => 'Sesi belum dimulai oleh admin. Mohon tunggu hingga admin memulai sesi.']);
         }
 
         if ($attempt->isLewatBatas()) {
@@ -255,6 +255,8 @@ class AttemptController extends Controller
         ]);
 
         $session = $attempt->quizSession;
+        \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+
         if ($session && $session->display_token) {
             $label = AttemptEvent::label('fullscreen_exit_timeout');
 
@@ -384,19 +386,23 @@ class AttemptController extends Controller
         $jumlah = $attempt->events()->count();
 
         $session = $attempt->quizSession;
-        if ($session && $session->display_token) {
-            $label = AttemptEvent::label($tipe);
+        if ($session) {
+            \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
 
-            PesertaPeringatan::safeDispatch($session->display_token, [
-                'id' => $kejadian->id,
-                'nama' => $attempt->user?->nama ?? 'Peserta',
-                'username' => $attempt->user?->username ?? '-',
-                'tipe' => $tipe,
-                'pesan' => $label['pesan'],
-                'level' => $label['level'],
-                'waktu' => now()->format('H:i:s'),
-                'jumlah_pelanggaran' => $jumlah,
-            ]);
+            if ($session->display_token) {
+                $label = AttemptEvent::label($tipe);
+
+                PesertaPeringatan::safeDispatch($session->display_token, [
+                    'id' => $kejadian->id,
+                    'nama' => $attempt->user?->nama ?? 'Peserta',
+                    'username' => $attempt->user?->username ?? '-',
+                    'tipe' => $tipe,
+                    'pesan' => $label['pesan'],
+                    'level' => $label['level'],
+                    'waktu' => now()->format('H:i:s'),
+                    'jumlah_pelanggaran' => $jumlah,
+                ]);
+            }
         }
 
         return response()->json([

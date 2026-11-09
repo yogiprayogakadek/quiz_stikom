@@ -329,6 +329,8 @@ class SessionController extends Controller
                 ]);
             }
 
+            \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+
             if ($attempt->status === 'berjalan') {
                 $totalSoal = $session->sessionQuestions()->count();
                 $benar = Answer::query()

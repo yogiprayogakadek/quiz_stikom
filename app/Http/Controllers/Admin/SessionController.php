@@ -109,6 +109,8 @@ class SessionController extends Controller
         return response()->json([
             'status' => view('admin.sessions._status', $data)->render(),
             'peserta' => view('admin.sessions._peserta', $data)->render(),
+            'proctoring' => view('admin.sessions._proctoring', $data)->render(),
+            'proctoring_count' => $data['kejadianTerbaru']->count(),
         ]);
     }
 
