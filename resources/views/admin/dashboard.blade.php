@@ -586,7 +586,7 @@
 
                                 <div class="flex items-center gap-3 self-end md:self-center shrink-0">
                                     <a
-                                        href="{{ route('admin.sessions.monitor', $sesi) }}"
+                                        href="{{ route('admin.sessions.show', $sesi) }}"
                                         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition active:scale-[0.98]"
                                     >
                                         <span>Buka Monitor</span>
