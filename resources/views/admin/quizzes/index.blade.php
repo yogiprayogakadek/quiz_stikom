@@ -25,6 +25,9 @@
                         @if ($kuis->jumlah_soal !== null)
                             <span class="pill pill-sun">{{ $kuis->jumlah_soal }} dipakai</span>
                         @endif
+                        @if ($kuis->acak_opsi)
+                            <span class="pill pill-leaf text-xs">Acak Opsi</span>
+                        @endif
                     </div>
 
                     <h2 class="mt-3 text-2xl">{{ $kuis->judul }}</h2>

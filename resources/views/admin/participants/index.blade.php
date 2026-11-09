@@ -14,69 +14,105 @@
         </a>
     </x-slot:aksi>
 
-    <form method="GET" action="{{ route('admin.participants.index') }}" class="flex flex-col gap-3 sm:flex-row">
-        <div class="flex-1">
-            <label for="cari" class="sr-only">Cari peserta</label>
-            <input id="cari" name="q" type="search" value="{{ $cari }}" class="input" placeholder="Cari nama atau username">
-        </div>
-        <button type="submit" class="btn btn-secondary">Cari</button>
-        @if ($cari !== '')
-            <a href="{{ route('admin.participants.index') }}" class="btn btn-ghost">Bersihkan</a>
-        @endif
-    </form>
-
     @if ($participants->isEmpty())
         <x-empty-state
             class="mt-6"
             :judul="$cari !== '' ? 'Peserta tidak ditemukan' : 'Belum ada peserta'"
-            :keterangan="$cari !== '' ? 'Coba kata kunci lain atau bersihkan pencarian.' : 'Tambahkan satu per satu atau impor daftar kelas dari CSV.'"
+            :keterangan="$cari !== '' ? 'Coba kata kunci lain atau tambahkan peserta baru.' : 'Tambahkan satu per satu atau impor daftar kelas dari CSV.'"
         >
-            @if ($cari === '')
-                <a href="{{ route('admin.participants.create') }}" class="btn btn-primary mt-2">Tambah peserta pertama</a>
-            @endif
+            <a href="{{ route('admin.participants.create') }}" class="btn btn-primary mt-2">Tambah peserta pertama</a>
         </x-empty-state>
     @else
-        <div class="mt-6 overflow-x-auto rounded-card border border-outline bg-page">
-            <table class="table">
-                <caption class="sr-only">Daftar peserta</caption>
-                <thead>
-                    <tr>
-                        <th scope="col">Nama</th>
-                        <th scope="col">Username</th>
-                        <th scope="col">Attempt</th>
-                        <th scope="col">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($participants as $peserta)
-                        <tr>
-                            <td>
-                                <p class="font-bold text-ink">{{ $peserta->nama }}</p>
-                            </td>
-                            <td class="font-mono text-base">{{ $peserta->username }}</td>
-                            <td>{{ $peserta->attempts_count }}</td>
-                            <td>
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <a href="{{ route('admin.participants.edit', $peserta) }}" class="btn btn-ghost px-3">Edit</a>
-                                    <form method="POST" action="{{ route('admin.participants.reset-password', $peserta) }}" onsubmit="return confirm('Reset password {{ $peserta->username }}? Password lama tidak berlaku lagi.')">
-                                        @csrf
-                                        <button type="submit" class="btn btn-ghost px-3">Reset password</button>
-                                    </form>
-                                    <form method="POST" action="{{ route('admin.participants.destroy', $peserta) }}" onsubmit="return confirm('Hapus peserta {{ $peserta->username }}? Tindakan ini tidak bisa dibatalkan dari halaman ini.')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-ghost px-3 text-coral-deep">Hapus</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-
-        <div class="mt-6">
-            {{ $participants->links() }}
+        <div class="card shadow-xs border border-slate-200/90 bg-white">
+            <x-data-table
+                search-placeholder="Cari nama atau username peserta..."
+                :per-page="10"
+                :per-page-options="[10, 25, 50, 100]"
+                empty-message="Tidak ada peserta yang cocok dengan pencarian."
+            >
+                <div class="overflow-x-auto rounded-xl border border-slate-200/90">
+                    <table class="table">
+                        <caption class="sr-only">Daftar peserta kuis</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Nama</th>
+                                <th scope="col">Username</th>
+                                <th scope="col">Attempt</th>
+                                <th scope="col" class="text-right">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($participants as $peserta)
+                                <tr
+                                    data-item
+                                    data-search="{{ strtolower($peserta->nama . ' ' . $peserta->username) }}"
+                                    class="transition hover:bg-slate-50/75"
+                                >
+                                    <td>
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
+                                                {{ strtoupper(substr($peserta->nama, 0, 1)) }}
+                                            </div>
+                                            <p class="font-bold text-slate-900 text-sm sm:text-base leading-snug">
+                                                {{ $peserta->nama }}
+                                            </p>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="font-mono text-xs sm:text-sm font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                                            {{ $peserta->username }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="pill pill-neutral text-xs">
+                                            {{ $peserta->attempts_count }} ujian
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="flex items-center justify-end gap-1.5">
+                                            <a
+                                                href="{{ route('admin.participants.edit', $peserta) }}"
+                                                class="btn btn-secondary !py-1.5 !px-3 text-xs"
+                                            >
+                                                Edit
+                                            </a>
+                                            <form
+                                                method="POST"
+                                                action="{{ route('admin.participants.reset-password', $peserta) }}"
+                                                onsubmit="return confirm('Reset password {{ $peserta->username }}? Password lama tidak berlaku lagi.')"
+                                            >
+                                                @csrf
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-amber-700 hover:bg-amber-50"
+                                                    title="Reset password ke acak"
+                                                >
+                                                    Reset Pass
+                                                </button>
+                                            </form>
+                                            <form
+                                                method="POST"
+                                                action="{{ route('admin.participants.destroy', $peserta) }}"
+                                                onsubmit="return confirm('Hapus peserta {{ $peserta->username }}? Tindakan ini tidak bisa dibatalkan.')"
+                                            >
+                                                @csrf
+                                                @method('DELETE')
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-rose-600 hover:bg-rose-50"
+                                                    title="Hapus peserta"
+                                                >
+                                                    Hapus
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </x-data-table>
         </div>
     @endif
 </x-layouts.admin>

@@ -28,6 +28,9 @@
             sisaToleransi: 10,
             timerToleransi: null,
             memprosesPelanggaran: false,
+            audioCtx: null,
+            notifWaktu300: false,
+            notifWaktu60: false,
             get current() {
                 return this.questions[this.index] ?? null;
             },
@@ -76,6 +79,44 @@
                 this.pasangDeteksiKoneksi();
                 this.pasangEcho();
                 setInterval(() => this.cekStatus(), 5000);
+
+                const bukaAudio = () => {
+                    try {
+                        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtxClass && !this.audioCtx) {
+                            this.audioCtx = new AudioCtxClass();
+                        }
+                        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume();
+                        }
+                    } catch (e) {}
+                    window.removeEventListener('click', bukaAudio);
+                    window.removeEventListener('keydown', bukaAudio);
+                };
+                window.addEventListener('click', bukaAudio, { passive: true });
+                window.addEventListener('keydown', bukaAudio, { passive: true });
+            },
+            bunyikanAlert(frekuensi = 520, durasi = 0.2, bipUlang = 1) {
+                try {
+                    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtxClass) return;
+                    if (!this.audioCtx) this.audioCtx = new AudioCtxClass();
+                    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+
+                    for (let i = 0; i < bipUlang; i++) {
+                        const start = this.audioCtx.currentTime + (i * 0.18);
+                        const osc = this.audioCtx.createOscillator();
+                        const gain = this.audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(frekuensi, start);
+                        gain.gain.setValueAtTime(0.25, start);
+                        gain.gain.exponentialRampToValueAtTime(0.001, start + durasi);
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+                        osc.start(start);
+                        osc.stop(start + durasi);
+                    }
+                } catch (e) {}
             },
             pasangEcho() {
                 if (typeof window.buatEcho !== 'function') return;
@@ -227,6 +268,18 @@
                 const selisih = Date.now() - config.serverNow;
                 const hitung = () => {
                     this.sisa = Math.max(0, Math.round((config.batasAkhir - (Date.now() - selisih)) / 1000));
+
+                    // Alert audio & visual saat waktu kritis mendekati batas
+                    if (this.sisa > 0) {
+                        if (this.sisa <= 60 && !this.notifWaktu60) {
+                            this.notifWaktu60 = true;
+                            this.bunyikanAlert(880, 0.25, 2);
+                        } else if (this.sisa <= 300 && !this.notifWaktu300) {
+                            this.notifWaktu300 = true;
+                            this.bunyikanAlert(587.33, 0.2, 1);
+                        }
+                    }
+
                     if (this.sisa <= 0 && !this.selesaiOtomatis) {
                         this.selesaiOtomatis = true;
                         this.akhiri(true);
@@ -685,8 +738,19 @@
 
                     <div class="flex items-center gap-2">
                         <div class="text-right">
-                            <p class="text-xs font-bold text-ink-muted">Sisa waktu</p>
-                            <p class="timer text-2xl" x-bind:class="sisa <= 30 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
+                            <div class="flex items-center justify-end gap-1.5">
+                                <span x-show="sisa <= 60 && sisa > 0" class="inline-flex h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+                                <p class="text-xs font-bold text-ink-muted" x-text="sisa <= 60 && sisa > 0 ? 'Waktu Kritis' : 'Sisa waktu'">Sisa waktu</p>
+                            </div>
+                            <p
+                                class="timer text-2xl font-bold transition-all duration-200"
+                                x-bind:class="{
+                                    'text-rose-600 animate-pulse font-extrabold': sisa <= 60,
+                                    'text-amber-600 font-bold': sisa > 60 && sisa <= 300,
+                                    'text-ink': sisa > 300
+                                }"
+                                x-text="format(sisa)"
+                            >0:00</p>
                         </div>
                         <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
                             <x-icon name="eye" :size="20" />

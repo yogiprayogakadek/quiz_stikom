@@ -63,6 +63,39 @@ class ReportController extends Controller
         ));
     }
 
+    public function beritaAcara(QuizSession $session): View
+    {
+        $session->load(['quiz.kelas', 'kelas']);
+
+        $attempts = $session->attempts()
+            ->bergabung()
+            ->with('user')
+            ->withCount(['events', 'answers'])
+            ->orderByDesc('skor_total')
+            ->orderBy('created_at')
+            ->get();
+
+        $totalPeserta = $attempts->count();
+        $selesai = $attempts->where('status', 'selesai')->count();
+        $sedangMengerjakan = $attempts->where('status', 'berjalan')->count();
+        $pelanggaran = $attempts->sum('events_count');
+        $skorRataRata = $totalPeserta > 0 ? round($attempts->avg('skor_total'), 1) : 0;
+        $skorTertinggi = $totalPeserta > 0 ? $attempts->max('skor_total') : 0;
+        $skorTerendah = $totalPeserta > 0 ? $attempts->min('skor_total') : 0;
+
+        return view('admin.reports.berita-acara', compact(
+            'session',
+            'attempts',
+            'totalPeserta',
+            'selesai',
+            'sedangMengerjakan',
+            'pelanggaran',
+            'skorRataRata',
+            'skorTertinggi',
+            'skorTerendah'
+        ));
+    }
+
     public function attempt(Attempt $attempt): View
     {
         $attempt->load(['user', 'quizSession.quiz', 'events']);
@@ -201,28 +234,38 @@ class ReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
+        $session->loadMissing('kelas');
+
         return response()->streamDownload(function () use ($attempts, $session) {
             $out = fopen('php://output', 'w');
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM for Microsoft Excel
 
             fputcsv($out, [
+                'peringkat',
                 'nama',
-                'username',
+                'nim_username',
+                'kelas',
                 'status',
                 'jumlah_benar',
                 'poin',
                 'poin_maksimal',
-                'skor',
+                'skor_total',
                 'essay_belum_dinilai',
                 'mulai',
                 'selesai',
-                'kejadian_tercatat',
+                'pelanggaran',
                 'perlu_ditinjau',
             ]);
 
+            $rank = 1;
+            $namaKelas = $session->kelas?->nama ?? '-';
+
             foreach ($attempts as $attempt) {
                 fputcsv($out, [
+                    $rank++,
                     $attempt->user?->nama ?? '(peserta dihapus)',
                     $attempt->user?->username ?? '',
+                    $namaKelas,
                     $attempt->status,
                     $attempt->jumlah_benar,
                     $attempt->poin_total,
@@ -237,7 +280,7 @@ class ReportController extends Controller
             }
 
             fclose($out);
-        }, 'nilai-'.$this->slug($session->nama).'.csv', ['Content-Type' => 'text/csv']);
+        }, 'nilai-'.$this->slug($session->nama).'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function resetAttempt(Request $request, Attempt $attempt): RedirectResponse
@@ -305,11 +348,15 @@ class ReportController extends Controller
                 ->where('options.is_correct', true)
                 ->count();
 
+            $persen = $peserta > 0 ? round($benar / $peserta * 100, 1) : 0.0;
+            $kategori = $persen < 30 ? 'Sukar' : ($persen <= 70 ? 'Sedang' : 'Mudah');
+
             return [
                 'teks' => $question->teks,
                 'peserta' => $peserta,
                 'benar' => $benar,
-                'persen' => $peserta > 0 ? round($benar / $peserta * 100, 1) : 0.0,
+                'persen' => $persen,
+                'kategori' => $kategori,
             ];
         })->sortBy('persen')->values()->all();
     }

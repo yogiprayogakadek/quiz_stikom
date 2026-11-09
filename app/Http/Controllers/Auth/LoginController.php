@@ -54,6 +54,15 @@ class LoginController extends Controller
 
         $request->session()->put('auth_token', $token);
 
+        if ($user->role === 'peserta') {
+            \App\Events\PesertaStatusLogin::safeDispatch(
+                $user->id,
+                $user->nama,
+                $user->username,
+                'login'
+            );
+        }
+
         if ($user->wajibGantiPassword()) {
             return redirect()->route('password.change')
                 ->with('peringatan', 'Ini adalah login pertama Anda. Silakan ganti password Anda terlebih dahulu.');
@@ -70,6 +79,15 @@ class LoginController extends Controller
 
         if ($user !== null) {
             User::whereKey($user->id)->update(['current_session_token' => null]);
+
+            if ($user->role === 'peserta') {
+                \App\Events\PesertaStatusLogin::safeDispatch(
+                    $user->id,
+                    $user->nama,
+                    $user->username,
+                    'logout'
+                );
+            }
         }
 
         Auth::logout();

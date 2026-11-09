@@ -52,6 +52,18 @@
                             <div class="flex flex-wrap items-center gap-2">
                                 <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
 
+                                @if ($session->mode === 'acak' && $session->status === 'berjalan' && $attempt->status === 'berjalan')
+                                    <form
+                                        method="POST"
+                                        action="{{ route('admin.sessions.attempts.add-time', [$session, $attempt]) }}"
+                                        onsubmit="return confirm('Tambah waktu 10 menit untuk {{ addslashes($attempt->user?->nama ?? 'peserta ini') }}?')"
+                                    >
+                                        @csrf
+                                        <input type="hidden" name="minutes" value="10">
+                                        <button type="submit" class="btn btn-secondary px-2.5 py-1 text-xs whitespace-nowrap" title="Beri tambahan waktu 10 menit">+10m</button>
+                                    </form>
+                                @endif
+
                                 @if ($session->status === 'berjalan' && $attempt->status === 'berjalan')
                                     <form
                                         method="POST"
@@ -64,6 +76,14 @@
                                 @endif
 
                                 @if (in_array($session->status, ['lobby', 'berjalan'], true))
+                                    <form
+                                        method="POST"
+                                        action="{{ route('admin.sessions.attempts.reset', [$session, $attempt]) }}"
+                                        onsubmit="return confirm('Reset attempt peserta ini? Jawaban dihapus dan peserta bisa masuk/mengulang dari awal tanpa dikeluarkan dari sesi.')"
+                                    >
+                                        @csrf
+                                        <button type="submit" class="btn btn-ghost px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 whitespace-nowrap" title="Reset attempt agar peserta bisa mengerjakan ulang">Reset</button>
+                                    </form>
                                     <form
                                         method="POST"
                                         action="{{ route('admin.sessions.attempts.kick', [$session, $attempt]) }}"

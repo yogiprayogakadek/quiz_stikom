@@ -1,121 +1,228 @@
 @props(['judul' => 'Masuk'])
 
 <x-layouts.guest :judul="$judul">
-    <div class="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-        <section class="relative hidden flex-col justify-between bg-brand-soft px-12 py-10 lg:flex xl:px-16">
-            <div class="flex items-center gap-3">
-                <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-11 w-11 object-contain">
-                <span class="font-display text-2xl font-bold text-brand-deep">STIKOM Quiz</span>
-            </div>
-
-            <div class="max-w-lg">
-                <h1 class="text-[44px] leading-[1.08] text-ink xl:text-[52px]">
-                    Sistem Informasi Quiz &amp; Penilaian Kelas
-                </h1>
-                <p class="mt-6 text-xl leading-relaxed text-ink-muted">
-                    Kerjakan kuis di komputer masing-masing secara terfokus, terpantau real-time.
-                </p>
-
-                <dl class="mt-10 space-y-5">
-                    <div class="flex gap-4">
-                        <dt class="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-page font-mono text-base font-bold text-brand-deep">1</dt>
-                        <dd class="text-lg text-ink">Minta username dan password ke admin kelas.</dd>
+    <div class="min-h-screen w-full grid grid-cols-1 lg:grid-cols-12 bg-surface font-sans">
+        {{-- Left Side: Visual & Contextual Storytelling --}}
+        <div class="relative hidden lg:col-span-6 lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-soft via-surface-sunken to-brand-soft/40 p-10 xl:p-14 border-r border-outline">
+            {{-- Top Branding & Status --}}
+            <div class="relative z-10 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-page p-2 shadow-xs border border-outline">
+                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
                     </div>
-                    <div class="flex gap-4">
-                        <dt class="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-page font-mono text-base font-bold text-brand-deep">2</dt>
-                        <dd class="text-lg text-ink">Masuk dengan username, bukan email.</dd>
+                    <div>
+                        <p class="font-display text-lg font-bold text-ink leading-tight">STIKOM Quiz</p>
+                        <p class="text-xs text-ink-subtle">Sistem Kuis & Evaluasi Kelas</p>
                     </div>
-                    <div class="flex gap-4">
-                        <dt class="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-page font-mono text-base font-bold text-brand-deep">3</dt>
-                        <dd class="text-lg text-ink">Satu akun aktif di satu perangkat. Masuk di perangkat lain akan mengakhiri sesi lama.</dd>
-                    </div>
-                </dl>
-            </div>
-
-            <p class="text-base text-ink-muted">Berjalan di jaringan lokal kelas. Tanpa internet.</p>
-        </section>
-
-        <main class="flex items-center justify-center px-5 py-10 sm:px-8">
-            <div class="w-full max-w-md">
-                <div class="mb-8 flex items-center gap-3 lg:hidden">
-                    <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-11 w-11 object-contain">
-                    <span class="font-display text-2xl font-bold text-brand-deep">STIKOM Quiz</span>
                 </div>
 
-                <h2 class="text-3xl">Masuk ke akun</h2>
-                <p class="mt-2 text-lg text-ink-muted">Gunakan akun yang diberikan admin kelas.</p>
+                <div class="inline-flex items-center gap-2 rounded-full bg-page/90 px-3.5 py-1.5 border border-outline shadow-xs backdrop-blur-sm">
+                    <span class="h-2 w-2 rounded-full bg-leaf animate-pulse"></span>
+                    <span class="text-xs font-bold text-ink-muted">Server Lokal Aktif</span>
+                </div>
+            </div>
 
-                @if (session('sukses'))
-                    <x-alert jenis="success" class="mt-6">{{ session('sukses') }}</x-alert>
-                @endif
+            {{-- Center: Clean Illustration Frame --}}
+            <div class="relative z-10 my-auto flex flex-col items-center justify-center py-6">
+                <div class="w-full max-w-md overflow-hidden rounded-2xl border border-outline bg-page/60 p-3 shadow-lift backdrop-blur-xs">
+                    <img
+                        src="{{ asset('images/login-illustration.png') }}"
+                        alt="Ilustrasi peserta mengerjakan kuis"
+                        class="w-full h-auto rounded-xl object-cover select-none pointer-events-none"
+                    >
+                </div>
+            </div>
 
-                @if (session('peringatan'))
-                    <x-alert jenis="warning" class="mt-6">{{ session('peringatan') }}</x-alert>
-                @endif
-
-                @if ($errors->any())
-                    <x-alert jenis="error" class="mt-6">
-                        <ul class="space-y-1">
-                            @foreach ($errors->all() as $pesan)
-                                <li>{{ $pesan }}</li>
-                            @endforeach
-                        </ul>
-                    </x-alert>
-                @endif
-
-                <form method="POST" action="{{ route('login') }}" class="mt-6 space-y-5">
-                    @csrf
-
+            {{-- Bottom Contextual Feature Callouts --}}
+            <div class="relative z-10 grid grid-cols-2 gap-4 pt-4 border-t border-outline/70">
+                <div class="flex items-start gap-3">
+                    <span class="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-page border border-outline text-brand-deep">
+                        <x-icon name="shield-check" :size="18" />
+                    </span>
                     <div>
-                        <label for="username" class="label">Username</label>
-                        <input
-                            id="username"
-                            name="username"
-                            type="text"
-                            value="{{ old('username') }}"
-                            class="input"
-                            autocomplete="username"
-                            autocapitalize="none"
-                            spellcheck="false"
-                            required
-                            autofocus
-                            @error('username') aria-invalid="true" @enderror
-                        >
-                        @error('username')
-                            <p class="field-error">{{ $message }}</p>
-                        @enderror
+                        <p class="text-xs font-bold text-ink">Mode Layar Penuh</p>
+                        <p class="text-[11px] text-ink-subtle leading-normal">Pengawasan integritas sesi otomatis.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span class="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-page border border-outline text-brand-deep">
+                        <x-icon name="zap" :size="18" />
+                    </span>
+                    <div>
+                        <p class="text-xs font-bold text-ink">Sinkron Realtime</p>
+                        <p class="text-[11px] text-ink-subtle leading-normal">Jawaban tersimpan instan ke server.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Right Side: Login Form --}}
+        <main class="flex min-h-screen w-full flex-col justify-center bg-surface p-6 sm:p-12 lg:p-14 xl:p-18 lg:col-span-6">
+            <div
+                x-data="{ showPassword: false, submitting: false }"
+                class="w-full max-w-md mx-auto my-auto flex flex-col justify-center"
+            >
+                {{-- Mobile Brand Header --}}
+                <div class="flex lg:hidden items-center justify-center gap-3 mb-8">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-page p-2 shadow-xs border border-outline">
+                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                    </div>
+                    <span class="font-display text-2xl font-bold tracking-tight text-ink">
+                        STIKOM Quiz
+                    </span>
+                </div>
+
+                {{-- Card Wrapper --}}
+                <div class="card p-6 sm:p-8 bg-page border border-outline shadow-lift">
+                    {{-- Title --}}
+                    <div>
+                        <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink">
+                            Masuk akun
+                        </h1>
+                        <p class="mt-2 text-sm text-ink-muted">
+                            Gunakan kredensial yang diberikan oleh pengawas atau admin kelas.
+                        </p>
                     </div>
 
-                    <div>
-                        <label for="password" class="label">Password</label>
-                        <input
-                            id="password"
-                            name="password"
-                            type="password"
-                            class="input"
-                            autocomplete="current-password"
-                            required
-                            @error('password') aria-invalid="true" @enderror
+                    {{-- Alert Notifications --}}
+                    @if (session('sukses'))
+                        <div class="mt-5 flex items-start gap-3 rounded-xl bg-leaf-soft border border-leaf-deep/20 p-3.5 text-sm text-leaf-deep" role="alert">
+                            <x-icon name="check" :size="18" class="flex-none mt-0.5" />
+                            <div>{{ session('sukses') }}</div>
+                        </div>
+                    @endif
+
+                    @if (session('peringatan'))
+                        <div class="mt-5 flex items-start gap-3 rounded-xl bg-sun-soft border border-sun-deep/20 p-3.5 text-sm text-sun-deep" role="alert">
+                            <x-icon name="alert" :size="18" class="flex-none mt-0.5" />
+                            <div>{{ session('peringatan') }}</div>
+                        </div>
+                    @endif
+
+                    @if ($errors->any())
+                        <div class="mt-5 rounded-xl bg-coral-soft border border-coral-deep/20 p-3.5 text-sm text-coral-deep" role="alert">
+                            <div class="flex items-center gap-2 font-bold">
+                                <x-icon name="alert" :size="18" class="flex-none" />
+                                <span>Gagal masuk</span>
+                            </div>
+                            <ul class="mt-1.5 list-inside list-disc space-y-1 text-xs">
+                                @foreach ($errors->all() as $pesan)
+                                    <li>{{ $pesan }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    {{-- Login Form --}}
+                    <form
+                        method="POST"
+                        action="{{ route('login.store') }}"
+                        class="mt-6 space-y-4"
+                        @submit="submitting = true"
+                    >
+                        @csrf
+
+                        {{-- Username Field --}}
+                        <div>
+                            <label for="username" class="block text-xs font-bold uppercase tracking-wider text-ink-muted">
+                                Username
+                            </label>
+                            <div class="relative mt-1.5">
+                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
+                                    <x-icon name="user" :size="18" />
+                                </span>
+                                <input
+                                    id="username"
+                                    name="username"
+                                    type="text"
+                                    inputmode="text"
+                                    autocomplete="username"
+                                    required
+                                    autofocus
+                                    value="{{ old('username') }}"
+                                    placeholder="NIM / Username"
+                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-4 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('username') border-coral-deep @enderror"
+                                >
+                            </div>
+                            @error('username')
+                                <p class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        {{-- Password Field --}}
+                        <div>
+                            <label for="password" class="block text-xs font-bold uppercase tracking-wider text-ink-muted">
+                                Password
+                            </label>
+                            <div class="relative mt-1.5">
+                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
+                                    <x-icon name="lock" :size="18" />
+                                </span>
+                                <input
+                                    id="password"
+                                    name="password"
+                                    :type="showPassword ? 'text' : 'password'"
+                                    autocomplete="current-password"
+                                    required
+                                    placeholder="Kata sandi"
+                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-10 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('password') border-coral-deep @enderror"
+                                >
+                                <button
+                                    type="button"
+                                    @click="showPassword = !showPassword"
+                                    class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-ink-faint hover:text-ink focus:outline-none transition-colors"
+                                    :aria-label="showPassword ? 'Sembunyikan password' : 'Lihat password'"
+                                >
+                                    <template x-if="!showPassword">
+                                        <x-icon name="eye" :size="18" />
+                                    </template>
+                                    <template x-if="showPassword">
+                                        <x-icon name="eye-off" :size="18" />
+                                    </template>
+                                </button>
+                            </div>
+                            @error('password')
+                                <p class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        {{-- Remember Me --}}
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-ink-muted select-none">
+                                <input
+                                    type="checkbox"
+                                    name="remember"
+                                    value="1"
+                                    class="h-4 w-4 rounded border-outline text-brand focus:ring-brand-soft"
+                                >
+                                <span>Ingat saya di perangkat ini</span>
+                            </label>
+                        </div>
+
+                        {{-- Submit Button --}}
+                        <button
+                            type="submit"
+                            :disabled="submitting"
+                            class="btn btn-primary w-full mt-3 font-extrabold"
                         >
-                        @error('password')
-                            <p class="field-error">{{ $message }}</p>
-                        @enderror
+                            <span x-show="!submitting">Masuk akun</span>
+                            <span x-show="submitting" x-cloak class="flex items-center gap-2">
+                                <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Memverifikasi...</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    {{-- Help Note --}}
+                    <div class="mt-6 border-t border-outline/70 pt-4 text-center">
+                        <p class="text-xs text-ink-subtle">
+                            Kendala akun atau lupa sandi? Hubungi proktor / admin kelas.
+                        </p>
                     </div>
-
-                    <label class="flex min-h-12 items-center gap-3 text-base text-ink-muted">
-                        <input type="checkbox" name="remember" value="1" class="h-5 w-5 rounded border-outline-strong text-brand">
-                        Ingat saya di perangkat ini
-                    </label>
-
-                    <button type="submit" class="btn btn-primary btn-anak w-full">
-                        Masuk
-                        <x-icon name="arrow-left" class="rotate-180" :size="22" />
-                    </button>
-                </form>
-
-                <p class="mt-8 border-t border-outline pt-6 text-base text-ink-muted">
-                    Lupa password? Hubungi admin kelas untuk reset dari halaman peserta.
-                </p>
+                </div>
             </div>
         </main>
     </div>

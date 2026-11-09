@@ -258,6 +258,57 @@
         @include('admin.sessions._peserta')
     </section>
 
+    {{-- Live Proctoring Stream Widget --}}
+    <section class="mt-6 card shadow-xs border border-slate-200/90 bg-white" id="monitor-proctoring" aria-labelledby="proctoring-heading">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                    <x-icon name="alert" :size="20" />
+                </span>
+                <div>
+                    <h2 id="proctoring-heading" class="text-lg font-bold text-slate-900 leading-tight">Live Proctoring Stream</h2>
+                    <p class="text-xs text-slate-500">Pantauan pelanggaran peserta (tab switch, exit fullscreen, copy teks) secara real-time</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    <span id="proctoring-count">{{ $kejadianTerbaru->count() }}</span> Pelanggaran
+                </span>
+            </div>
+        </div>
+
+        <div id="proctoring-stream-list" class="mt-4 space-y-2.5 max-h-72 overflow-y-auto pr-1">
+            @forelse ($kejadianTerbaru as $kejadian)
+                @php
+                    $label = \App\Models\AttemptEvent::label($kejadian->tipe);
+                @endphp
+                <div class="flex items-start justify-between gap-3 p-3 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 transition text-xs">
+                    <div class="flex items-start gap-2.5 min-w-0">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg {{ $label['level'] === 'danger' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700' }}">
+                            <x-icon name="alert" :size="14" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="font-bold text-slate-900">
+                                {{ $kejadian->attempt?->user?->nama ?? 'Peserta' }}
+                                <span class="font-mono text-slate-500 font-normal">({{ $kejadian->attempt?->user?->username ?? '-' }})</span>
+                            </p>
+                            <p class="text-slate-600 mt-0.5">{{ $label['pesan'] }}</p>
+                        </div>
+                    </div>
+                    <span class="font-mono text-[11px] text-slate-400 shrink-0">
+                        {{ $kejadian->created_at ? $kejadian->created_at->format('H:i:s') : '-' }}
+                    </span>
+                </div>
+            @empty
+                <div id="proctoring-empty" class="p-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
+                    <p class="text-xs font-bold text-slate-600">Belum ada pelanggaran terdeteksi.</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Notifikasi otomatis muncul di sini bila ada siswa yang berpindah tab atau keluar fullscreen.</p>
+                </div>
+            @endforelse
+        </div>
+    </section>
+
     @if ($session->mode === 'serempak' && $soalAktif !== null)
         <section class="mt-6 card" aria-labelledby="soal-aktif">
             <h2 id="soal-aktif" class="text-2xl">Soal aktif</h2>
@@ -297,6 +348,54 @@
                 };
 
                 // Real-time WebSocket via Reverb
+                const mainkanChime = () => {
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(520, ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(780, ctx.currentTime + 0.15);
+                        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.25);
+                    } catch (e) {}
+                };
+
+                const tambahKejadian = (data) => {
+                    mainkanChime();
+                    const countEl = document.getElementById('proctoring-count');
+                    if (countEl) {
+                        countEl.textContent = parseInt(countEl.textContent || '0', 10) + 1;
+                    }
+                    const emptyEl = document.getElementById('proctoring-empty');
+                    if (emptyEl) emptyEl.remove();
+
+                    const listEl = document.getElementById('proctoring-stream-list');
+                    if (listEl) {
+                        const item = document.createElement('div');
+                        const isDanger = data.level === 'danger';
+                        item.className = 'flex items-start justify-between gap-3 p-3 rounded-xl border border-rose-300 bg-rose-50 text-xs transition duration-300 animate-pulse';
+                        item.innerHTML = `
+                            <div class="flex items-start gap-2.5 min-w-0">
+                                <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${isDanger ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-800'} font-bold">
+                                    !
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="font-bold text-slate-900">${data.nama || 'Peserta'} <span class="font-mono text-slate-500 font-normal">(${data.username || '-'})</span></p>
+                                    <p class="text-slate-600 mt-0.5">${data.pesan || 'Pelanggaran terdeteksi'}</p>
+                                </div>
+                            </div>
+                            <span class="font-mono text-[11px] text-slate-400 shrink-0">${data.waktu || 'Baru saja'}</span>
+                        `;
+                        listEl.prepend(item);
+                        setTimeout(() => item.classList.remove('animate-pulse'), 3000);
+                    }
+                };
+
                 const pasangEcho = () => {
                     if (typeof window.buatEcho !== 'function') return;
                     const echo = window.buatEcho();
@@ -313,6 +412,14 @@
                                 perbarui();
                             }
                         });
+
+                    @if ($session->display_token)
+                        echo.channel('display.' + @json($session->display_token))
+                            .listen('.PesertaPeringatan', (data) => {
+                                tambahKejadian(data);
+                                perbarui();
+                            });
+                    @endif
                 };
 
                 pasangEcho();

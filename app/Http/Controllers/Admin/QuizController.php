@@ -41,11 +41,12 @@ class QuizController extends Controller
     {
         $data = $request->validated();
 
-        $quiz = DB::transaction(function () use ($data) {
+        $quiz = DB::transaction(function () use ($data, $request) {
             return Quiz::create([
                 'kelas_id' => $data['kelas_id'],
                 'judul' => $data['judul'],
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
+                'acak_opsi' => $request->boolean('acak_opsi', true),
                 'created_by' => request()->user()->id,
             ]);
         });
@@ -73,6 +74,7 @@ class QuizController extends Controller
             'kelas_id' => $data['kelas_id'],
             'judul' => $data['judul'],
             'jumlah_soal' => $data['jumlah_soal'] ?? null,
+            'acak_opsi' => $request->boolean('acak_opsi'),
         ]);
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis diperbarui.');

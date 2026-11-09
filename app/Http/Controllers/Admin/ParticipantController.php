@@ -22,6 +22,7 @@ class ParticipantController extends Controller
     {
         $cari = trim((string) $request->query('q'));
 
+        // shortcut: client-side pagination up to 2000 rows for real-time responsiveness, upgrade to AJAX datatable if huge
         $participants = User::where('role', 'peserta')
             ->when($cari !== '', function ($query) use ($cari) {
                 $query->where(fn ($q) => $q
@@ -30,8 +31,7 @@ class ParticipantController extends Controller
             })
             ->withCount('attempts')
             ->orderBy('nama')
-            ->paginate(15)
-            ->withQueryString();
+            ->get();
 
         return view('admin.participants.index', compact('participants', 'cari'));
     }

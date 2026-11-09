@@ -12,6 +12,7 @@ class StoreQuizRequest extends FormRequest
             'kelas_id' => ['required', 'integer', 'exists:kelas,id'],
             'judul' => ['required', 'string', 'max:160'],
             'jumlah_soal' => ['nullable', 'integer', 'min:1'],
+            'acak_opsi' => ['nullable', 'boolean'],
         ];
     }
 

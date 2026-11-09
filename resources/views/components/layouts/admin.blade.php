@@ -1,4 +1,4 @@
-@props(['judul' => 'Dashboard', 'keterangan' => null])
+@props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false])
 
 <!DOCTYPE html>
 <html lang="id">
@@ -10,144 +10,320 @@
     <link rel="icon" type="image/png" href="{{ asset('logo.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-surface">
+<body
+    class="min-h-screen bg-[#f8fafc] text-slate-900"
+    x-data="{
+        mobileNav: false,
+        sidebarCollapsed: localStorage.getItem('admin-sidebar-collapsed') === 'true',
+        toggleSidebar() {
+            this.sidebarCollapsed = !this.sidebarCollapsed;
+            localStorage.setItem('admin-sidebar-collapsed', this.sidebarCollapsed ? 'true' : 'false');
+        }
+    }"
+    x-on:keydown.escape.window="mobileNav = false"
+>
     <a href="#utama" class="skip-link">Lewati ke konten utama</a>
 
+    <!-- Mobile Slide-over Backdrop -->
     <div
-        x-data="{
-            menu: false,
-            ringkas: false,
-            init() {
-                this.ringkas = localStorage.getItem('admin-menu-ringkas') === '1';
-            },
-            toggleRingkas() {
-                this.ringkas = !this.ringkas;
-                localStorage.setItem('admin-menu-ringkas', this.ringkas ? '1' : '0');
-            }
-        }"
-        x-on:keydown.escape.window="menu = false"
-    >
-        <div
-            x-show="menu"
-            x-cloak
-            x-transition.opacity
-            class="fixed inset-0 z-40 bg-ink/40 lg:hidden"
-            x-on:click="menu = false"
-            aria-hidden="true"
-        ></div>
+        x-show="mobileNav"
+        x-cloak
+        x-transition.opacity.duration.300ms
+        class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
+        @click="mobileNav = false"
+        aria-hidden="true"
+    ></div>
 
-        <div x-show="menu" x-cloak id="menu-admin" class="fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto border-r border-outline bg-page p-5 lg:hidden">
-            <div class="flex items-center justify-between">
-                <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 rounded-xl">
-                    <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-10 w-10 object-contain">
-                    <span class="font-display text-xl font-bold text-brand-deep">STIKOM Quiz</span>
+    <!-- Mobile Slide-over Navigation Drawer -->
+    <div
+        x-show="mobileNav"
+        x-cloak
+        x-transition:enter="transition ease-out duration-300 transform"
+        x-transition:enter-start="-translate-x-full"
+        x-transition:enter-end="translate-x-0"
+        x-transition:leave="transition ease-in duration-200 transform"
+        x-transition:leave-start="translate-x-0"
+        x-transition:leave-end="-translate-x-full"
+        id="menu-admin"
+        class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col justify-between bg-white border-r border-slate-200/80 p-5 shadow-2xl lg:hidden font-sans"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu navigasi administrator"
+    >
+        <div>
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+                <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
+                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                    </div>
+                    <div>
+                        <span class="font-display text-lg font-extrabold tracking-tight text-slate-900 block leading-tight">STIKOM Quiz</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Panel Administrator</span>
+                    </div>
                 </a>
                 <button
                     type="button"
-                    class="btn btn-ghost px-3"
-                    x-on:click="menu = false"
+                    @click="mobileNav = false"
+                    class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
                     aria-label="Tutup menu"
                 >
-                    <x-icon name="x" :size="24" />
+                    <x-icon name="x" :size="20" />
                 </button>
             </div>
 
-            <p class="mt-6 px-3 text-sm font-bold text-ink-subtle">Ruang admin</p>
-            <x-nav-admin />
+            <nav class="mt-6 space-y-1.5" aria-label="Navigasi mobile administrator">
+                <a
+                    href="{{ route('admin.dashboard') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.dashboard') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="home" :size="20" class="{{ request()->routeIs('admin.dashboard') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Dashboard</span>
+                </a>
+                <a
+                    href="{{ route('admin.participants.index') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.participants.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="users" :size="20" class="{{ request()->routeIs('admin.participants.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Peserta</span>
+                </a>
+                <a
+                    href="{{ route('admin.classes.index') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.classes.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="kelas" :size="20" class="{{ request()->routeIs('admin.classes.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Kelas</span>
+                </a>
+                <a
+                    href="{{ route('admin.quizzes.index') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.quizzes.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="book" :size="20" class="{{ request()->routeIs('admin.quizzes.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Kuis & Soal</span>
+                </a>
+                <a
+                    href="{{ route('admin.sessions.index') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.sessions.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="play" :size="20" class="{{ request()->routeIs('admin.sessions.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Sesi Ujian</span>
+                </a>
+            </nav>
         </div>
 
-        <aside
-            class="fixed inset-y-0 left-0 z-30 hidden overflow-y-auto border-r border-outline bg-page p-5 transition-all duration-300 lg:block"
-            x-bind:class="{ 'w-24': ringkas, 'w-72': !ringkas }"
-        >
-            <div class="flex items-center gap-2" x-bind:class="{ 'justify-center': ringkas, 'justify-between': !ringkas }">
-                <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 rounded-xl" x-show="!ringkas" x-cloak>
-                    <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-10 w-10 object-contain">
-                    <span class="font-display text-xl font-bold text-brand-deep">STIKOM Quiz</span>
-                </a>
-                <button
-                    type="button"
-                    class="btn btn-ghost px-2"
-                    x-on:click="toggleRingkas()"
-                    x-bind:aria-label="ringkas ? 'Perbesar menu' : 'Perkecil menu'"
-                    title="Perkecil atau perbesar menu"
-                >
-                    <x-icon name="menu" :size="22" />
+        <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white font-bold font-display text-base shadow-sm">
+                    {{ strtoupper(substr(auth()->user()->nama, 0, 1)) }}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-extrabold text-slate-800 leading-tight">{{ auth()->user()->nama }}</p>
+                    <p class="text-[11px] font-semibold text-slate-400">Administrator</p>
+                </div>
+            </div>
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
+                    <x-icon name="logout" :size="18" />
                 </button>
+            </form>
+        </div>
+    </div>
+
+    {{-- Unified Full-Screen Layout Shell --}}
+    <div class="min-h-screen w-full bg-[#f8fafc] flex flex-col lg:flex-row font-sans">
+        {{-- Left Sidebar Desktop (Collapsible: Icon-Only w-20 or Full w-64/w-72) --}}
+        <aside
+            class="hidden lg:flex lg:flex-col lg:justify-between lg:h-screen lg:sticky lg:top-0 bg-white border-r border-slate-200/80 p-5 flex-shrink-0 transition-all duration-300 ease-in-out"
+            :class="sidebarCollapsed ? 'lg:w-20' : 'lg:w-64 xl:w-72'"
+        >
+            <div>
+                {{-- Logo & App Title (No toggle here - toggle is in the top bar) --}}
+                <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
+                    <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? 'STIKOM Quiz' : ''">
+                        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
+                            <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                        </div>
+                        <div x-show="!sidebarCollapsed" x-cloak class="min-w-0">
+                            <span class="font-display text-xl font-extrabold tracking-tight text-slate-900 block leading-tight truncate">STIKOM Quiz</span>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Panel Administrator</span>
+                        </div>
+                    </a>
+                </div>
+
+                {{-- Navigation Links --}}
+                <nav class="mt-8 space-y-1.5">
+                    <a
+                        href="{{ route('admin.dashboard') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.dashboard') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Dashboard' : ''"
+                    >
+                        <x-icon name="home" :size="20" class="{{ request()->routeIs('admin.dashboard') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Dashboard</span>
+                    </a>
+                    <a
+                        href="{{ route('admin.participants.index') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.participants.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Peserta' : ''"
+                    >
+                        <x-icon name="users" :size="20" class="{{ request()->routeIs('admin.participants.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Peserta</span>
+                    </a>
+                    <a
+                        href="{{ route('admin.classes.index') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.classes.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Kelas' : ''"
+                    >
+                        <x-icon name="kelas" :size="20" class="{{ request()->routeIs('admin.classes.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Kelas</span>
+                    </a>
+                    <a
+                        href="{{ route('admin.quizzes.index') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.quizzes.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Kuis & Soal' : ''"
+                    >
+                        <x-icon name="book" :size="20" class="{{ request()->routeIs('admin.quizzes.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Kuis & Soal</span>
+                    </a>
+                    <a
+                        href="{{ route('admin.sessions.index') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.sessions.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Sesi Ujian' : ''"
+                    >
+                        <x-icon name="play" :size="20" class="{{ request()->routeIs('admin.sessions.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Sesi Ujian</span>
+                    </a>
+                </nav>
+
+                {{-- Server Status Card --}}
+                <div x-show="!sidebarCollapsed" x-cloak class="mt-8 hidden lg:block rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/60 border border-slate-200/80 p-4 shadow-xs">
+                    <div class="flex items-center gap-2.5">
+                        <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
+                            <x-icon name="shield-check" :size="18" />
+                        </span>
+                        <span class="font-display text-sm font-extrabold text-slate-900">Server Lokal</span>
+                    </div>
+                    <p class="mt-2 text-xs text-slate-600 leading-relaxed">
+                        Reverb WebSockets & antrean kuis aktif melayani kelas.
+                    </p>
+                    <a href="{{ route('admin.sessions.create') }}" class="mt-3 block w-full text-center py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs transition">
+                        + Buka Sesi Ujian
+                    </a>
+                </div>
             </div>
 
-            <p class="mt-6 px-3 text-sm font-bold text-ink-subtle" x-show="!ringkas" x-cloak>Ruang admin</p>
-            <x-nav-admin :ringkas="true" />
+            {{-- User Profile Footer --}}
+            <div
+                class="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between"
+                :class="sidebarCollapsed ? 'lg:flex-col lg:gap-3 lg:justify-center' : ''"
+            >
+                <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
+                    <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white font-bold font-display text-base shadow-sm"
+                        title="{{ auth()->user()->nama }}"
+                    >
+                        {{ strtoupper(substr(auth()->user()->nama, 0, 1)) }}
+                    </div>
+                    <div x-show="!sidebarCollapsed" x-cloak class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-extrabold text-slate-800 leading-tight">{{ auth()->user()->nama }}</p>
+                        <p class="text-[11px] font-semibold text-slate-400">Administrator</p>
+                    </div>
+                </div>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
+                        <x-icon name="logout" :size="18" />
+                    </button>
+                </form>
+            </div>
         </aside>
 
-        <div class="flex min-h-screen flex-col" x-bind:class="{ 'lg:pl-72': !ringkas, 'lg:pl-24': ringkas }">
-            <header class="sticky top-0 z-30 border-b border-outline bg-page lg:hidden">
-                <div class="flex items-center justify-between gap-3 px-4 py-3">
-                    <button
-                        type="button"
-                        class="btn btn-secondary px-3"
-                        x-on:click="menu = true"
-                        x-bind:aria-expanded="menu ? 'true' : 'false'"
-                        aria-controls="menu-admin"
-                        aria-label="Buka menu"
-                    >
-                        <x-icon name="menu" :size="24" />
-                    </button>
-                    <div class="flex items-center gap-2">
-                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-7 w-7 object-contain">
-                        <span class="font-display text-lg font-bold text-brand-deep">STIKOM Quiz</span>
-                    </div>
-                    <span class="pill pill-brand">Admin</span>
-                </div>
-            </header>
+        {{-- Main Content Canvas Full Page --}}
+        <main id="utama" class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 xl:p-10 overflow-y-auto">
+            @if ($canvas)
+                {{ $slot }}
+            @else
+                {{-- Standard Subpage Header with Single Hamburger Toggle --}}
+                <div class="mb-7">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80">
+                        <div class="flex items-center gap-3.5 min-w-0">
+                            {{-- Single Desktop Hamburger Toggle --}}
+                            <button
+                                type="button"
+                                @click="toggleSidebar()"
+                                class="hidden lg:inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-xs transition shrink-0"
+                                :title="sidebarCollapsed ? 'Perbesar Menu' : 'Perkecil Menu'"
+                                :aria-label="sidebarCollapsed ? 'Perbesar Menu' : 'Perkecil Menu'"
+                            >
+                                <x-icon name="menu" :size="20" />
+                            </button>
 
-            <main id="utama" class="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-outline pb-6">
-                    <div class="min-w-0 flex-1">
-                        <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl lg:text-4xl">{{ $judul }}</h1>
-                        @if ($keterangan)
-                            <p class="mt-1.5 max-w-2xl text-sm sm:text-base text-ink-muted leading-relaxed">{{ $keterangan }}</p>
+                            {{-- Single Mobile Hamburger Toggle --}}
+                            <button
+                                type="button"
+                                @click="mobileNav = true"
+                                class="lg:hidden inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-xs transition shrink-0"
+                                aria-label="Buka menu navigasi"
+                            >
+                                <x-icon name="menu" :size="20" />
+                            </button>
+
+                            <div class="min-w-0">
+                                <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-tight truncate">
+                                    {{ $judul }}
+                                </h1>
+                                @if ($keterangan)
+                                    <p class="mt-1 text-sm text-slate-500 leading-relaxed max-w-3xl">
+                                        {{ $keterangan }}
+                                    </p>
+                                @endif
+                            </div>
+                        </div>
+
+                        @isset($aksi)
+                            <div class="flex flex-wrap items-center gap-2.5 sm:shrink-0 self-start sm:self-auto">
+                                {{ $aksi }}
+                            </div>
+                        @endisset
+                    </div>
+
+                    {{-- Flash Messages & Error Alerts --}}
+                    <div class="mt-5 space-y-3">
+                        @if (session('sukses'))
+                            <x-alert jenis="success">{{ session('sukses') }}</x-alert>
+                        @endif
+
+                        @if (session('password_baru'))
+                            <x-alert jenis="warning">
+                                <p class="font-bold">Catat password ini sekarang. Password hanya ditampilkan sekali.</p>
+                                <p class="mt-2 font-mono text-lg">
+                                    {{ session('password_baru')['username'] }} : {{ session('password_baru')['password'] }}
+                                </p>
+                            </x-alert>
+                        @endif
+
+                        @if ($errors->any())
+                            <x-alert jenis="error">
+                                <ul class="space-y-1">
+                                    @foreach ($errors->all() as $pesan)
+                                        <li>{{ $pesan }}</li>
+                                    @endforeach
+                                </ul>
+                            </x-alert>
                         @endif
                     </div>
-                    @isset($aksi)
-                        <div class="flex flex-wrap items-center gap-2.5 sm:shrink-0">{{ $aksi }}</div>
-                    @endisset
                 </div>
 
-                <div class="mt-6 space-y-4">
-                    @if (session('sukses'))
-                        <x-alert jenis="success">{{ session('sukses') }}</x-alert>
-                    @endif
-
-                    @if (session('password_baru'))
-                        <x-alert jenis="warning">
-                            <p class="font-bold">Catat password ini sekarang. Password hanya ditampilkan sekali.</p>
-                            <p class="mt-2 font-mono text-lg">
-                                {{ session('password_baru')['username'] }} : {{ session('password_baru')['password'] }}
-                            </p>
-                        </x-alert>
-                    @endif
-
-                    @if ($errors->any())
-                        <x-alert jenis="error">
-                            <ul class="space-y-1">
-                                @foreach ($errors->all() as $pesan)
-                                    <li>{{ $pesan }}</li>
-                                @endforeach
-                            </ul>
-                        </x-alert>
-                    @endif
-                </div>
-
-                <div class="mt-8">
+                {{-- Subpage Slot --}}
+                <div>
                     {{ $slot }}
                 </div>
-            </main>
-
-            <footer class="mt-auto border-t border-outline px-4 py-6 text-center text-sm text-ink-subtle sm:px-6 lg:px-10">
-                STIKOM Quiz berjalan di jaringan lokal kelas.
-            </footer>
-        </div>
+            @endif
+        </main>
     </div>
 </body>
 </html>

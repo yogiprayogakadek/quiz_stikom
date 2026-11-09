@@ -4,6 +4,10 @@
             <x-icon name="arrow-left" :size="20" />
             Ruang kendali
         </a>
+        <a href="{{ route('admin.reports.berita-acara', $session) }}" target="_blank" class="btn btn-secondary">
+            <x-icon name="printer" :size="20" />
+            Berita Acara
+        </a>
         <a href="{{ route('admin.reports.export', $session) }}" class="btn btn-secondary">
             <x-icon name="download" :size="20" />
             Ekspor CSV
@@ -31,12 +35,15 @@
         </div>
     </div>
 
-    <section class="mt-8 card" aria-labelledby="tabel-nilai">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 id="tabel-nilai" class="text-2xl">Tabel nilai</h2>
+    <section class="mt-8 card shadow-xs border border-slate-200/90 bg-white" aria-labelledby="tabel-nilai">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100">
+            <div>
+                <h2 id="tabel-nilai" class="text-xl font-bold text-slate-900">Tabel Nilai & Hasil Ujian</h2>
+                <p class="text-xs text-slate-500">Rekap perolehan skor dan catatan proctoring tiap peserta</p>
+            </div>
             <a
                 href="{{ route('admin.reports.session', $tinjau ? ['session' => $session] : ['session' => $session, 'tinjau' => 1]) }}"
-                class="btn {{ $tinjau ? 'btn-primary' : 'btn-secondary' }}"
+                class="btn {{ $tinjau ? 'btn-primary' : 'btn-secondary' }} text-xs !py-1.5 !px-3"
             >
                 {{ $tinjau ? 'Tampilkan semua peserta' : 'Hanya perlu ditinjau' }}
             </a>
@@ -47,58 +54,81 @@
                 {{ $tinjau ? 'Tidak ada peserta yang perlu ditinjau.' : 'Belum ada peserta di sesi ini.' }}
             </p>
         @else
-            <div class="mt-4 overflow-x-auto">
-                <table class="table">
-                    <caption class="sr-only">Nilai peserta</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Nama</th>
-                            <th scope="col">Username</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">PG benar</th>
-                            <th scope="col">Poin / nilai</th>
-                            <th scope="col">Jawaban</th>
-                            <th scope="col">Kejadian</th>
-                            <th scope="col">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($attempts as $attempt)
-                            <tr>
-                                <td class="font-bold text-ink">{{ $attempt->user?->nama ?? '(peserta dihapus)' }}</td>
-                                <td class="font-mono text-base">{{ $attempt->user?->username ?? '-' }}</td>
-                                <td>
-                                    <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
-                                        {{ ucfirst($attempt->status) }}
-                                    </span>
-                                    @if ($attempt->essay_belum_dinilai > 0)
-                                        <span class="pill pill-sun mt-1 block w-fit">Essay belum dinilai</span>
-                                    @endif
-                                </td>
-                                <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
-                                <td class="font-mono">
-                                    @if ($session->mode === 'acak' && $attempt->poin_maksimal > 0)
-                                        {{ $attempt->poin_total }}/{{ $attempt->poin_maksimal }}
-                                        <span class="block text-sm text-ink-muted">Nilai {{ $attempt->skor_total }}</span>
-                                    @else
-                                        {{ $attempt->skor_total }}
-                                    @endif
-                                </td>
-                                <td class="font-mono">{{ $attempt->answers_count }}</td>
-                                <td>
-                                    @if ($attempt->events_count >= 3)
-                                        <span class="pill pill-coral">Perlu ditinjau</span>
-                                    @else
-                                        <span class="text-ink-muted">{{ $attempt->events_count }}</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+            <div class="mt-4">
+                <x-data-table
+                    search-placeholder="Cari nama atau username peserta..."
+                    :per-page="10"
+                    :per-page-options="[10, 25, 50, 100]"
+                    empty-message="Tidak ada peserta yang cocok dengan filter."
+                >
+                    <div class="overflow-x-auto rounded-xl border border-slate-200/90">
+                        <table class="table">
+                            <caption class="sr-only">Nilai peserta</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Nama</th>
+                                    <th scope="col">Username</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">PG benar</th>
+                                    <th scope="col">Poin / nilai</th>
+                                    <th scope="col">Jawaban</th>
+                                    <th scope="col">Kejadian</th>
+                                    <th scope="col" class="text-right">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($attempts as $attempt)
+                                    <tr
+                                        data-item
+                                        data-search="{{ strtolower(($attempt->user?->nama ?? '') . ' ' . ($attempt->user?->username ?? '')) }}"
+                                        class="transition hover:bg-slate-50/75"
+                                    >
+                                        <td class="font-bold text-slate-900 text-sm">
+                                            {{ $attempt->user?->nama ?? '(peserta dihapus)' }}
+                                        </td>
+                                        <td>
+                                            <span class="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                                                {{ $attempt->user?->username ?? '-' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }} text-xs">
+                                                {{ ucfirst($attempt->status) }}
+                                            </span>
+                                            @if ($attempt->essay_belum_dinilai > 0)
+                                                <span class="pill pill-sun mt-1 block w-fit text-[11px]">Essay belum dinilai</span>
+                                            @endif
+                                        </td>
+                                        <td class="font-mono text-sm font-semibold">{{ $attempt->jumlah_benar }}</td>
+                                        <td class="font-mono text-sm">
+                                            @if ($session->mode === 'acak' && $attempt->poin_maksimal > 0)
+                                                <span class="font-bold text-slate-900">{{ $attempt->poin_total }}/{{ $attempt->poin_maksimal }}</span>
+                                                <span class="block text-xs text-slate-500">Nilai {{ $attempt->skor_total }}</span>
+                                            @else
+                                                <span class="font-bold text-slate-900">{{ $attempt->skor_total }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="font-mono text-sm">{{ $attempt->answers_count }}</td>
+                                        <td>
+                                            @if ($attempt->events_count >= 3)
+                                                <span class="pill pill-coral text-xs">Perlu ditinjau</span>
+                                            @else
+                                                <span class="text-slate-500 font-mono text-sm">{{ $attempt->events_count }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <div class="flex items-center justify-end">
+                                                <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-secondary !py-1 !px-3 text-xs">
+                                                    Detail
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </x-data-table>
             </div>
         @endif
     </section>
@@ -121,8 +151,13 @@
                 @foreach ($statistikSoal as $stat)
                     <li>
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <p class="text-base font-bold text-ink">{{ \Illuminate\Support\Str::limit($stat['teks'], 160) }}</p>
-                            <p class="font-mono text-base text-ink-muted">{{ $stat['benar'] }}/{{ $stat['peserta'] }} benar</p>
+                            <div class="flex items-center gap-2">
+                                <span class="pill {{ ($stat['kategori'] ?? '') === 'Sukar' ? 'pill-coral' : (($stat['kategori'] ?? '') === 'Sedang' ? 'pill-sun' : 'pill-leaf') }} text-xs font-bold">
+                                    {{ $stat['kategori'] ?? 'Sedang' }}
+                                </span>
+                                <p class="text-base font-bold text-ink">{{ \Illuminate\Support\Str::limit($stat['teks'], 160) }}</p>
+                            </div>
+                            <p class="font-mono text-base text-ink-muted shrink-0">{{ $stat['benar'] }}/{{ $stat['peserta'] }} benar</p>
                         </div>
                         <div class="mt-2 flex items-center gap-3">
                             <div class="progress flex-1">

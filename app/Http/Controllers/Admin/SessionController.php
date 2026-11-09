@@ -137,11 +137,19 @@ class SessionController extends Controller
                 ->count()
             : 0;
 
+        $kejadianTerbaru = \App\Models\AttemptEvent::query()
+            ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
+            ->with('attempt.user')
+            ->latest('id')
+            ->limit(25)
+            ->get();
+
         return [
             'attempts' => $attempts,
             'soalAktif' => $soalAktif,
             'sudahMenjawab' => $sudahMenjawab,
             'totalPeserta' => $attempts->whereNotNull('bergabung_at')->count(),
+            'kejadianTerbaru' => $kejadianTerbaru,
         ];
     }
 
@@ -386,6 +394,85 @@ class SessionController extends Controller
         \App\Events\PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
         return back()->with('sukses', $nama . ' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
+    }
+
+    /**
+     * Tambah waktu ujian untuk peserta tertentu (mode acak).
+     */
+    public function addTime(Request $request, QuizSession $session, Attempt $attempt): RedirectResponse
+    {
+        $this->pastikanAttemptMilikSesi($session, $attempt);
+
+        if ($session->mode !== 'acak' || $session->status !== 'berjalan' || $attempt->status !== 'berjalan') {
+            throw ValidationException::withMessages([
+                'peserta' => 'Penambahan waktu hanya bisa dilakukan saat sesi dan attempt sedang berjalan (mode acak).',
+            ]);
+        }
+
+        $minutes = (int) $request->input('minutes', 10);
+        if ($minutes < 1 || $minutes > 180) {
+            $minutes = 10;
+        }
+
+        $attempt->loadMissing('user');
+        $nama = $attempt->user?->nama ?? 'Peserta';
+        $nowMs = (int) (microtime(true) * 1000);
+
+        $basis = ($attempt->batas_akhir_at && $attempt->batas_akhir_at > $nowMs)
+            ? (int) $attempt->batas_akhir_at
+            : $nowMs;
+
+        $attempt->batas_akhir_at = $basis + ($minutes * 60 * 1000);
+        $attempt->save();
+
+        Log::notice('Admin menambah waktu ujian peserta.', [
+            'admin_id' => $request->user()->id,
+            'attempt_id' => $attempt->id,
+            'peserta' => $nama,
+            'tambahan_menit' => $minutes,
+            'batas_baru' => $attempt->batas_akhir_at,
+        ]);
+
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+            'action' => 'add_time',
+            'user_id' => $attempt->user_id,
+            'attempt_id' => $attempt->id,
+            'minutes' => $minutes,
+        ]);
+
+        return back()->with('sukses', "Waktu ujian untuk {$nama} berhasil ditambah {$minutes} menit.");
+    }
+
+    /**
+     * Reset attempt peserta agar bisa masuk atau mengulang dari awal tanpa dikeluarkan dari sesi.
+     */
+    public function resetAttempt(Request $request, QuizSession $session, Attempt $attempt): RedirectResponse
+    {
+        $this->pastikanAttemptMilikSesi($session, $attempt);
+
+        $attempt->loadMissing('user');
+        $nama = $attempt->user?->nama ?? 'Peserta';
+        $userId = $attempt->user_id;
+
+        DB::transaction(function () use ($attempt) {
+            $attempt->delete();
+        });
+
+        Log::notice('Admin mereset attempt peserta via ruang kendali.', [
+            'admin_id' => $request->user()->id,
+            'admin_username' => $request->user()->username,
+            'peserta' => $nama,
+            'user_id' => $userId,
+            'quiz_session_id' => $session->id,
+        ]);
+
+        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+            'action' => 'reset_attempt',
+            'user_id' => $userId,
+        ]);
+        \App\Events\PesertaDikeluarkan::safeDispatch($session->id, $userId);
+
+        return back()->with('sukses', "Attempt untuk {$nama} berhasil direset. Peserta dapat masuk kembali.");
     }
 
     private function pastikanAttemptMilikSesi(QuizSession $session, Attempt $attempt): void

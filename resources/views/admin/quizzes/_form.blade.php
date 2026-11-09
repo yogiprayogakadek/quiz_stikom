@@ -26,6 +26,21 @@
         @error('jumlah_soal') <p class="field-error">{{ $message }}</p> @enderror
     </div>
 
+    <div>
+        @php
+            $acakOpsiKuis = (bool) old('acak_opsi', $quiz?->acak_opsi ?? true);
+        @endphp
+        <label class="flex items-start gap-3.5 cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:bg-slate-50 transition">
+            <input type="checkbox" name="acak_opsi" value="1" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500" @checked($acakOpsiKuis)>
+            <div class="min-w-0">
+                <span class="text-sm font-bold text-slate-900 block">Acak Urutan Pilihan Jawaban (A, B, C, D)</span>
+                <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    Setiap peserta yang duduk bersebelahan akan menerima letak opsi jawaban dalam urutan berbeda untuk mencegah contekan.
+                </p>
+            </div>
+        </label>
+    </div>
+
     @if (isset($quiz))
         <div class="rounded-2xl border border-outline bg-surface p-4">
             <p class="text-sm font-bold text-ink">Kelola soal kuis</p>

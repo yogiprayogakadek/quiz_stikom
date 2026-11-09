@@ -47,6 +47,7 @@
                         @else
                             <span class="pill pill-neutral">{{ $sesi->attempts_count }} peserta</span>
                         @endif
+                        <span class="pill {{ $sesi->acak_opsi ? 'pill-leaf' : 'pill-neutral' }} text-xs">{{ $sesi->acak_opsi ? 'Acak Opsi' : 'Opsi Tetap' }}</span>
                     </div>
 
                     <h2 class="mt-3 text-2xl">{{ $sesi->nama }}</h2>

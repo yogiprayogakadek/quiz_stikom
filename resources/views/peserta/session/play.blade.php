@@ -19,6 +19,12 @@
             sisaToleransi: 10,
             timerToleransi: null,
             memprosesPelanggaran: false,
+            audioCtx: null,
+            terakhirBipDetik: null,
+            isOnline: navigator.onLine ?? true,
+            storageKey: 'kuis_serempak_' + config.sessionId,
+            antreanOffline: [],
+            sedangSinkron: false,
             get isFullscreen() {
                 return Boolean(
                     document.fullscreenElement ||
@@ -29,10 +35,48 @@
             },
             init() {
                 this.muat();
+                this.muatAntreanLokal();
+                this.pasangDeteksiKoneksi();
                 setInterval(() => this.muat(), 3000);
                 setInterval(() => this.hitung(), 250);
                 this.pasangEcho();
                 this.pasangPengawas();
+
+                const bukaAudio = () => {
+                    try {
+                        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtxClass && !this.audioCtx) {
+                            this.audioCtx = new AudioCtxClass();
+                        }
+                        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume();
+                        }
+                    } catch (e) {}
+                    window.removeEventListener('click', bukaAudio);
+                    window.removeEventListener('keydown', bukaAudio);
+                };
+                window.addEventListener('click', bukaAudio, { passive: true });
+                window.addEventListener('keydown', bukaAudio, { passive: true });
+            },
+            bunyikanAlert(frekuensi = 660, durasi = 0.12) {
+                try {
+                    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtxClass) return;
+                    if (!this.audioCtx) this.audioCtx = new AudioCtxClass();
+                    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+
+                    const now = this.audioCtx.currentTime;
+                    const osc = this.audioCtx.createOscillator();
+                    const gain = this.audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(frekuensi, now);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + durasi);
+                    osc.connect(gain);
+                    gain.connect(this.audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + durasi);
+                } catch (e) {}
             },
             async muat() {
                 let hasil;
@@ -66,6 +110,16 @@
                 this.target = hasil.data.fase === 'jeda'
                     ? (hasil.data.ends_at ?? 0) + ((hasil.data.jeda_detik ?? 0) * 1000)
                     : (hasil.data.ends_at ?? 0);
+
+                if (this.state.soal && !this.state.soal.jawaban_option_id) {
+                    try {
+                        const savedOpsi = localStorage.getItem(this.storageKey + '_q_' + this.state.soal.id);
+                        if (savedOpsi) {
+                            this.state.soal.jawaban_option_id = parseInt(savedOpsi, 10);
+                        }
+                    } catch (e) {}
+                }
+
                 this.hitung();
             },
             hitung() {
@@ -74,11 +128,73 @@
                     return;
                 }
                 this.sisa = Math.max(0, Math.round((this.target - (Date.now() - this.offset)) / 1000));
+
+                // Audio alert hitungan mundur kritis (5, 4, 3, 2, 1) saat fase soal
+                if (this.state?.fase === 'soal_terbuka' && this.sisa <= 5 && this.sisa > 0) {
+                    if (this.terakhirBipDetik !== this.sisa) {
+                        this.terakhirBipDetik = this.sisa;
+                        this.bunyikanAlert(this.sisa <= 2 ? 880 : 660, 0.12);
+                    }
+                }
             },
             format(n) {
                 const menit = Math.floor(n / 60);
                 const detik = n % 60;
                 return menit + ':' + String(detik).padStart(2, '0');
+            },
+            muatAntreanLokal() {
+                try {
+                    const raw = localStorage.getItem(this.storageKey + '_antrean');
+                    if (raw) {
+                        this.antreanOffline = JSON.parse(raw);
+                    }
+                } catch (e) {
+                    this.antreanOffline = [];
+                }
+                if (navigator.onLine && this.antreanOffline.length > 0) {
+                    this.prosesAntrean();
+                }
+            },
+            simpanAntreanKeStorage() {
+                try {
+                    if (this.antreanOffline.length === 0) {
+                        localStorage.removeItem(this.storageKey + '_antrean');
+                    } else {
+                        localStorage.setItem(this.storageKey + '_antrean', JSON.stringify(this.antreanOffline));
+                    }
+                } catch (e) {}
+            },
+            pasangDeteksiKoneksi() {
+                window.addEventListener('online', () => {
+                    this.isOnline = true;
+                    this.prosesAntrean();
+                });
+                window.addEventListener('offline', () => {
+                    this.isOnline = false;
+                });
+            },
+            async prosesAntrean() {
+                if (this.sedangSinkron || !navigator.onLine || this.antreanOffline.length === 0) {
+                    return;
+                }
+                this.sedangSinkron = true;
+                const sisa = [];
+                for (const item of this.antreanOffline) {
+                    try {
+                        const res = await window.kuisFetch(config.answerUrl, {
+                            method: 'POST',
+                            body: { question_id: item.question_id, option_id: item.option_id }
+                        });
+                        if (!res.ok) {
+                            sisa.push(item);
+                        }
+                    } catch (err) {
+                        sisa.push(item);
+                    }
+                }
+                this.antreanOffline = sisa;
+                this.simpanAntreanKeStorage();
+                this.sedangSinkron = false;
             },
             async jawab(opsi) {
                 if (!this.state?.soal || this.menyimpan || this.berhenti) {
@@ -86,21 +202,43 @@
                 }
                 this.menyimpan = true;
                 this.pesan = '';
+                const qId = this.state.soal.id;
+                this.state.soal.jawaban_option_id = opsi.id;
+                try {
+                    localStorage.setItem(this.storageKey + '_q_' + qId, String(opsi.id));
+                } catch (e) {}
+
+                if (!navigator.onLine) {
+                    this.isOnline = false;
+                    this.menyimpan = false;
+                    this.antreanOffline = this.antreanOffline.filter(item => item.question_id !== qId);
+                    this.antreanOffline.push({ question_id: qId, option_id: opsi.id });
+                    this.simpanAntreanKeStorage();
+                    this.pesan = 'Mode offline: Jawaban disimpan di perangkat Anda.';
+                    return;
+                }
+
                 try {
                     const hasil = await window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: this.state.soal.id, option_id: opsi.id }
+                        body: { question_id: qId, option_id: opsi.id }
                     });
                     this.menyimpan = false;
                     if (hasil.ok) {
                         this.state.soal.jawaban_option_id = opsi.id;
                         this.state.sudah_menjawab = hasil.data.sudah_menjawab;
+                        this.antreanOffline = this.antreanOffline.filter(item => item.question_id !== qId);
+                        this.simpanAntreanKeStorage();
                         return;
                     }
                     this.pesan = hasil.data?.message ?? 'Jawaban gagal dikirim. Coba lagi.';
                 } catch (e) {
                     this.menyimpan = false;
-                    this.pesan = 'Koneksi terputus saat mengirim jawaban. Periksa internet Anda.';
+                    this.isOnline = false;
+                    this.antreanOffline = this.antreanOffline.filter(item => item.question_id !== qId);
+                    this.antreanOffline.push({ question_id: qId, option_id: opsi.id });
+                    this.simpanAntreanKeStorage();
+                    this.pesan = 'Koneksi terputus: Jawaban tersimpan di perangkat.';
                 }
             },
             async masukLayarPenuh() {
@@ -339,8 +477,19 @@
                             </div>
                             <div class="flex items-center gap-2">
                                 <div class="text-right">
-                                    <p class="text-xs font-bold text-ink-muted">Sisa waktu</p>
-                                    <p class="timer text-2xl" x-bind:class="sisa <= 10 ? 'text-coral-deep' : 'text-ink'" x-text="format(sisa)">0:00</p>
+                                    <div class="flex items-center justify-end gap-1.5">
+                                        <span x-show="sisa <= 5 && sisa > 0" class="inline-flex h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+                                        <p class="text-xs font-bold text-ink-muted" x-text="sisa <= 5 && sisa > 0 ? 'Waktu Kritis' : 'Sisa waktu'">Sisa waktu</p>
+                                    </div>
+                                    <p
+                                        class="timer text-2xl font-bold transition-all duration-200"
+                                        x-bind:class="{
+                                            'text-rose-600 animate-pulse scale-105 font-extrabold': sisa <= 5,
+                                            'text-amber-600 font-bold': sisa > 5 && sisa <= 10,
+                                            'text-ink': sisa > 10
+                                        }"
+                                        x-text="format(sisa)"
+                                    >0:00</p>
                                 </div>
                                 <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
                                     <x-icon name="eye" :size="20" />
@@ -353,8 +502,16 @@
                         </div>
 
                         <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span class="font-bold text-ink-muted" x-text="state.sudah_menjawab + ' dari ' + state.total_peserta + ' peserta sudah menjawab'"></span>
-                            <span class="exam-status" aria-live="polite" x-text="menyimpan ? 'Mengirim jawaban...' : (state.soal.jawaban_option_id ? 'Tersimpan' : '')"></span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-ink-muted" x-text="state.sudah_menjawab + ' dari ' + state.total_peserta + ' peserta sudah menjawab'"></span>
+                                <template x-if="!isOnline">
+                                    <span class="pill pill-coral text-xs">Offline</span>
+                                </template>
+                                <template x-if="antreanOffline.length > 0">
+                                    <span class="pill pill-sun text-xs" x-text="antreanOffline.length + ' di perangkat'"></span>
+                                </template>
+                            </div>
+                            <span class="exam-status" aria-live="polite" x-text="sedangSinkron ? 'Menyinkronkan...' : (menyimpan ? 'Mengirim jawaban...' : (state.soal.jawaban_option_id ? 'Tersimpan' : ''))"></span>
                         </div>
                     </div>
                 </div>
