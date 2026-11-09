@@ -812,7 +812,7 @@
                     </button>
                 </div>
 
-                <h2 id="teks-soal" class="mt-4 max-w-[65ch] whitespace-pre-line text-2xl leading-snug text-ink sm:text-3xl" x-text="current.teks"></h2>
+                <h2 id="teks-soal" class="question-text mt-4 whitespace-pre-line" x-text="current.teks"></h2>
 
                 <template x-if="current.tipe === 'essay'">
                     <div class="mt-5">

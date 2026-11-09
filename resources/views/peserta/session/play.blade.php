@@ -519,7 +519,7 @@
                 <div class="card">
                     <span class="pill pill-brand">Pilihan ganda</span>
 
-                    <h2 id="teks-soal-serempak" class="mt-4 max-w-[65ch] whitespace-pre-line text-2xl leading-snug text-ink sm:text-3xl" x-text="state.soal.teks"></h2>
+                    <h2 id="teks-soal-serempak" class="question-text mt-4 whitespace-pre-line" x-text="state.soal.teks"></h2>
 
                     <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
                         <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">

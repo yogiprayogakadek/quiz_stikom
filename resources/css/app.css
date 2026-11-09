@@ -212,6 +212,22 @@
         border-color: var(--color-brand-bright);
     }
 
+    .question-text {
+        font-family: var(--font-sans);
+        font-size: 1.375rem;
+        font-weight: 600;
+        line-height: 1.55;
+        letter-spacing: 0;
+        color: var(--color-ink);
+        text-wrap: pretty;
+    }
+
+    @media (min-width: 640px) {
+        .question-text {
+            font-size: 1.5rem;
+        }
+    }
+
     .input {
         width: 100%;
         min-height: 48px;
