@@ -100,6 +100,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
 Route::middleware(['auth', 'role:peserta'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'peserta'])->name('peserta.dashboard');
     Route::get('/dashboard/state', [DashboardController::class, 'pesertaState'])->name('peserta.dashboard.state');
+    Route::post('/dashboard/panduan-selesai', [DashboardController::class, 'selesaikanTour'])->name('peserta.tour.selesai');
 
     Route::get('/kelas', [PesertaKelasController::class, 'index'])->name('peserta.kelas.index');
     Route::get('/kelas/{kelas}', [PesertaKelasController::class, 'show'])->name('peserta.kelas.show');

@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import './tour';
 
 window.Pusher = Pusher;
 window.Alpine = Alpine;

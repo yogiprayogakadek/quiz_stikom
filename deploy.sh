@@ -5,6 +5,7 @@ set -eu
 git pull --ff-only
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
+php artisan db:seed --class=TrialQuizSeeder --force
 npm ci
 npm run build
 php artisan optimize:clear

@@ -1,4 +1,4 @@
-<x-layouts.peserta :canvas="true" :judul="'Halo, '.auth()->user()->nama" keterangan="Pilih sesi yang sedang dibuka admin, lalu kerjakan soal sampai selesai.">
+<x-layouts.peserta :canvas="true" :tour-baru="$tourBaru" :judul="'Halo, '.auth()->user()->nama" keterangan="Pilih sesi yang sedang dibuka admin, lalu kerjakan soal sampai selesai.">
     <script>
         window.dashboardPeserta = (config) => ({
             sesiList: config.initialSesi || [],
@@ -127,6 +127,7 @@
                     <button
                         type="button"
                         @click="toggleSidebar()"
+                        data-tour="menu-utama"
                         class="hidden lg:inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-xs transition shrink-0"
                         :title="sidebarCollapsed ? 'Perbesar Menu' : 'Perkecil Menu'"
                         :aria-label="sidebarCollapsed ? 'Perbesar Menu' : 'Perkecil Menu'"
@@ -138,13 +139,14 @@
                     <button
                         type="button"
                         @click="mobileNav = true"
+                        data-tour="menu-utama"
                         class="lg:hidden inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-xs transition shrink-0"
                         aria-label="Buka menu"
                     >
                         <x-icon name="menu" :size="20" />
                     </button>
 
-                    <div class="relative flex-1 min-w-0">
+                    <div class="relative flex-1 min-w-0" data-tour="cari">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400">
                             <x-icon name="search" :size="18" />
                         </span>
@@ -199,7 +201,7 @@
             </div>
 
             {{-- HERO BANNER (Option A: Modern Dark Slate / High-Contrast Deep Navy) --}}
-            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-[#0b1b36] border border-slate-800/80 p-6 sm:p-8 lg:p-9 shadow-sm">
+            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-[#0b1b36] border border-slate-800/80 p-6 sm:p-8 lg:p-9 shadow-sm" data-tour="hero">
                 {{-- Ambient mesh glow --}}
                 <div class="absolute -right-10 -top-10 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl pointer-events-none"></div>
                 <div class="absolute -left-12 -bottom-12 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none"></div>
@@ -237,6 +239,14 @@
                                 <x-icon name="kelas" :size="16" />
                                 <span>Pilih Kelas</span>
                             </a>
+                            <button
+                                type="button"
+                                @click="window.mulaiTourPeserta?.()"
+                                class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white text-sm font-semibold border border-white/15 backdrop-blur-md transition"
+                            >
+                                <x-icon name="book" :size="16" />
+                                <span>Panduan</span>
+                            </button>
                         </div>
                     </div>
 
@@ -610,7 +620,7 @@
             </div>
 
             {{-- WIDGET 2: LEADERBOARD / PERINGKAT KELAS --}}
-            <div class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs">
+            <div class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs" data-tour="leaderboard">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-display text-base font-extrabold text-slate-900">Peringkat Kelas</h3>
                     <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Top Skor</span>

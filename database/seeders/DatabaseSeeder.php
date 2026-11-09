@@ -25,5 +25,7 @@ class DatabaseSeeder extends Seeder
                 'role' => 'admin',
             ],
         );
+
+        $this->call(TrialQuizSeeder::class);
     }
 }

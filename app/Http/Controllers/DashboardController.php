@@ -211,7 +211,16 @@ class DashboardController extends Controller
             'target_harian' => 3,
         ];
 
-        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats'));
+        $tourBaru = $user->tour_completed_at === null;
+
+        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats', 'tourBaru'));
+    }
+
+    public function selesaikanTour(Request $request): JsonResponse
+    {
+        $request->user()->forceFill(['tour_completed_at' => now()])->save();
+
+        return response()->json(['ok' => true]);
     }
 
     public function pesertaState(Request $request): JsonResponse

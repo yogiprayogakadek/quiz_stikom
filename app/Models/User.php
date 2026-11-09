@@ -19,6 +19,7 @@ class User extends Authenticatable
         'password',
         'role',
         'must_change_password',
+        'tour_completed_at',
         'current_session_token',
     ];
 
@@ -33,6 +34,7 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'must_change_password' => 'boolean',
+            'tour_completed_at' => 'datetime',
         ];
     }
 

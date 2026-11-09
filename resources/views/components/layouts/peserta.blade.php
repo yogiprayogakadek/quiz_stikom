@@ -1,4 +1,4 @@
-@props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false, 'fokus' => false])
+@props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false, 'fokus' => false, 'tourBaru' => false])
 
 <!DOCTYPE html>
 <html lang="id">
@@ -87,6 +87,14 @@
                     <x-icon name="kelas" :size="20" class="{{ request()->routeIs('peserta.kelas.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                     <span>Kelas Saya</span>
                 </a>
+                <button
+                    type="button"
+                    @click="mobileNav = false; setTimeout(() => window.mulaiTourPeserta?.(), 250)"
+                    class="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                >
+                    <x-icon name="book" :size="20" class="text-slate-400" />
+                    <span>Panduan</span>
+                </button>
             </nav>
         </div>
 
@@ -115,6 +123,7 @@
         @unless ($fokus)
         {{-- Left Sidebar Desktop (Collapsible: Icon-Only w-20 or Full w-64/w-72) --}}
         <aside
+            id="sidebar-peserta"
             class="hidden lg:flex lg:flex-col lg:justify-between lg:h-screen lg:sticky lg:top-0 bg-white border-r border-slate-200/80 p-5 flex-shrink-0 transition-all duration-300 ease-in-out"
             :class="sidebarCollapsed ? 'lg:w-20' : 'lg:w-64 xl:w-72'"
         >
@@ -152,6 +161,16 @@
                         <x-icon name="kelas" :size="20" class="{{ request()->routeIs('peserta.kelas.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Kelas Saya</span>
                     </a>
+                    <button
+                        type="button"
+                        @click="window.mulaiTourPeserta?.()"
+                        class="flex w-full items-center rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Panduan' : ''"
+                    >
+                        <x-icon name="book" :size="20" class="text-slate-400" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Panduan</span>
+                    </button>
                 </nav>
 
                 {{-- Info Box (Portal Peserta) --}}
@@ -262,5 +281,15 @@
             @endif
         </main>
     </div>
+
+    <script>
+        window.pesertaTourSelesaiUrl = @json(route('peserta.tour.selesai'));
+
+        @if ($tourBaru)
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => window.mulaiTourPeserta?.(), 700);
+            });
+        @endif
+    </script>
 </body>
 </html>
