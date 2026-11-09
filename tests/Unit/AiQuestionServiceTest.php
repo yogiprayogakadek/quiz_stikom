@@ -221,4 +221,89 @@ class AiQuestionServiceTest extends TestCase
 
         $this->assertCount(1, $result);
     }
+
+    public function test_generate_questions_sends_stream_false_and_parses_multipart_content(): void
+    {
+        $mockPayload = [
+            'questions' => [
+                [
+                    'teks' => 'Soal dari multipart',
+                    'tipe' => 'essay',
+                    'bobot' => 5,
+                    'durasi_detik' => 120,
+                ],
+            ],
+        ];
+
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => function ($request) use ($mockPayload) {
+                $body = json_decode($request->body(), true);
+                if (isset($body['stream']) && $body['stream'] === true) {
+                    return Http::response(['error' => 'stream must be false'], 400);
+                }
+
+                return Http::response([
+                    'choices' => [
+                        [
+                            'message' => [
+                                'role' => 'assistant',
+                                'content' => [
+                                    ['type' => 'text', 'text' => json_encode($mockPayload)],
+                                ],
+                            ],
+                        ],
+                    ],
+                ], 200);
+            },
+        ]);
+
+        $service = new AiQuestionService();
+        $result = $service->generateQuestions([
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'rps_text' => 'Silabus',
+            'topik' => 'Topik',
+            'jumlah_pg' => 0,
+            'jumlah_essay' => 1,
+            'level' => 'C2 - Memahami',
+        ]);
+
+        $this->assertCount(1, $result);
+        $this->assertEquals('Soal dari multipart', $result[0]['teks']);
+    }
+
+    public function test_generate_questions_handles_sse_chunked_response_fallback(): void
+    {
+        $mockPayload = [
+            'questions' => [
+                [
+                    'teks' => 'Soal dari SSE',
+                    'tipe' => 'essay',
+                    'bobot' => 5,
+                    'durasi_detik' => 120,
+                ],
+            ],
+        ];
+
+        $jsonStr = json_encode($mockPayload);
+        $sseBody = "data: {\"choices\":[{\"delta\":{\"content\":\"" . addslashes(substr($jsonStr, 0, 20)) . "\"}}]}\n\n"
+            . "data: {\"choices\":[{\"delta\":{\"content\":\"" . addslashes(substr($jsonStr, 20)) . "\"}}]}\n\n"
+            . "data: [DONE]\n\n";
+
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response($sseBody, 200, ['Content-Type' => 'text/event-stream']),
+        ]);
+
+        $service = new AiQuestionService();
+        $result = $service->generateQuestions([
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'rps_text' => 'Silabus',
+            'topik' => 'Topik',
+            'jumlah_pg' => 0,
+            'jumlah_essay' => 1,
+            'level' => 'C2 - Memahami',
+        ]);
+
+        $this->assertCount(1, $result);
+        $this->assertEquals('Soal dari SSE', $result[0]['teks']);
+    }
 }

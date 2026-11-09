@@ -174,6 +174,7 @@ PROMPT;
                         ['role' => 'user', 'content' => $userPrompt],
                     ],
                     'temperature' => 0.7,
+                    'stream' => false,
                 ]);
         } catch (Throwable $e) {
             throw new RuntimeException("Gagal menghubungi layanan AI: {$e->getMessage()}");
@@ -185,10 +186,7 @@ PROMPT;
             throw new RuntimeException("Layanan AI merespon dengan status {$status}: {$body}");
         }
 
-        $rawContent = $response->json('choices.0.message.content');
-        if (! is_string($rawContent) || trim($rawContent) === '') {
-            throw new RuntimeException('Layanan AI mengembalikan konten kosong.');
-        }
+        $rawContent = $this->extractRawContent($response);
 
         $cleanedJson = $this->extractJson($rawContent);
         $data = json_decode($cleanedJson, true);
@@ -198,6 +196,87 @@ PROMPT;
         }
 
         return $this->sanitizeQuestions($data['questions']);
+    }
+
+    /**
+     * Mengekstrak konten teks dari respons API secara defensif (mendukung standard, array part, atau SSE chunk).
+     */
+    protected function extractRawContent(\Illuminate\Http\Client\Response $response): string
+    {
+        $json = $response->json();
+
+        if (is_array($json)) {
+            // 1. Format standar: choices.0.message.content (string)
+            $content = $json['choices'][0]['message']['content'] ?? null;
+            if (is_string($content) && trim($content) !== '') {
+                return trim($content);
+            }
+
+            // 2. Format multi-part array: choices.0.message.content = [['type' => 'text', 'text' => '...']]
+            if (is_array($content)) {
+                $pieces = [];
+                foreach ($content as $part) {
+                    if (is_array($part) && isset($part['text']) && is_string($part['text'])) {
+                        $pieces[] = $part['text'];
+                    } elseif (is_string($part)) {
+                        $pieces[] = $part;
+                    }
+                }
+                $combined = trim(implode('', $pieces));
+                if ($combined !== '') {
+                    return $combined;
+                }
+            }
+
+            // 3. Format completion biasa: choices.0.text
+            $text = $json['choices'][0]['text'] ?? null;
+            if (is_string($text) && trim($text) !== '') {
+                return trim($text);
+            }
+
+            // 4. Format reasoning content (thinking models) jika content utama kosong
+            $reasoning = $json['choices'][0]['message']['reasoning_content'] ?? null;
+            if (is_string($reasoning) && trim($reasoning) !== '') {
+                return trim($reasoning);
+            }
+
+            // 5. Cek refusal jika ada penolakan keselamatan
+            $refusal = $json['choices'][0]['message']['refusal'] ?? null;
+            if (is_string($refusal) && trim($refusal) !== '') {
+                throw new RuntimeException("Layanan AI menolak permintaan: {$refusal}");
+            }
+        }
+
+        // 6. Fallback jika respons berupa SSE stream (data: {...})
+        $body = $response->body();
+        if (str_contains($body, 'data:')) {
+            $accumulated = '';
+            $lines = explode("\n", $body);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if (! str_starts_with($line, 'data:')) {
+                    continue;
+                }
+                $payload = trim(substr($line, 5));
+                if ($payload === '' || $payload === '[DONE]') {
+                    continue;
+                }
+                $chunk = json_decode($payload, true);
+                if (is_array($chunk)) {
+                    $delta = $chunk['choices'][0]['delta']['content'] ?? ($chunk['choices'][0]['text'] ?? '');
+                    if (is_string($delta)) {
+                        $accumulated .= $delta;
+                    }
+                }
+            }
+
+            if (trim($accumulated) !== '') {
+                return trim($accumulated);
+            }
+        }
+
+        $preview = Str::limit(trim($body), 150);
+        throw new RuntimeException("Layanan AI mengembalikan konten kosong. (Respons: {$preview})");
     }
 
     /**
