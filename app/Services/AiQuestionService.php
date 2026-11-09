@@ -202,12 +202,12 @@ PROMPT;
     {
         $raw = trim($raw);
 
-        // Bersihkan markdown code block ```json ... ```
-        if (preg_match('/```(?:json)?\s*([\s\S]*?)\s*```/i', $raw, $matches)) {
-            return trim($matches[1]);
+        // Jika dibungkus codeblock markdown, kupas pembungkus paling luar
+        if (preg_match('/^```(?:json)?\s*([\s\S]*)\s*```$/i', $raw, $matches)) {
+            $raw = trim($matches[1]);
         }
 
-        // Cari substring antara kurung kurawal pertama dan terakhir
+        // Cari substring antara kurung kurawal terluar (pertama dan terakhir)
         $firstBrace = strpos($raw, '{');
         $lastBrace = strrpos($raw, '}');
         if ($firstBrace !== false && $lastBrace !== false && $lastBrace > $firstBrace) {

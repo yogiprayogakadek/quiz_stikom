@@ -130,4 +130,47 @@ class AiQuestionServiceTest extends TestCase
         $this->assertEquals('essay', $result[1]['tipe']);
         $this->assertEquals('Jelaskan konsep polymorphism!', $result[1]['teks']);
     }
+
+    public function test_generate_questions_handles_embedded_code_blocks(): void
+    {
+        $mockPayload = [
+            'questions' => [
+                [
+                    'teks' => "Perhatikan kode berikut:\n```php\necho 'hello';\n```\nApakah outputnya?",
+                    'tipe' => 'pilihan_ganda',
+                    'bobot' => 1,
+                    'durasi_detik' => 60,
+                    'pembahasan' => 'Mencetak hello',
+                    'opsi' => [
+                        ['teks' => 'hello', 'is_correct' => true],
+                        ['teks' => 'world', 'is_correct' => false],
+                    ],
+                ],
+            ],
+        ];
+
+        // Wrapped in outer markdown codeblock
+        $mockContent = "```json\n" . json_encode($mockPayload) . "\n```";
+
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'choices' => [
+                    ['message' => ['role' => 'assistant', 'content' => $mockContent]],
+                ],
+            ], 200),
+        ]);
+
+        $service = new AiQuestionService();
+        $result = $service->generateQuestions([
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'rps_text' => 'Pemrograman PHP',
+            'topik' => 'Sintaks Dasar',
+            'jumlah_pg' => 1,
+            'jumlah_essay' => 0,
+            'level' => 'C3 - Menerapkan',
+        ]);
+
+        $this->assertCount(1, $result);
+        $this->assertStringContainsString("echo 'hello';", $result[0]['teks']);
+    }
 }
