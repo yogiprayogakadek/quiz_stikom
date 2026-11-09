@@ -12,3 +12,5 @@ Broadcast::channel('session.{sessionId}', function ($user, $sessionId) {
         ->where('quiz_session_id', (int) $sessionId)
         ->exists();
 });
+
+Broadcast::channel('admin-dashboard', fn ($user) => $user->isAdmin());

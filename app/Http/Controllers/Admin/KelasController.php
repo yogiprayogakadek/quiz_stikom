@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateClassCoverJob;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\User;
@@ -39,6 +40,10 @@ class KelasController extends Controller
         ]);
 
         $kelas = Kelas::create($data + ['created_by' => $request->user()->id]);
+
+        if (app('app.settings')->class_cover_mode === 'ai') {
+            GenerateClassCoverJob::dispatch($kelas->id);
+        }
 
         return redirect()->route('admin.classes.edit', $kelas)
             ->with('sukses', 'Kelas dibuat. Tambahkan peserta dan kuis di halaman ini.');
@@ -100,5 +105,16 @@ class KelasController extends Controller
         $kelas->delete();
 
         return redirect()->route('admin.classes.index')->with('sukses', 'Kelas dihapus.');
+    }
+
+    public function regenerateCover(Kelas $kelas): RedirectResponse
+    {
+        if (app('app.settings')->class_cover_mode !== 'ai') {
+            return back()->withErrors(['cover' => 'Aktifkan mode cover AI di Pengaturan terlebih dahulu.']);
+        }
+
+        GenerateClassCoverJob::dispatch($kelas->id);
+
+        return back()->with('sukses', 'Cover AI sedang dibuat. Cover saat ini tetap dipakai sampai proses selesai.');
     }
 }

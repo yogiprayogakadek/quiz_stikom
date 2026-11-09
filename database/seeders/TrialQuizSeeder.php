@@ -31,7 +31,7 @@ class TrialQuizSeeder extends Seeder
 
         $soal = [
             [
-                'teks' => 'Apa langkah pertama untuk mengikuti kuis di STIKOM Quiz?',
+                'teks' => 'Apa langkah pertama untuk mengikuti kuis di aplikasi ini?',
                 'pembahasan' => 'Kartu sesi yang dibuka admin muncul di Beranda. Tekan Gabung sesi sebelum memulai ujian.',
                 'opsi' => [
                     ['teks' => 'Tekan Gabung sesi pada kartu sesi', 'benar' => true],

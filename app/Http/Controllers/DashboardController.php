@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attempt;
+use App\Models\Kelas;
+use App\Models\ParticipantLoginActivity;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -44,8 +47,9 @@ class DashboardController extends Controller
 
         $loginHariIni = Attempt::where('created_at', '>=', now()->startOfDay())->count();
         $pesertaOnline = $this->getPesertaOnline();
+        $aktivitasLogin = $this->getAktivitasLogin();
 
-        return view('admin.dashboard', compact('ringkasan', 'sesiAktif', 'sesiTerakhir', 'leaderboardTerbaru', 'loginHariIni', 'pesertaOnline'));
+        return view('admin.dashboard', compact('ringkasan', 'sesiAktif', 'sesiTerakhir', 'leaderboardTerbaru', 'loginHariIni', 'pesertaOnline', 'aktivitasLogin'));
     }
 
     public function pesertaOnline(): JsonResponse
@@ -55,6 +59,8 @@ class DashboardController extends Controller
         return response()->json([
             'total' => count($peserta),
             'peserta' => $peserta,
+            'activities' => $this->getAktivitasLogin(),
+            'server_now' => now()->getTimestampMs(),
         ]);
     }
 
@@ -63,15 +69,16 @@ class DashboardController extends Controller
         $threshold = now()->subMinutes(15)->timestamp;
 
         try {
-            return \Illuminate\Support\Facades\DB::table('sessions')
+            return DB::table('sessions')
                 ->join('users', 'sessions.user_id', '=', 'users.id')
                 ->where('users.role', 'peserta')
+                ->whereNotNull('users.current_session_token')
                 ->where('sessions.last_activity', '>=', $threshold)
                 ->select(
                     'users.id',
                     'users.nama',
                     'users.username',
-                    \Illuminate\Support\Facades\DB::raw('MAX(sessions.last_activity) as last_activity')
+                    DB::raw('MAX(sessions.last_activity) as last_activity')
                 )
                 ->groupBy('users.id', 'users.nama', 'users.username')
                 ->orderByDesc('last_activity')
@@ -89,6 +96,24 @@ class DashboardController extends Controller
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    private function getAktivitasLogin(): array
+    {
+        return ParticipantLoginActivity::query()
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn (ParticipantLoginActivity $activity) => [
+                'id' => $activity->id,
+                'user_id' => $activity->user_id,
+                'nama' => $activity->nama,
+                'username' => $activity->username,
+                'status' => $activity->status,
+                'reason' => $activity->reason,
+                'waktu' => $activity->created_at->toISOString(),
+            ])
+            ->all();
     }
 
     public function adminSearch(Request $request): JsonResponse
@@ -114,7 +139,7 @@ class DashboardController extends Controller
             ->map(fn (QuizSession $s) => [
                 'id' => $s->id,
                 'nama' => $s->nama,
-                'sub' => ($s->quiz->judul ?? '') . ($s->kelas ? ' · ' . $s->kelas->nama : ''),
+                'sub' => ($s->quiz->judul ?? '').($s->kelas ? ' · '.$s->kelas->nama : ''),
                 'status' => $s->status,
                 'mode' => $s->mode,
                 'url' => route('admin.sessions.show', $s),
@@ -130,14 +155,14 @@ class DashboardController extends Controller
             ->map(fn (Quiz $k) => [
                 'id' => $k->id,
                 'judul' => $k->judul,
-                'sub' => ($k->kelas ? $k->kelas->nama . ' · ' : '') . $k->questions_count . ' soal',
+                'sub' => ($k->kelas ? $k->kelas->nama.' · ' : '').$k->questions_count.' soal',
                 'url' => route('admin.quizzes.questions.index', $k),
             ]);
 
         $peserta = User::where(function ($query) use ($q) {
-                $query->where('nama', 'like', "%{$q}%")
-                    ->orWhere('username', 'like', "%{$q}%");
-            })
+            $query->where('nama', 'like', "%{$q}%")
+                ->orWhere('username', 'like', "%{$q}%");
+        })
             ->orderByRaw("CASE WHEN role = 'peserta' THEN 0 ELSE 1 END")
             ->orderBy('nama')
             ->limit(6)
@@ -145,24 +170,24 @@ class DashboardController extends Controller
             ->map(fn (User $u) => [
                 'id' => $u->id,
                 'nama' => $u->nama,
-                'sub' => $u->role === 'peserta' ? ('NIM/Username: ' . $u->username) : ('Administrator (' . $u->username . ')'),
+                'sub' => $u->role === 'peserta' ? ('NIM/Username: '.$u->username) : ('Administrator ('.$u->username.')'),
                 'role' => $u->role,
                 'url' => $u->role === 'peserta'
                     ? route('admin.participants.index', ['q' => $u->username])
                     : route('admin.dashboard'),
             ]);
 
-        $kelas = \App\Models\Kelas::where(function ($query) use ($q) {
-                $query->where('nama', 'like', "%{$q}%")
-                    ->orWhere('pin', 'like', "%{$q}%");
-            })
+        $kelas = Kelas::where(function ($query) use ($q) {
+            $query->where('nama', 'like', "%{$q}%")
+                ->orWhere('pin', 'like', "%{$q}%");
+        })
             ->orderBy('nama')
             ->limit(4)
             ->get()
-            ->map(fn (\App\Models\Kelas $c) => [
+            ->map(fn (Kelas $c) => [
                 'id' => $c->id,
                 'nama' => $c->nama,
-                'sub' => 'PIN: ' . $c->pin,
+                'sub' => 'PIN: '.$c->pin,
                 'url' => route('admin.classes.index'),
             ]);
 

@@ -35,7 +35,7 @@ class AiQuestionServiceTest extends TestCase
             ], 200),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $models = $service->getAvailableModels();
 
         $this->assertIsArray($models);
@@ -46,11 +46,12 @@ class AiQuestionServiceTest extends TestCase
         $this->assertContains('openai/gpt-4o-mini', $models['OpenAI']);
 
         // Check caching: Next call should use cache without hitting Http again
-        $this->assertTrue(Cache::has('9router_models'));
+        $cacheKey = 'ai_models_'.sha1(config('services.ai.base_url'));
+        $this->assertTrue(Cache::has($cacheKey));
 
         // Force refresh should forget cache
         $service->getAvailableModels(forceRefresh: true);
-        $this->assertTrue(Cache::has('9router_models'));
+        $this->assertTrue(Cache::has($cacheKey));
     }
 
     public function test_get_available_models_fallback_on_failure(): void
@@ -59,7 +60,7 @@ class AiQuestionServiceTest extends TestCase
             'https://api.9router.com/v1/models' => Http::response(null, 500),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $models = $service->getAvailableModels();
 
         $this->assertIsArray($models);
@@ -96,7 +97,7 @@ class AiQuestionServiceTest extends TestCase
         ];
 
         // AI response sometimes includes markdown code blocks ```json ... ```
-        $mockContent = "```json\n" . json_encode($mockPayload) . "\n```";
+        $mockContent = "```json\n".json_encode($mockPayload)."\n```";
 
         Http::fake([
             'https://api.9router.com/v1/chat/completions' => Http::response([
@@ -111,7 +112,7 @@ class AiQuestionServiceTest extends TestCase
             ], 200),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Pemrograman Berorientasi Objek',
@@ -150,7 +151,7 @@ class AiQuestionServiceTest extends TestCase
         ];
 
         // Wrapped in outer markdown codeblock
-        $mockContent = "```json\n" . json_encode($mockPayload) . "\n```";
+        $mockContent = "```json\n".json_encode($mockPayload)."\n```";
 
         Http::fake([
             'https://api.9router.com/v1/chat/completions' => Http::response([
@@ -160,7 +161,7 @@ class AiQuestionServiceTest extends TestCase
             ], 200),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Pemrograman PHP',
@@ -209,7 +210,7 @@ class AiQuestionServiceTest extends TestCase
             },
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Silabus Jaringan',
@@ -257,7 +258,7 @@ class AiQuestionServiceTest extends TestCase
             },
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Silabus',
@@ -285,15 +286,15 @@ class AiQuestionServiceTest extends TestCase
         ];
 
         $jsonStr = json_encode($mockPayload);
-        $sseBody = "data: {\"choices\":[{\"delta\":{\"content\":\"" . addslashes(substr($jsonStr, 0, 20)) . "\"}}]}\n\n"
-            . "data: {\"choices\":[{\"delta\":{\"content\":\"" . addslashes(substr($jsonStr, 20)) . "\"}}]}\n\n"
-            . "data: [DONE]\n\n";
+        $sseBody = 'data: {"choices":[{"delta":{"content":"'.addslashes(substr($jsonStr, 0, 20))."\"}}]}\n\n"
+            .'data: {"choices":[{"delta":{"content":"'.addslashes(substr($jsonStr, 20))."\"}}]}\n\n"
+            ."data: [DONE]\n\n";
 
         Http::fake([
             'https://api.9router.com/v1/chat/completions' => Http::response($sseBody, 200, ['Content-Type' => 'text/event-stream']),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Silabus',
@@ -351,7 +352,7 @@ class AiQuestionServiceTest extends TestCase
             ], 200),
         ]);
 
-        $service = new AiQuestionService();
+        $service = new AiQuestionService;
         $result = $service->generateQuestions([
             'model' => 'ag/gemini-3.8-flash-medium',
             'rps_text' => 'Silabus',

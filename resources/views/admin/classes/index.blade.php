@@ -59,7 +59,7 @@
         </div>
 
         {{-- KOLOM KANAN: DATA TABLE & DAFTAR KELAS --}}
-        <div class="xl:col-span-8 w-full min-w-0" x-data="{ tampilan: 'tabel' }">
+        <div class="xl:col-span-8 w-full min-w-0" x-data="{ tampilan: 'kartu' }">
             @if ($kelas->isEmpty())
                 <x-empty-state
                     judul="Belum ada kelas"
@@ -115,6 +115,7 @@
                                     @foreach ($kelas as $k)
                                         <tr
                                             data-item
+                                            data-item-key="kelas-{{ $k->id }}"
                                             data-search="{{ strtolower($k->nama . ' ' . $k->pin) }}"
                                             class="transition hover:bg-slate-50/75"
                                         >
@@ -202,19 +203,18 @@
                             @foreach ($kelas as $k)
                                 <article
                                     data-item
+                                    data-item-key="kelas-{{ $k->id }}"
                                     data-search="{{ strtolower($k->nama . ' ' . $k->pin) }}"
-                                    class="card card-hover flex flex-col justify-between !p-5 border border-slate-200/90 rounded-2xl bg-white shadow-xs min-w-0"
+                                    class="card-hover flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs"
                                 >
-                                    <div>
+                                    <x-class-cover :kelas="$k" :show-title="true" />
+                                    <div class="p-5">
                                         <div class="flex flex-wrap items-center gap-1.5">
                                             <span class="pill pill-brand text-xs">{{ $k->peserta_count }} peserta</span>
                                             <span class="pill pill-neutral text-xs">{{ $k->quizzes_count }} kuis</span>
                                             <span class="pill {{ $k->sessions_count > 0 ? 'pill-leaf' : 'pill-neutral' }} text-xs">{{ $k->sessions_count }} sesi</span>
                                         </div>
 
-                                        <h3 class="mt-3 text-lg font-bold text-slate-900 leading-snug break-words">
-                                            {{ $k->nama }}
-                                        </h3>
                                         <div class="mt-2 flex items-center gap-2">
                                             <span class="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                                                 PIN: {{ $k->pin }}
@@ -229,7 +229,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="mt-5 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                                    <div class="mx-5 mb-5 mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
                                         <a href="{{ route('admin.classes.edit', $k) }}" class="btn btn-secondary !py-1.5 !px-3 text-xs">
                                             Kelola kelas
                                         </a>

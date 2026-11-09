@@ -6,9 +6,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $judul }} | STIKOM Quiz</title>
-    <link rel="icon" type="image/png" href="{{ asset('logo.png') }}">
+    <title>{{ $judul }} | {{ $appSettings->site_name }}</title>
+    <link rel="icon" href="{{ $appSettings->logoUrl() }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-brand-style />
 </head>
 <body
     class="min-h-screen bg-[#f8fafc] text-slate-900"
@@ -55,11 +56,11 @@
             <div class="flex items-center justify-between pb-4 border-b border-slate-100">
                 <a href="{{ route('peserta.dashboard') }}" class="flex items-center gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
-                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                        <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                     </div>
                     <div>
-                        <span class="font-display text-lg font-extrabold tracking-tight text-slate-900 block leading-tight">STIKOM Quiz</span>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Learn · Practice · Win</span>
+                        <span class="font-display text-lg font-extrabold tracking-tight text-slate-900 block leading-tight">{{ $appSettings->site_name }}</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{{ $appSettings->organization_name ?: 'Portal Peserta' }}</span>
                     </div>
                 </a>
                 <button
@@ -130,13 +131,13 @@
             <div>
                 {{-- Logo & App Title (No toggle here - toggle is in the top bar) --}}
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                    <a href="{{ route('peserta.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? 'STIKOM Quiz' : ''">
+                    <a href="{{ route('peserta.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? @js($appSettings->site_name) : ''">
                         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
-                            <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                            <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                         </div>
                         <div x-show="!sidebarCollapsed" x-cloak class="min-w-0">
-                            <span class="font-display text-xl font-extrabold tracking-tight text-slate-900 block leading-tight truncate">STIKOM Quiz</span>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Learn · Practice · Win</span>
+                            <span class="font-display text-xl font-extrabold tracking-tight text-slate-900 block leading-tight truncate">{{ $appSettings->site_name }}</span>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">{{ $appSettings->organization_name ?: 'Portal Peserta' }}</span>
                         </div>
                     </a>
                 </div>
@@ -291,5 +292,6 @@
             });
         @endif
     </script>
+    <x-global-progress />
 </body>
 </html>

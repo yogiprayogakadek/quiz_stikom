@@ -297,9 +297,9 @@
 
         <header class="mx-auto flex w-full max-w-[1500px] flex-wrap items-center justify-between gap-4 border-b border-outline pb-6">
             <div class="flex items-center gap-3">
-                <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-12 w-12 object-contain">
+                <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-12 w-12 object-contain">
                 <div>
-                    <p class="font-display text-2xl font-bold text-brand-deep">STIKOM Quiz</p>
+                    <p class="font-display text-2xl font-bold text-brand-deep">{{ $appSettings->site_name }}</p>
                     <p class="text-base text-ink-muted">Layar kelas</p>
                 </div>
             </div>

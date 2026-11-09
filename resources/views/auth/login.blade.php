@@ -3,22 +3,26 @@
 <x-layouts.guest :judul="$judul">
     <div class="min-h-screen w-full grid grid-cols-1 lg:grid-cols-12 bg-surface font-sans">
         {{-- Left Side: Visual & Contextual Storytelling --}}
-        <div class="relative hidden lg:col-span-6 lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-soft via-surface-sunken to-brand-soft/40 p-10 xl:p-14 border-r border-outline">
+        <div @class([
+            'relative flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-soft via-surface-sunken to-brand-soft/40 p-10 xl:p-14 border-r border-outline',
+            'hidden lg:col-span-6 lg:flex' => $appSettings->login_layout !== 'centered',
+            'hidden' => $appSettings->login_layout === 'centered',
+        ])>
             {{-- Top Branding & Status --}}
             <div class="relative z-10 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-page p-2 shadow-xs border border-outline">
-                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                        <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                     </div>
                     <div>
-                        <p class="font-display text-lg font-bold text-ink leading-tight">STIKOM Quiz</p>
-                        <p class="text-xs text-ink-subtle">Sistem Kuis & Evaluasi Kelas</p>
+                        <p class="font-display text-lg font-bold text-ink leading-tight">{{ $appSettings->site_name }}</p>
+                        <p class="text-xs text-ink-subtle">{{ $appSettings->site_tagline }}</p>
                     </div>
                 </div>
 
                 <div class="inline-flex items-center gap-2 rounded-full bg-page/90 px-3.5 py-1.5 border border-outline shadow-xs backdrop-blur-sm">
                     <span class="h-2 w-2 rounded-full bg-leaf animate-pulse"></span>
-                    <span class="text-xs font-bold text-ink-muted">Server Lokal Aktif</span>
+                    <span class="text-xs font-bold text-ink-muted">Layanan siap</span>
                 </div>
             </div>
 
@@ -57,18 +61,26 @@
         </div>
 
         {{-- Right Side: Login Form --}}
-        <main class="flex min-h-screen w-full flex-col justify-center bg-surface p-6 sm:p-12 lg:p-14 xl:p-18 lg:col-span-6">
+        <main @class([
+            'flex min-h-screen w-full flex-col justify-center p-6 sm:p-12 lg:p-14 xl:p-18',
+            'bg-surface lg:col-span-6' => $appSettings->login_layout !== 'centered',
+            'bg-gradient-to-br from-brand-soft via-surface to-surface-sunken lg:col-span-12' => $appSettings->login_layout === 'centered',
+        ])>
             <div
                 x-data="{ showPassword: false, submitting: false }"
                 class="w-full max-w-md mx-auto my-auto flex flex-col justify-center"
             >
                 {{-- Mobile Brand Header --}}
-                <div class="flex lg:hidden items-center justify-center gap-3 mb-8">
+                <div @class([
+                    'items-center justify-center gap-3 mb-8',
+                    'flex lg:hidden' => $appSettings->login_layout !== 'centered',
+                    'flex' => $appSettings->login_layout === 'centered',
+                ])>
                     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-page p-2 shadow-xs border border-outline">
-                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                        <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                     </div>
                     <span class="font-display text-2xl font-bold tracking-tight text-ink">
-                        STIKOM Quiz
+                        {{ $appSettings->site_name }}
                     </span>
                 </div>
 
@@ -77,10 +89,10 @@
                     {{-- Title --}}
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink">
-                            Masuk akun
+                            {{ $appSettings->login_title }}
                         </h1>
                         <p class="mt-2 text-sm text-ink-muted">
-                            Gunakan kredensial yang diberikan oleh pengawas atau admin kelas.
+                            {{ $appSettings->login_description }}
                         </p>
                     </div>
 

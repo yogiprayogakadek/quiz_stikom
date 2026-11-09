@@ -599,6 +599,22 @@
     }
 }
 
+@keyframes global-progress-slide {
+    from { transform: translateX(-130%); }
+    to { transform: translateX(330%); }
+}
+
+.global-progress-bar {
+    animation: global-progress-slide 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .global-progress-bar {
+        animation: none;
+        width: 100%;
+    }
+}
+
 .driver-popover.tour-popover {
     font-family: var(--font-sans) !important;
     color: var(--color-ink) !important;

@@ -211,7 +211,7 @@
                         {{-- Status Pill --}}
                         <div class="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3.5 py-1 text-xs font-semibold text-blue-200 border border-white/15 shadow-2xs mb-4">
                             <span class="h-2 w-2 rounded-full bg-blue-400 animate-pulse"></span>
-                            <span>Ujian Lokal STIKOM</span>
+                            <span>{{ $appSettings->site_tagline }}</span>
                         </div>
 
                         {{-- Headline --}}
@@ -490,15 +490,13 @@
                         @foreach ($kelasSaya as $kelas)
                             <article
                                 x-show="!cari || '{{ strtolower(addslashes($kelas->nama . ' ' . $kelas->kode)) }}'.includes(cari.toLowerCase().trim())"
-                                class="group rounded-2xl bg-white border border-slate-200/80 p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between"
+                                class="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs transition-all hover:border-slate-300"
                             >
+                                <x-class-cover :kelas="$kelas" :show-title="true" />
+                                <div class="p-5">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-center gap-3">
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 group-hover:scale-105 transition">
-                                            <x-icon name="kelas" :size="22" />
-                                        </div>
                                         <div>
-                                            <h3 class="text-base font-bold text-slate-900">{{ $kelas->nama }}</h3>
                                             <p class="text-xs text-slate-500 mt-0.5">
                                                 {{ $kelas->quizzes_count }} kuis · {{ $kelas->sessions_count }} sesi
                                             </p>
@@ -517,6 +515,7 @@
                                         <span>Masuk kelas</span>
                                         <span>&rarr;</span>
                                     </a>
+                                </div>
                                 </div>
                             </article>
                         @endforeach

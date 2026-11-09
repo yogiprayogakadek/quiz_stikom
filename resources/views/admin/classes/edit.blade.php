@@ -5,6 +5,12 @@
 
 <x-layouts.admin :judul="'Kelas '.$kelas->nama" keterangan="Pilih peserta dan kuis untuk kelas ini. Peserta bisa bergabung sendiri dengan PIN.">
     <x-slot:aksi>
+        @if ($appSettings->class_cover_mode === 'ai')
+            <form method="POST" action="{{ route('admin.classes.regenerate-cover', $kelas) }}" data-progress-message="Menjadwalkan cover AI...">
+                @csrf
+                <button type="submit" class="btn btn-secondary">Generate ulang cover</button>
+            </form>
+        @endif
         <a href="{{ route('admin.sessions.create', ['kelas_id' => $kelas->id]) }}" class="btn btn-primary">
             <x-icon name="plus" :size="20" />
             Buat sesi

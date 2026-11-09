@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Peserta;
 
+use App\Events\PesertaPeringatan;
+use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAnswerRequest;
 use App\Http\Requests\StoreAttemptEventRequest;
@@ -9,7 +11,7 @@ use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
-use App\Events\PesertaPeringatan;
+use App\Models\ParticipantLoginActivity;
 use App\Models\User;
 use App\Services\QuizEngine;
 use Illuminate\Http\JsonResponse;
@@ -219,7 +221,7 @@ class AttemptController extends Controller
         );
 
         $engine->siarkanDisplayTerbatas($attempt->quizSession);
-        \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+        SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
             'action' => 'answer_submitted',
             'user_id' => $attempt->user_id,
             'question_id' => $questionId,
@@ -242,7 +244,7 @@ class AttemptController extends Controller
         if ($attempt->quizSession->mode === 'acak') {
             $engine->selesaikanAcak($attempt);
             $engine->siarkanDisplay($attempt->quizSession->fresh());
-            \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+            SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
                 'action' => 'attempt_selesai',
                 'user_id' => $attempt->user_id,
             ]);
@@ -265,7 +267,7 @@ class AttemptController extends Controller
         ]);
 
         $session = $attempt->quizSession;
-        \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+        SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
 
         if ($session && $session->display_token) {
             $label = AttemptEvent::label('fullscreen_exit_timeout');
@@ -308,6 +310,7 @@ class AttemptController extends Controller
 
         $user = $request->user();
         if ($user !== null) {
+            ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'fullscreen_violation');
             User::whereKey($user->id)->update(['current_session_token' => null]);
         }
 
@@ -415,7 +418,7 @@ class AttemptController extends Controller
 
         $session = $attempt->quizSession;
         if ($session) {
-            \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+            SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
 
             if ($session->display_token) {
                 $label = AttemptEvent::label($tipe);

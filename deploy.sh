@@ -5,6 +5,7 @@ set -eu
 git pull --ff-only
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
+[ -L public/storage ] || php artisan storage:link
 php artisan db:seed --class=TrialQuizSeeder --force
 npm ci
 npm run build

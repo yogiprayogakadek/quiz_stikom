@@ -6,6 +6,8 @@
         </a>
     </x-slot:aksi>
 
+    <x-class-cover :kelas="$kelas" :show-title="true" class="mb-6 max-h-72 w-full rounded-2xl" />
+
     @unless ($anggota)
         <form method="POST" action="{{ route('peserta.kelas.masuk', $kelas) }}" class="card max-w-md">
             @csrf

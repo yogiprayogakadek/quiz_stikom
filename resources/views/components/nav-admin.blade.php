@@ -7,6 +7,7 @@
         ['rute' => 'admin.classes.index', 'aktif' => 'admin.classes.*', 'label' => 'Kelas', 'ikon' => 'kelas'],
         ['rute' => 'admin.quizzes.index', 'aktif' => ['admin.quizzes.*'], 'label' => 'Kuis & Soal', 'ikon' => 'book'],
         ['rute' => 'admin.sessions.index', 'aktif' => 'admin.sessions.*', 'label' => 'Sesi', 'ikon' => 'play'],
+        ['rute' => 'admin.settings.edit', 'aktif' => 'admin.settings.*', 'label' => 'Pengaturan', 'ikon' => 'settings'],
     ];
 @endphp
 

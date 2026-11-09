@@ -2,8 +2,8 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -19,6 +19,8 @@ class PesertaStatusLogin implements ShouldBroadcastNow
         public string $username,
         public string $status, // 'login' | 'logout'
         public string $waktu,
+        public ?int $activityId = null,
+        public ?string $reason = null,
     ) {}
 
     public static function safeDispatch(
@@ -27,6 +29,8 @@ class PesertaStatusLogin implements ShouldBroadcastNow
         string $username,
         string $status,
         ?string $waktu = null,
+        ?int $activityId = null,
+        ?string $reason = null,
     ): void {
         try {
             static::dispatch(
@@ -34,16 +38,18 @@ class PesertaStatusLogin implements ShouldBroadcastNow
                 $nama,
                 $username,
                 $status,
-                $waktu ?? now()->toISOString()
+                $waktu ?? now()->toISOString(),
+                $activityId,
+                $reason,
             );
         } catch (\Throwable $e) {
-            Log::warning('PesertaStatusLogin broadcast error: ' . $e->getMessage());
+            Log::warning('PesertaStatusLogin broadcast error: '.$e->getMessage());
         }
     }
 
     public function broadcastOn(): array
     {
-        return [new Channel('admin-dashboard')];
+        return [new PrivateChannel('admin-dashboard')];
     }
 
     public function broadcastAs(): string
@@ -59,6 +65,8 @@ class PesertaStatusLogin implements ShouldBroadcastNow
             'username' => $this->username,
             'status' => $this->status,
             'waktu' => $this->waktu,
+            'activity_id' => $this->activityId,
+            'reason' => $this->reason,
             'timestamp' => now()->timestamp,
         ];
     }

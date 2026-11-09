@@ -34,6 +34,10 @@ class OnlinePesertaTest extends TestCase
         Event::assertDispatched(PesertaStatusLogin::class, function (PesertaStatusLogin $event) use ($peserta) {
             return $event->userId === $peserta->id && $event->status === 'login';
         });
+        $this->assertDatabaseHas('participant_login_activities', [
+            'user_id' => $peserta->id,
+            'status' => 'login',
+        ]);
 
         // Logout
         $resLogout = $this->actingAs($peserta)
@@ -45,6 +49,10 @@ class OnlinePesertaTest extends TestCase
         Event::assertDispatched(PesertaStatusLogin::class, function (PesertaStatusLogin $event) use ($peserta) {
             return $event->userId === $peserta->id && $event->status === 'logout';
         });
+        $this->assertDatabaseHas('participant_login_activities', [
+            'user_id' => $peserta->id,
+            'status' => 'logout',
+        ]);
     }
 
     public function test_admin_bisa_mengakses_endpoint_peserta_online(): void
@@ -62,6 +70,7 @@ class OnlinePesertaTest extends TestCase
             'username' => 'siswa_online',
             'password' => Hash::make('password'),
             'role' => 'peserta',
+            'current_session_token' => 'peserta-online-token',
         ]);
 
         // Insert session record
@@ -83,6 +92,8 @@ class OnlinePesertaTest extends TestCase
         $this->assertSame(1, $data['total']);
         $this->assertSame('Siswa Online', $data['peserta'][0]['nama']);
         $this->assertSame('siswa_online', $data['peserta'][0]['username']);
+        $this->assertArrayHasKey('activities', $data);
+        $this->assertArrayHasKey('server_now', $data);
     }
 
     public function test_peserta_tidak_bisa_mengakses_endpoint_peserta_online(): void

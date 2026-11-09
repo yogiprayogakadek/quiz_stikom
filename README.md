@@ -70,6 +70,7 @@ CREATE DATABASE db_quiz CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ```bash
 php artisan migrate --seed
+php artisan storage:link
 npm install
 npm run build
 ```
@@ -258,6 +259,7 @@ Bila Reverb dimatikan dengan sengaja, set `BROADCAST_CONNECTION=log` di `.env`, 
 | --- | --- |
 | `/login` | Masuk admin dan peserta |
 | `/admin` | Dashboard admin |
+| `/admin/settings` | Identitas publik, provider AI, dan sumber cover kelas |
 | `/dashboard` | Dashboard peserta |
 | `/admin/sessions/{id}` | Ruang kendali sesi |
 | `/display/{token}` | Layar proyektor, tanpa login |
@@ -265,6 +267,14 @@ Bila Reverb dimatikan dengan sengaja, set `BROADCAST_CONNECTION=log` di `.env`, 
 | `/admin/sessions/{id}/laporan` | Laporan dan ekspor sesi |
 
 Token layar dibuat saat sesi dibuat dan dipakai lagi saat lobby dibuka. Siapa pun yang memiliki tautan layar dapat melihat progres kelas, jadi tampilkan hanya di proyektor kelas.
+
+## Pengaturan publik dan AI
+
+Admin dapat mengubah nama aplikasi, organisasi, logo, warna utama, dan teks login dari menu **Pengaturan**. Nilai ini berlaku pada halaman login, navigasi admin/peserta, dan layar kelas. Logo serta cover AI disimpan di disk `public`, sehingga `php artisan storage:link` harus sudah dijalankan.
+
+Provider pembuat soal dapat diganti dengan endpoint yang kompatibel dengan OpenAI Chat Completions. Konfigurasi database dari halaman Pengaturan mengalahkan `AI_BASE_URL`, `AI_API_KEY`, dan `AI_DEFAULT_MODEL` di `.env`; nilai `.env` tetap menjadi fallback. API key disimpan terenkripsi menggunakan `APP_KEY`.
+
+Cover kelas dapat memakai ilustrasi lokal deterministik atau endpoint kompatibel OpenAI Images. Proses AI berjalan melalui queue dan selalu kembali ke cover lokal bila konfigurasi belum lengkap atau layanan gambar gagal.
 
 ## Format CSV peserta
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -11,16 +12,20 @@ use Throwable;
 class AiQuestionService
 {
     protected string $baseUrl;
+
     protected ?string $apiKey;
+
     protected string $defaultModel;
+
     protected int $timeout;
 
     public function __construct()
     {
-        $this->baseUrl = rtrim((string) config('services.ai.base_url', 'https://api.9router.com/v1'), '/');
-        $this->apiKey = config('services.ai.api_key');
-        $this->defaultModel = (string) config('services.ai.default_model', 'ag/gemini-3.8-flash-medium');
-        $this->timeout = (int) config('services.ai.timeout', 60);
+        $settings = app('app.settings');
+        $this->baseUrl = rtrim((string) ($settings->ai_base_url ?: config('services.ai.base_url', 'https://api.9router.com/v1')), '/');
+        $this->apiKey = $settings->ai_api_key ?: config('services.ai.api_key');
+        $this->defaultModel = (string) ($settings->ai_default_model ?: config('services.ai.default_model', 'ag/gemini-3.8-flash-medium'));
+        $this->timeout = (int) ($settings->ai_timeout ?: config('services.ai.timeout', 60));
     }
 
     /**
@@ -30,7 +35,7 @@ class AiQuestionService
      */
     public function getAvailableModels(bool $forceRefresh = false): array
     {
-        $cacheKey = '9router_models';
+        $cacheKey = 'ai_models_'.sha1($this->baseUrl);
 
         if ($forceRefresh) {
             Cache::forget($cacheKey);
@@ -86,6 +91,7 @@ class AiQuestionService
                     if ($pA === $pB) {
                         return strcmp($a, $b);
                     }
+
                     return $pA <=> $pB;
                 });
 
@@ -99,8 +105,9 @@ class AiQuestionService
     /**
      * Generate soal kuis menggunakan 9router /chat/completions.
      *
-     * @param array<string, mixed> $params
+     * @param  array<string, mixed>  $params
      * @return array<int, array<string, mixed>>
+     *
      * @throws RuntimeException
      */
     public function generateQuestions(array $params): array
@@ -125,7 +132,7 @@ class AiQuestionService
 
         $weights = self::calculateWeights($nilaiMaksimal, $jumlahPg, $jumlahEssay, $porsiPg);
 
-        $systemPrompt = <<<PROMPT
+        $systemPrompt = <<<'PROMPT'
 Anda adalah asisten pembuat soal akademik perguruan tinggi profesional.
 Tugas Anda adalah membuat soal kuis berkualitas tinggi berdasarkan RPS/CPMK dan topik yang diberikan.
 
@@ -219,6 +226,7 @@ PROMPT;
 
         if ($jumlahEssay === 0) {
             $weightsPg = self::distributeAmount($nilaiMaksimal, $jumlahPg);
+
             return [
                 'pg' => $weightsPg,
                 'essay' => [],
@@ -228,6 +236,7 @@ PROMPT;
 
         if ($jumlahPg === 0) {
             $weightsEssay = self::distributeAmount($nilaiMaksimal, $jumlahEssay);
+
             return [
                 'pg' => [],
                 'essay' => $weightsEssay,
@@ -278,7 +287,7 @@ PROMPT;
     /**
      * Mengekstrak konten teks dari respons API secara defensif (mendukung standard, array part, atau SSE chunk).
      */
-    protected function extractRawContent(\Illuminate\Http\Client\Response $response): string
+    protected function extractRawContent(Response $response): string
     {
         $json = $response->json();
 
@@ -381,8 +390,8 @@ PROMPT;
     /**
      * Memastikan struktur array soal lengkap dan aman serta menerapkan alokasi bobot proporsional.
      *
-     * @param array<int, mixed> $questions
-     * @param array{pg?: array<int>, essay?: array<int>}|null $weights
+     * @param  array<int, mixed>  $questions
+     * @param  array{pg?: array<int>, essay?: array<int>}|null  $weights
      * @return array<int, array<string, mixed>>
      */
     protected function sanitizeQuestions(array $questions, ?array $weights = null): array

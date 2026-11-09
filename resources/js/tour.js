@@ -31,7 +31,7 @@ window.mulaiTourPeserta = () => {
 
     langkah.push({
         popover: {
-            title: 'Selamat datang di STIKOM Quiz',
+            title: 'Selamat datang',
             description: 'Tur singkat ini menunjukkan menu, daftar sesi, dan cara mengerjakan kuis. Anda bisa menutupnya kapan saja.',
         },
     });
@@ -130,7 +130,7 @@ window.mulaiTourPeserta = () => {
     langkah.push({
         popover: {
             title: 'Cara mengerjakan kuis',
-            description: '1) Tekan Gabung sesi. 2) Tekan Mulai Ujian. 3) Aktifkan layar penuh saat diminta. 4) Pilih jawaban — jawaban tersimpan otomatis. 5) Tekan Selesai setelah semua soal terjawab.',
+            description: '1) Tekan Gabung sesi. 2) Tekan Mulai Ujian. 3) Aktifkan layar penuh saat diminta. 4) Pilih jawaban, lalu tunggu sampai tersimpan. 5) Tekan Selesai setelah semua soal terjawab.',
         },
     });
 

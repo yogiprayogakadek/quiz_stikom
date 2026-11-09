@@ -45,9 +45,25 @@
 
         window.adminPesertaOnline = (config) => ({
             pesertaList: config.initial || [],
+            aktivitasList: config.activities || [],
             notifikasiList: [],
             suaraAktif: true,
             audioCtx: null,
+            statusKoneksi: 'connecting',
+            sedangSinkron: false,
+            gagalSinkron: false,
+
+            get labelKoneksi() {
+                if (this.statusKoneksi === 'connected') return 'Realtime tersambung';
+                if (this.gagalSinkron) return 'Gagal menyinkronkan';
+                return 'Sinkronisasi berkala';
+            },
+
+            get kelasKoneksi() {
+                if (this.statusKoneksi === 'connected') return 'text-emerald-700';
+                if (this.gagalSinkron) return 'text-rose-700';
+                return 'text-amber-700';
+            },
 
             init() {
                 this.pasangAudio();
@@ -57,7 +73,7 @@
                     if (! document.hidden) {
                         this.sinkronUlang();
                     }
-                }, 5000);
+                }, 3000);
 
                 document.addEventListener('visibilitychange', () => {
                     if (! document.hidden) {
@@ -121,19 +137,64 @@
                 }
                 try {
                     const echo = window.buatEcho();
-                    if (! echo) return;
+                    if (! echo) {
+                        this.statusKoneksi = 'polling';
+                        return;
+                    }
 
-                    echo.channel('admin-dashboard')
+                    const connection = echo.connector?.pusher?.connection;
+                    if (connection) {
+                        this.statusKoneksi = connection.state;
+                        connection.bind('state_change', ({ current }) => {
+                            this.statusKoneksi = current;
+                            if (current === 'connected') this.sinkronUlang();
+                        });
+                        connection.bind('error', () => {
+                            this.statusKoneksi = 'polling';
+                        });
+                    }
+
+                    echo.private('admin-dashboard')
                         .listen('.PesertaStatusLogin', (data) => {
                             if (data.status === 'login') {
                                 this.tambahPeserta(data);
                             } else if (data.status === 'logout') {
                                 this.hapusPeserta(data);
                             }
+                            this.tambahAktivitas(data);
                         });
                 } catch (e) {
+                    this.statusKoneksi = 'polling';
                     console.warn('Reverb channel admin-dashboard error:', e);
                 }
+            },
+
+            tambahAktivitas(data) {
+                const id = data.activity_id || data.id;
+                if (id && this.aktivitasList.some(item => item.id === id)) return;
+
+                this.aktivitasList.unshift({
+                    id: id || `event-${Date.now()}`,
+                    user_id: data.user_id,
+                    nama: data.nama || 'Peserta',
+                    username: data.username || '',
+                    status: data.status || 'login',
+                    reason: data.reason || null,
+                    waktu: data.waktu || new Date().toISOString(),
+                });
+                this.aktivitasList = this.aktivitasList.slice(0, 10);
+            },
+
+            waktuAktivitas(waktu) {
+                const tanggal = new Date(waktu);
+                if (Number.isNaN(tanggal.getTime())) return '';
+
+                return new Intl.DateTimeFormat('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: 'short',
+                }).format(tanggal);
             },
 
             tambahNotifikasi(item) {
@@ -196,12 +257,15 @@
             },
 
             async sinkronUlang() {
+                if (this.sedangSinkron) return;
+                this.sedangSinkron = true;
                 try {
                     const res = await fetch(config.endpoint, {
                         headers: { 'Accept': 'application/json' }
                     });
                     if (res.ok) {
                         const json = await res.json();
+                        this.gagalSinkron = false;
                         if (Array.isArray(json.peserta)) {
                             const currentIds = new Set(this.pesertaList.map(p => p.id));
                             const newlyLoggedIn = json.peserta.filter(p => !currentIds.has(p.id));
@@ -228,8 +292,22 @@
                                 isNew: newIds.has(p.id)
                             }));
                         }
+                        if (Array.isArray(json.activities)) {
+                            const activityIds = new Set(this.aktivitasList.map(item => item.id));
+                            json.activities
+                                .filter(item => !activityIds.has(item.id))
+                                .reverse()
+                                .forEach(item => this.tambahAktivitas(item));
+                            this.aktivitasList = json.activities;
+                        }
+                    } else {
+                        this.gagalSinkron = true;
                     }
-                } catch (e) {}
+                } catch (e) {
+                    this.gagalSinkron = true;
+                } finally {
+                    this.sedangSinkron = false;
+                }
             }
         });
     </script>
@@ -626,7 +704,14 @@
         </div>
 
         {{-- RIGHT COLUMN WIDGETS (4 Columns on xl, Sticky on Desktop) --}}
-        <div class="xl:col-span-4 space-y-6 xl:sticky xl:top-8">
+        <div
+            x-data="adminPesertaOnline({
+                initial: @json($pesertaOnline),
+                activities: @json($aktivitasLogin),
+                endpoint: '{{ route('admin.dashboard.peserta-online', [], false) }}'
+            })"
+            class="xl:col-span-4 space-y-6 xl:sticky xl:top-8"
+        >
             {{-- Top Stats Counters (Server Status & Login Hari Ini) --}}
             <div class="flex items-center justify-between gap-3">
                 <div class="flex-1 rounded-2xl bg-white border border-slate-200/80 p-3.5 shadow-xs flex items-center gap-3">
@@ -634,8 +719,8 @@
                         <x-icon name="wifi" :size="20" />
                     </span>
                     <div>
-                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">WebSockets</p>
-                        <p class="text-base font-extrabold text-slate-900">Reverb Aktif</p>
+                        <p class="text-[11px] font-bold text-slate-500">Koneksi dashboard</p>
+                        <p class="text-sm font-extrabold" :class="kelasKoneksi" x-text="labelKoneksi"></p>
                     </div>
                 </div>
 
@@ -651,13 +736,7 @@
             </div>
 
             {{-- WIDGET: PESERTA LOGIN / ONLINE REALTIME --}}
-            <div
-                x-data="adminPesertaOnline({
-                    initial: @json($pesertaOnline),
-                    endpoint: '{{ route('admin.dashboard.peserta-online', [], false) }}'
-                })"
-                class="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-xs"
-            >
+            <div class="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-xs">
                 {{-- Floating Toast Alerts Container (Top Right Corner) --}}
                 <div
                     class="fixed top-5 right-5 z-[9999] flex flex-col items-end space-y-2.5 pointer-events-none max-w-sm w-full sm:w-80"
@@ -715,11 +794,8 @@
 
                 <div class="flex items-center justify-between mb-3.5">
                     <div class="flex items-center gap-2">
-                        <span class="relative flex h-2.5 w-2.5">
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </span>
-                        <h3 class="font-display text-base font-extrabold text-slate-900">Peserta Login</h3>
+                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true"></span>
+                        <h3 class="font-display text-base font-extrabold text-slate-900">Sedang online</h3>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
@@ -728,11 +804,11 @@
                         <button
                             type="button"
                             @click="suaraAktif = !suaraAktif"
-                            class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                            class="min-h-11 px-2 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
                             :title="suaraAktif ? 'Mute notifikasi suara' : 'Aktifkan notifikasi suara'"
+                            :aria-pressed="suaraAktif"
                         >
-                            <span x-show="suaraAktif" class="text-xs">🔔</span>
-                            <span x-show="!suaraAktif" class="text-xs opacity-50">🔕</span>
+                            <span x-text="suaraAktif ? 'Suara aktif' : 'Suara mati'"></span>
                         </button>
                     </div>
                 </div>
@@ -772,6 +848,49 @@
                             ></span>
                         </div>
                     </template>
+                </div>
+
+                <div class="mt-5 border-t border-slate-200 pt-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="font-display text-base font-extrabold text-slate-900">Aktivitas terbaru</h3>
+                        <span class="text-xs font-bold text-slate-500" x-text="aktivitasList.length + ' terakhir'"></span>
+                    </div>
+
+                    <template x-if="aktivitasList.length === 0">
+                        <p class="py-5 text-center text-xs text-slate-500">Belum ada aktivitas login peserta.</p>
+                    </template>
+
+                    <ol x-show="aktivitasList.length > 0" class="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1" aria-label="Aktivitas login dan logout peserta">
+                        <template x-for="aktivitas in aktivitasList" :key="'activity-' + aktivitas.id">
+                            <li class="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-slate-50">
+                                <span
+                                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                                    :class="aktivitas.status === 'login' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'"
+                                    aria-hidden="true"
+                                >
+                                    <template x-if="aktivitas.status === 'login'">
+                                        <x-icon name="user" :size="17" />
+                                    </template>
+                                    <template x-if="aktivitas.status === 'logout'">
+                                        <x-icon name="logout" :size="17" />
+                                    </template>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-xs font-extrabold text-slate-900" x-text="aktivitas.nama"></p>
+                                    <p class="truncate text-[11px] text-slate-500">
+                                        <span x-text="aktivitas.username"></span>
+                                        <span aria-hidden="true"> · </span>
+                                        <span x-text="aktivitas.status === 'login' ? 'Masuk' : 'Keluar'"></span>
+                                    </p>
+                                </div>
+                                <time class="shrink-0 text-[10px] font-semibold text-slate-500" :datetime="aktivitas.waktu" x-text="waktuAktivitas(aktivitas.waktu)"></time>
+                            </li>
+                        </template>
+                    </ol>
+
+                    <p x-show="gagalSinkron" class="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800" role="status">
+                        Data terakhir tetap ditampilkan. Dashboard akan mencoba menyinkronkan lagi.
+                    </p>
                 </div>
             </div>
 

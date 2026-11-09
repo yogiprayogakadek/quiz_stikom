@@ -2,22 +2,25 @@
 
 namespace App\Providers;
 
-use App\Models\Attempt;
+use App\Models\AppSetting;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->scoped('app.settings', fn () => AppSetting::current());
     }
 
     public function boot(): void
     {
+        View::composer('*', fn ($view) => $view->with('appSettings', app('app.settings')));
+
         // TLS diterminasi di edge, jadi request ke PHP selalu http. Paksa https
         // hanya kalau APP_URL memang https, supaya redirect dan asset tidak
         // diturunkan ke http.

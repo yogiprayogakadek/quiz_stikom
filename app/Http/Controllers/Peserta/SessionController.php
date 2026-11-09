@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers\Peserta;
 
+use App\Events\PesertaPeringatan;
+use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAnswerRequest;
+use App\Jobs\CloseQuestionJob;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
-use App\Events\PesertaPeringatan;
+use App\Models\ParticipantLoginActivity;
 use App\Models\QuizSession;
 use App\Models\User;
-use App\Jobs\CloseQuestionJob;
 use App\Services\QuizEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -209,7 +211,7 @@ class SessionController extends Controller
         }
 
         $engine->siarkanDisplayTerbatas($session);
-        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+        SessionMonitorUpdated::safeDispatch($session->id, [
             'action' => 'answer_submitted',
             'user_id' => $attempt->user_id,
             'question_id' => $attemptQuestion->question_id,
@@ -331,7 +333,7 @@ class SessionController extends Controller
                 ]);
             }
 
-            \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+            SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
 
             if ($attempt->status === 'berjalan') {
                 $totalSoal = $session->sessionQuestions()->count();
@@ -356,6 +358,7 @@ class SessionController extends Controller
 
         $user = $request->user();
         if ($user !== null) {
+            ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'fullscreen_violation');
             User::whereKey($user->id)->update(['current_session_token' => null]);
         }
 

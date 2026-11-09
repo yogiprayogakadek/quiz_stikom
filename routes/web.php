@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
@@ -53,6 +54,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('backups/{nama}', [BackupController::class, 'download'])
         ->where('nama', '[A-Za-z0-9._-]+')
         ->name('backups.download');
+    Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
+    Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
     Route::delete('backups/{nama}', [BackupController::class, 'destroy'])
         ->where('nama', '[A-Za-z0-9._-]+')
         ->name('backups.destroy');
@@ -82,6 +85,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('questions/template', [QuestionController::class, 'template'])->name('questions.template');
     Route::resource('quizzes', QuizController::class)->except(['show']);
     Route::resource('classes', KelasController::class)->except(['show', 'create'])->parameters(['classes' => 'kelas']);
+    Route::post('classes/{kelas}/regenerate-cover', [KelasController::class, 'regenerateCover'])->name('classes.regenerate-cover');
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');

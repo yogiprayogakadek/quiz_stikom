@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
+use App\Models\ParticipantLoginActivity;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -55,12 +56,7 @@ class LoginController extends Controller
         $request->session()->put('auth_token', $token);
 
         if ($user->role === 'peserta') {
-            \App\Events\PesertaStatusLogin::safeDispatch(
-                $user->id,
-                $user->nama,
-                $user->username,
-                'login'
-            );
+            ParticipantLoginActivity::recordAndBroadcast($user, 'login');
         }
 
         if ($user->wajibGantiPassword()) {
@@ -81,12 +77,7 @@ class LoginController extends Controller
             User::whereKey($user->id)->update(['current_session_token' => null]);
 
             if ($user->role === 'peserta') {
-                \App\Events\PesertaStatusLogin::safeDispatch(
-                    $user->id,
-                    $user->nama,
-                    $user->username,
-                    'logout'
-                );
+                ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'manual');
             }
         }
 

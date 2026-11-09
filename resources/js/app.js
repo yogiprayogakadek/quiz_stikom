@@ -8,6 +8,35 @@ window.Alpine = Alpine;
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
+let progressTimer = null;
+let progressRequests = 0;
+
+window.tampilkanProgress = (message = 'Menyimpan perubahan...', delay = 450) => {
+    progressRequests++;
+    clearTimeout(progressTimer);
+    progressTimer = setTimeout(() => {
+        const overlay = document.getElementById('global-progress');
+        const title = document.getElementById('global-progress-title');
+        if (!overlay) return;
+        if (title) title.textContent = message;
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        document.documentElement.classList.add('overflow-hidden');
+    }, delay);
+};
+
+window.sembunyikanProgress = () => {
+    progressRequests = Math.max(0, progressRequests - 1);
+    if (progressRequests > 0) return;
+    clearTimeout(progressTimer);
+    const overlay = document.getElementById('global-progress');
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+    }
+    document.documentElement.classList.remove('overflow-hidden');
+};
+
 window.kuisFetch = async (url, options = {}) => {
     const headers = {
         Accept: 'application/json',
@@ -23,12 +52,21 @@ window.kuisFetch = async (url, options = {}) => {
         body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, {
-        ...options,
-        headers,
-        body,
-        credentials: 'same-origin',
-    });
+    const method = String(options.method || 'GET').toUpperCase();
+    const showProgress = !['GET', 'HEAD'].includes(method) && options.progress !== false;
+    if (showProgress) window.tampilkanProgress(options.progressMessage);
+
+    let response;
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers,
+            body,
+            credentials: 'same-origin',
+        });
+    } finally {
+        if (showProgress) window.sembunyikanProgress();
+    }
 
     let data = null;
 
@@ -129,11 +167,20 @@ window.tabelData = (config = {}) => ({
     muatItem() {
         // shortcut: DOM scan client-side up to 2000 rows, upgrade to server AJAX API if dataset is huge
         const els = this.$el.querySelectorAll('[data-item]');
-        this.items = Array.from(els).map((el, i) => ({
-            id: i,
-            el: el,
-            text: (el.getAttribute('data-search') || el.textContent || '').toLowerCase().replace(/\s+/g, ' ')
-        }));
+        const grouped = new Map();
+        Array.from(els).forEach((el, i) => {
+            const key = el.getAttribute('data-item-key') || `item-${i}`;
+            if (grouped.has(key)) {
+                grouped.get(key).els.push(el);
+                return;
+            }
+            grouped.set(key, {
+                id: key,
+                els: [el],
+                text: (el.getAttribute('data-search') || el.textContent || '').toLowerCase().replace(/\s+/g, ' ')
+            });
+        });
+        this.items = Array.from(grouped.values());
     },
 
     hitung() {
@@ -156,9 +203,9 @@ window.tabelData = (config = {}) => ({
         const end = start + this.perPage;
         const visibleIds = new Set(filtered.slice(start, end).map(item => item.id));
 
-        this.items.forEach(item => {
-            item.el.style.display = visibleIds.has(item.id) ? '' : 'none';
-        });
+        this.items.forEach(item => item.els.forEach(el => {
+            el.style.display = visibleIds.has(item.id) ? '' : 'none';
+        }));
 
         this.dari = this.totalFiltered === 0 ? 0 : start + 1;
         this.sampai = Math.min(end, this.totalFiltered);
@@ -194,3 +241,25 @@ window.tabelData = (config = {}) => ({
 });
 
 Alpine.start();
+
+document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.dataset.noProgress !== undefined) return;
+    if ((form.getAttribute('method') || 'GET').toUpperCase() === 'GET') return;
+
+    const submitter = event.submitter;
+    if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+        submitter.disabled = true;
+        submitter.dataset.progressDisabled = 'true';
+    }
+    window.tampilkanProgress(form.dataset.progressMessage || 'Menyimpan perubahan...', 350);
+});
+
+window.addEventListener('pageshow', () => {
+    progressRequests = 1;
+    window.sembunyikanProgress();
+    document.querySelectorAll('button:disabled[data-progress-disabled]').forEach(button => {
+        button.disabled = false;
+        delete button.dataset.progressDisabled;
+    });
+});

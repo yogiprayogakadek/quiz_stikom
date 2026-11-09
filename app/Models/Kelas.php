@@ -14,6 +14,7 @@ class Kelas extends Model
     protected $fillable = [
         'nama',
         'pin',
+        'cover_path',
         'created_by',
     ];
 

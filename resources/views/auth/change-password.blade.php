@@ -2,8 +2,8 @@
     <div class="flex min-h-screen items-center justify-center px-5 py-12 sm:px-8">
         <main class="w-full max-w-lg">
             <div class="mb-8 flex items-center justify-center gap-3">
-                <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-12 w-12 object-contain">
-                <span class="font-display text-2xl font-bold text-brand-deep">STIKOM Quiz</span>
+                <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-12 w-12 object-contain">
+                <span class="font-display text-2xl font-bold text-brand-deep">{{ $appSettings->site_name }}</span>
             </div>
 
             <div class="card shadow-modal border-2 border-brand/20 p-6 sm:p-8 space-y-6">

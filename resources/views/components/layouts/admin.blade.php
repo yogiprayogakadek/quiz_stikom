@@ -6,9 +6,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $judul }} | STIKOM Quiz</title>
-    <link rel="icon" type="image/png" href="{{ asset('logo.png') }}">
+    <title>{{ $judul }} | {{ $appSettings->site_name }}</title>
+    <link rel="icon" href="{{ $appSettings->logoUrl() }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-brand-style />
 </head>
 <body
     class="min-h-screen bg-[#f8fafc] text-slate-900"
@@ -54,11 +55,11 @@
             <div class="flex items-center justify-between pb-4 border-b border-slate-100">
                 <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
-                        <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                        <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                     </div>
                     <div>
-                        <span class="font-display text-lg font-extrabold tracking-tight text-slate-900 block leading-tight">STIKOM Quiz</span>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Panel Administrator</span>
+                        <span class="font-display text-lg font-extrabold tracking-tight text-slate-900 block leading-tight">{{ $appSettings->site_name }}</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{{ $appSettings->organization_name ?: 'Panel Administrator' }}</span>
                     </div>
                 </a>
                 <button
@@ -114,6 +115,14 @@
                     <x-icon name="download" :size="20" class="{{ request()->routeIs('admin.backups.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                     <span>Backup</span>
                 </a>
+                <a
+                    href="{{ route('admin.settings.edit') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.settings.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                    @if (request()->routeIs('admin.settings.*')) aria-current="page" @endif
+                >
+                    <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Pengaturan</span>
+                </a>
             </nav>
         </div>
 
@@ -146,13 +155,13 @@
             <div>
                 {{-- Logo & App Title (No toggle here - toggle is in the top bar) --}}
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                    <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? 'STIKOM Quiz' : ''">
+                    <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? @js($appSettings->site_name) : ''">
                         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
-                            <img src="{{ asset('logo.png') }}" alt="Logo STIKOM Quiz" class="h-full w-full object-contain">
+                            <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                         </div>
                         <div x-show="!sidebarCollapsed" x-cloak class="min-w-0">
-                            <span class="font-display text-xl font-extrabold tracking-tight text-slate-900 block leading-tight truncate">STIKOM Quiz</span>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Panel Administrator</span>
+                            <span class="font-display text-xl font-extrabold tracking-tight text-slate-900 block leading-tight truncate">{{ $appSettings->site_name }}</span>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">{{ $appSettings->organization_name ?: 'Panel Administrator' }}</span>
                         </div>
                     </a>
                 </div>
@@ -213,6 +222,16 @@
                         <x-icon name="download" :size="20" class="{{ request()->routeIs('admin.backups.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Backup</span>
                     </a>
+                    <a
+                        href="{{ route('admin.settings.edit') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.settings.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Pengaturan' : ''"
+                        @if (request()->routeIs('admin.settings.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Pengaturan</span>
+                    </a>
                 </nav>
 
                 {{-- Server Status Card --}}
@@ -221,10 +240,10 @@
                         <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
                             <x-icon name="shield-check" :size="18" />
                         </span>
-                        <span class="font-display text-sm font-extrabold text-slate-900">Server Lokal</span>
+                        <span class="font-display text-sm font-extrabold text-slate-900">Status layanan</span>
                     </div>
                     <p class="mt-2 text-xs text-slate-600 leading-relaxed">
-                        Reverb WebSockets & antrean kuis aktif melayani kelas.
+                        Realtime dan antrean kuis siap melayani kelas.
                     </p>
                     <a href="{{ route('admin.sessions.create') }}" class="mt-3 block w-full text-center py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs transition">
                         + Buka Sesi Ujian
@@ -341,5 +360,6 @@
             @endif
         </main>
     </div>
+    <x-global-progress />
 </body>
 </html>
