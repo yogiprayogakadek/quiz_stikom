@@ -306,4 +306,67 @@ class AiQuestionServiceTest extends TestCase
         $this->assertCount(1, $result);
         $this->assertEquals('Soal dari SSE', $result[0]['teks']);
     }
+
+    public function test_calculate_weights_distributes_exactly_to_max_score(): void
+    {
+        // 1. PG only: 100 points into 3 questions -> 34, 33, 33 (sum = 100)
+        $weightsPg = AiQuestionService::calculateWeights(nilaiMaksimal: 100, jumlahPg: 3, jumlahEssay: 0);
+        $this->assertCount(3, $weightsPg['pg']);
+        $this->assertEmpty($weightsPg['essay']);
+        $this->assertEquals(100, array_sum($weightsPg['pg']));
+
+        // 2. Essay only: 100 points into 4 questions -> 25, 25, 25, 25 (sum = 100)
+        $weightsEssay = AiQuestionService::calculateWeights(nilaiMaksimal: 100, jumlahPg: 0, jumlahEssay: 4);
+        $this->assertEmpty($weightsEssay['pg']);
+        $this->assertCount(4, $weightsEssay['essay']);
+        $this->assertEquals(100, array_sum($weightsEssay['essay']));
+
+        // 3. PG (10) and Essay (2) with 60% PG ratio:
+        // PG total = 60 (10 questions * 6 points)
+        // Essay total = 40 (2 questions * 20 points)
+        // Total sum = 100
+        $weightsCombined = AiQuestionService::calculateWeights(nilaiMaksimal: 100, jumlahPg: 10, jumlahEssay: 2, porsiPg: 60);
+        $this->assertCount(10, $weightsCombined['pg']);
+        $this->assertCount(2, $weightsCombined['essay']);
+        $this->assertEquals(60, array_sum($weightsCombined['pg']));
+        $this->assertEquals(40, array_sum($weightsCombined['essay']));
+        $this->assertEquals(100, array_sum($weightsCombined['pg']) + array_sum($weightsCombined['essay']));
+    }
+
+    public function test_generate_questions_applies_exact_weights_from_nilai_maksimal(): void
+    {
+        $mockPayload = [
+            'questions' => [
+                ['teks' => 'PG 1', 'tipe' => 'pilihan_ganda', 'bobot' => 999, 'opsi' => [['teks' => 'A', 'is_correct' => true]]],
+                ['teks' => 'PG 2', 'tipe' => 'pilihan_ganda', 'bobot' => 999, 'opsi' => [['teks' => 'A', 'is_correct' => true]]],
+                ['teks' => 'Essay 1', 'tipe' => 'essay', 'bobot' => 999],
+            ],
+        ];
+
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'choices' => [
+                    ['message' => ['role' => 'assistant', 'content' => json_encode($mockPayload)]],
+                ],
+            ], 200),
+        ]);
+
+        $service = new AiQuestionService();
+        $result = $service->generateQuestions([
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'rps_text' => 'Silabus',
+            'topik' => 'Topik',
+            'jumlah_pg' => 2,
+            'jumlah_essay' => 1,
+            'nilai_maksimal' => 100,
+            'porsi_pg' => 60,
+        ]);
+
+        // PG target = 60 for 2 items -> 30 each
+        // Essay target = 40 for 1 item -> 40
+        $this->assertEquals(30, $result[0]['bobot']);
+        $this->assertEquals(30, $result[1]['bobot']);
+        $this->assertEquals(40, $result[2]['bobot']);
+        $this->assertEquals(100, $result[0]['bobot'] + $result[1]['bobot'] + $result[2]['bobot']);
+    }
 }

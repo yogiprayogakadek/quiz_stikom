@@ -110,6 +110,8 @@ class AiQuestionService
         $topik = (string) ($params['topik'] ?? '');
         $jumlahPg = (int) ($params['jumlah_pg'] ?? 0);
         $jumlahEssay = (int) ($params['jumlah_essay'] ?? 0);
+        $nilaiMaksimal = max(10, (int) ($params['nilai_maksimal'] ?? 100));
+        $porsiPg = min(90, max(10, (int) ($params['porsi_pg'] ?? 60)));
 
         $rawLevel = $params['level'] ?? ['C3 - Menerapkan'];
         $levelStr = is_array($rawLevel) ? implode(', ', array_filter($rawLevel)) : (string) $rawLevel;
@@ -120,6 +122,8 @@ class AiQuestionService
         if ($jumlahPg <= 0 && $jumlahEssay <= 0) {
             throw new RuntimeException('Jumlah soal pilihan ganda atau essay minimal 1.');
         }
+
+        $weights = self::calculateWeights($nilaiMaksimal, $jumlahPg, $jumlahEssay, $porsiPg);
 
         $systemPrompt = <<<PROMPT
 Anda adalah asisten pembuat soal akademik perguruan tinggi profesional.
@@ -195,7 +199,80 @@ PROMPT;
             throw new RuntimeException('Format respon AI tidak sesuai dengan struktur JSON soal.');
         }
 
-        return $this->sanitizeQuestions($data['questions']);
+        return $this->sanitizeQuestions($data['questions'], $weights);
+    }
+
+    /**
+     * Membagi total nilai maksimal kuis ke tiap butir soal PG dan Essay.
+     *
+     * @return array{pg: array<int>, essay: array<int>, total: int}
+     */
+    public static function calculateWeights(int $nilaiMaksimal, int $jumlahPg, int $jumlahEssay, int $porsiPg = 60): array
+    {
+        $nilaiMaksimal = max(10, $nilaiMaksimal);
+        $jumlahPg = max(0, $jumlahPg);
+        $jumlahEssay = max(0, $jumlahEssay);
+
+        if ($jumlahPg === 0 && $jumlahEssay === 0) {
+            return ['pg' => [], 'essay' => [], 'total' => 0];
+        }
+
+        if ($jumlahEssay === 0) {
+            $weightsPg = self::distributeAmount($nilaiMaksimal, $jumlahPg);
+            return [
+                'pg' => $weightsPg,
+                'essay' => [],
+                'total' => array_sum($weightsPg),
+            ];
+        }
+
+        if ($jumlahPg === 0) {
+            $weightsEssay = self::distributeAmount($nilaiMaksimal, $jumlahEssay);
+            return [
+                'pg' => [],
+                'essay' => $weightsEssay,
+                'total' => array_sum($weightsEssay),
+            ];
+        }
+
+        // Keduanya ada: gunakan rasio porsi_pg
+        $porsiPg = min(90, max(10, $porsiPg));
+        $targetPg = (int) round($nilaiMaksimal * ($porsiPg / 100));
+        // Pastikan minimal 1 poin per butir
+        $targetPg = max($jumlahPg, min($nilaiMaksimal - $jumlahEssay, $targetPg));
+        $targetEssay = $nilaiMaksimal - $targetPg;
+
+        $weightsPg = self::distributeAmount($targetPg, $jumlahPg);
+        $weightsEssay = self::distributeAmount($targetEssay, $jumlahEssay);
+
+        return [
+            'pg' => $weightsPg,
+            'essay' => $weightsEssay,
+            'total' => array_sum($weightsPg) + array_sum($weightsEssay),
+        ];
+    }
+
+    /**
+     * Membagi sejumlah nilai secara merata ke N item dengan membagi sisa modulo ke item awal.
+     *
+     * @return array<int>
+     */
+    protected static function distributeAmount(int $total, int $count): array
+    {
+        if ($count <= 0) {
+            return [];
+        }
+
+        $total = max($count, $total);
+        $base = intdiv($total, $count);
+        $rem = $total % $count;
+
+        $weights = [];
+        for ($i = 0; $i < $count; $i++) {
+            $weights[] = $base + ($i < $rem ? 1 : 0);
+        }
+
+        return $weights;
     }
 
     /**
@@ -302,14 +379,17 @@ PROMPT;
     }
 
     /**
-     * Memastikan struktur array soal lengkap dan aman.
+     * Memastikan struktur array soal lengkap dan aman serta menerapkan alokasi bobot proporsional.
      *
      * @param array<int, mixed> $questions
+     * @param array{pg?: array<int>, essay?: array<int>}|null $weights
      * @return array<int, array<string, mixed>>
      */
-    protected function sanitizeQuestions(array $questions): array
+    protected function sanitizeQuestions(array $questions, ?array $weights = null): array
     {
         $sanitized = [];
+        $pgIndex = 0;
+        $essayIndex = 0;
 
         foreach ($questions as $q) {
             if (! is_array($q) || empty($q['teks'])) {
@@ -317,7 +397,19 @@ PROMPT;
             }
 
             $tipe = ($q['tipe'] ?? '') === 'essay' ? 'essay' : 'pilihan_ganda';
-            $bobot = max(1, (int) ($q['bobot'] ?? ($tipe === 'essay' ? 5 : 1)));
+
+            if ($tipe === 'pilihan_ganda') {
+                $bobot = isset($weights['pg'][$pgIndex])
+                    ? $weights['pg'][$pgIndex]
+                    : max(1, (int) ($q['bobot'] ?? 1));
+                $pgIndex++;
+            } else {
+                $bobot = isset($weights['essay'][$essayIndex])
+                    ? $weights['essay'][$essayIndex]
+                    : max(1, (int) ($q['bobot'] ?? 5));
+                $essayIndex++;
+            }
+
             $durasi = max(15, (int) ($q['durasi_detik'] ?? ($tipe === 'essay' ? 120 : 60)));
 
             $item = [

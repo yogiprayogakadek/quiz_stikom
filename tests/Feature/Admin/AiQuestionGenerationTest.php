@@ -106,6 +106,8 @@ class AiQuestionGenerationTest extends TestCase
             'jumlah_pg' => 1,
             'jumlah_essay' => 0,
             'level' => ['C2 - Memahami', 'C3 - Menerapkan'],
+            'nilai_maksimal' => 100,
+            'porsi_pg' => 60,
         ];
 
         $response = $this->actingAs($this->admin)
@@ -115,6 +117,8 @@ class AiQuestionGenerationTest extends TestCase
         $response->assertOk();
         $response->assertViewIs('admin.questions.ai-preview');
         $response->assertViewHas('questions');
+        $response->assertViewHas('params');
+        $this->assertEquals(100, $response->viewData('params')['nilai_maksimal']);
         $response->assertSee('Apa itu HTTP?');
         $response->assertSee('Hypertext Transfer Protocol');
         $response->assertSee('Simpan Soal ke Kuis');

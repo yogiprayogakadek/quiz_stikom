@@ -110,40 +110,103 @@
                 @enderror
             </div>
 
-            <!-- Jumlah Soal (Grid) -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                    <label for="jumlah_pg" class="label">Jumlah Pilihan Ganda</label>
-                    <input
-                        type="number"
-                        id="jumlah_pg"
-                        name="jumlah_pg"
-                        value="{{ old('jumlah_pg', 5) }}"
-                        min="0"
-                        max="50"
-                        class="input @error('jumlah_pg') border-red-500 @enderror"
-                        required
-                    >
-                    @error('jumlah_pg')
-                        <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                    @enderror
+            <!-- Parameter Jumlah & Nilai Soal (Card Group) -->
+            <div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="jumlah_pg" class="label font-medium text-slate-800">Jumlah Pilihan Ganda</label>
+                        <input
+                            type="number"
+                            id="jumlah_pg"
+                            name="jumlah_pg"
+                            value="{{ old('jumlah_pg', 5) }}"
+                            min="0"
+                            max="50"
+                            class="input @error('jumlah_pg') border-red-500 @enderror bg-white"
+                            required
+                        >
+                        @error('jumlah_pg')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="jumlah_essay" class="label font-medium text-slate-800">Jumlah Essay</label>
+                        <input
+                            type="number"
+                            id="jumlah_essay"
+                            name="jumlah_essay"
+                            value="{{ old('jumlah_essay', 1) }}"
+                            min="0"
+                            max="20"
+                            class="input @error('jumlah_essay') border-red-500 @enderror bg-white"
+                            required
+                        >
+                        @error('jumlah_essay')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
                 </div>
 
-                <div>
-                    <label for="jumlah_essay" class="label">Jumlah Essay</label>
-                    <input
-                        type="number"
-                        id="jumlah_essay"
-                        name="jumlah_essay"
-                        value="{{ old('jumlah_essay', 1) }}"
-                        min="0"
-                        max="20"
-                        class="input @error('jumlah_essay') border-red-500 @enderror"
-                        required
-                    >
-                    @error('jumlah_essay')
-                        <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                    @enderror
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-slate-200/60">
+                    <div>
+                        <label for="nilai_maksimal" class="label font-medium text-slate-800">
+                            Nilai Maksimal Kuis (Target Total)
+                        </label>
+                        <input
+                            type="number"
+                            id="nilai_maksimal"
+                            name="nilai_maksimal"
+                            value="{{ old('nilai_maksimal', 100) }}"
+                            min="10"
+                            max="1000"
+                            class="input @error('nilai_maksimal') border-red-500 @enderror bg-white"
+                            placeholder="100"
+                            required
+                        >
+                        <p class="mt-1 text-xs text-slate-500">
+                            Total nilai tertinggi peserta (umumnya 100). Bobot tiap soal akan dibagi otomatis hingga tepat jumlah ini.
+                        </p>
+                        @error('nilai_maksimal')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div id="porsi-wrapper">
+                        <div class="flex items-center justify-between">
+                            <label for="porsi_pg" class="label font-medium text-slate-800">
+                                Porsi Nilai PG vs Essay
+                            </label>
+                            <span id="porsi-label" class="text-xs font-semibold text-indigo-700">60% PG / 40% Essay</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="porsi_pg"
+                            name="porsi_pg"
+                            value="{{ old('porsi_pg', 60) }}"
+                            min="10"
+                            max="90"
+                            step="5"
+                            class="w-full accent-indigo-600 cursor-pointer mt-2"
+                        >
+                        <p class="mt-1 text-xs text-slate-500">
+                            Geser untuk mengatur perbandingan nilai PG dan Essay.
+                        </p>
+                        @error('porsi_pg')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+
+                <!-- Live Estimasi Pembagian Bobot -->
+                <div id="estimasi-bobot-box" class="rounded-lg bg-indigo-50/70 p-3 text-xs text-indigo-900 border border-indigo-100 flex items-start gap-2.5">
+                    <x-icon name="sparkles" :size="16" class="text-indigo-600 shrink-0 mt-0.5" />
+                    <div>
+                        <span class="font-semibold text-indigo-950">Estimasi Pembagian Bobot:</span>
+                        <div id="estimasi-detail" class="mt-0.5 text-indigo-800">
+                            Menghitung...
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -366,6 +429,60 @@
                 rpsText.addEventListener('input', updateCount);
                 updateCount();
             }
+
+            // Live weight distribution preview
+            const inputPg = document.getElementById('jumlah_pg');
+            const inputEssay = document.getElementById('jumlah_essay');
+            const inputMax = document.getElementById('nilai_maksimal');
+            const inputPorsi = document.getElementById('porsi_pg');
+            const porsiWrapper = document.getElementById('porsi-wrapper');
+            const porsiLabel = document.getElementById('porsi-label');
+            const estimasiDetail = document.getElementById('estimasi-detail');
+
+            const updateEstimasi = () => {
+                const pg = parseInt(inputPg?.value) || 0;
+                const essay = parseInt(inputEssay?.value) || 0;
+                const max = parseInt(inputMax?.value) || 100;
+                const porsiPg = parseInt(inputPorsi?.value) || 60;
+
+                if (porsiLabel) {
+                    porsiLabel.textContent = porsiPg + '% PG / ' + (100 - porsiPg) + '% Essay';
+                }
+
+                if (pg > 0 && essay > 0) {
+                    if (porsiWrapper) porsiWrapper.style.display = 'block';
+                    const targetPg = Math.round(max * (porsiPg / 100));
+                    const targetEssay = max - targetPg;
+                    const bobotPgRata = (targetPg / pg).toFixed(1).replace('.0', '');
+                    const bobotEssayRata = (targetEssay / essay).toFixed(1).replace('.0', '');
+                    if (estimasiDetail) {
+                        estimasiDetail.innerHTML = `<strong>${pg} Pilihan Ganda</strong> (total ${targetPg} poin, ~${bobotPgRata} poin/soal) + <strong>${essay} Essay</strong> (total ${targetEssay} poin, ~${bobotEssayRata} poin/soal) = <strong>Total ${max} Poin</strong>.`;
+                    }
+                } else if (pg > 0 && essay === 0) {
+                    if (porsiWrapper) porsiWrapper.style.display = 'none';
+                    const bobotPgRata = (max / pg).toFixed(1).replace('.0', '');
+                    if (estimasiDetail) {
+                        estimasiDetail.innerHTML = `<strong>${pg} Pilihan Ganda</strong> (seluruh ${max} poin, ~${bobotPgRata} poin/soal).`;
+                    }
+                } else if (pg === 0 && essay > 0) {
+                    if (porsiWrapper) porsiWrapper.style.display = 'none';
+                    const bobotEssayRata = (max / essay).toFixed(1).replace('.0', '');
+                    if (estimasiDetail) {
+                        estimasiDetail.innerHTML = `<strong>${essay} Essay</strong> (seluruh ${max} poin, ~${bobotEssayRata} poin/soal).`;
+                    }
+                } else {
+                    if (estimasiDetail) {
+                        estimasiDetail.textContent = 'Masukkan jumlah soal pilihan ganda atau essay minimal 1.';
+                    }
+                }
+            };
+
+            [inputPg, inputEssay, inputMax, inputPorsi].forEach(el => {
+                if (el) {
+                    el.addEventListener('input', updateEstimasi);
+                }
+            });
+            updateEstimasi();
 
             // Form submit & progress modal
             if (form && btnSubmit && modal) {

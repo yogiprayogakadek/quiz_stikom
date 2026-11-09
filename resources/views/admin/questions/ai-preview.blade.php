@@ -21,7 +21,7 @@
                     Hasil Generate ({{ count($questions) }} butir soal)
                 </h2>
                 <p class="text-xs text-slate-500">
-                    {{ $totalPg }} Pilihan Ganda, {{ $totalEssay }} Essay • Model: <span class="font-mono text-slate-700">{{ $params['model'] ?? '-' }}</span>
+                    {{ $totalPg }} Pilihan Ganda, {{ $totalEssay }} Essay • Target Nilai Maksimal: <strong class="text-slate-800">{{ $params['nilai_maksimal'] ?? 100 }}</strong> Poin
                 </p>
             </div>
         </div>
@@ -68,14 +68,16 @@
 
                         <div class="flex items-center gap-3 text-xs text-slate-600">
                             <div class="flex items-center gap-1">
-                                <label for="bobot-{{ $qIndex }}">Bobot:</label>
+                                <label for="bobot-{{ $qIndex }}" class="font-medium text-slate-700">Bobot:</label>
                                 <input
                                     type="number"
                                     id="bobot-{{ $qIndex }}"
                                     name="questions[{{ $qIndex }}][bobot]"
                                     value="{{ $q['bobot'] ?? ($isPg ? 1 : 5) }}"
                                     min="1"
-                                    class="input h-7 w-16 px-1.5 py-0.5 text-center text-xs"
+                                    max="1000"
+                                    class="bobot-input input h-7 w-16 px-1.5 py-0.5 text-center text-xs font-semibold text-slate-900"
+                                    data-index="{{ $qIndex }}"
                                     required
                                 >
                             </div>
@@ -171,9 +173,18 @@
         </div>
 
         <!-- Sticky Bottom Bar -->
-        <div class="sticky bottom-4 mt-8 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
-            <div class="text-sm text-slate-700">
-                <span id="selected-count" class="font-bold text-indigo-700">{{ count($questions) }}</span> dari {{ count($questions) }} soal terpilih
+        <div class="sticky bottom-4 mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+            <div class="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+                <div>
+                    <span id="selected-count" class="font-bold text-indigo-700">{{ count($questions) }}</span> dari {{ count($questions) }} soal terpilih
+                </div>
+                <div class="h-4 w-px bg-slate-300"></div>
+                <div>
+                    Total Bobot: <span id="total-bobot" class="font-bold text-slate-900">0</span> / Target: <span class="font-semibold text-slate-700">{{ $params['nilai_maksimal'] ?? 100 }}</span>
+                </div>
+                <span id="bobot-status-pill" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold">
+                    -
+                </span>
             </div>
 
             <div class="flex items-center gap-3">
@@ -191,43 +202,72 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const checkboxes = document.querySelectorAll('.question-checkbox');
+            const bobotInputs = document.querySelectorAll('.bobot-input');
             const selectedCount = document.getElementById('selected-count');
+            const totalBobotLabel = document.getElementById('total-bobot');
+            const statusPill = document.getElementById('bobot-status-pill');
             const btnSelectAll = document.getElementById('btn-select-all');
             const btnDeselectAll = document.getElementById('btn-deselect-all');
+            const targetScore = parseInt("{{ $params['nilai_maksimal'] ?? 100 }}") || 100;
 
-            const updateSelectedCount = () => {
+            const updateSummary = () => {
                 let count = 0;
+                let totalBobot = 0;
+
                 checkboxes.forEach(cb => {
-                    const card = document.getElementById('card-' + cb.dataset.index);
+                    const idx = cb.dataset.index;
+                    const card = document.getElementById('card-' + idx);
+                    const bobotInp = document.getElementById('bobot-' + idx);
+                    const val = parseInt(bobotInp ? bobotInp.value : 0) || 0;
+
                     if (cb.checked) {
                         count++;
+                        totalBobot += val;
                         if (card) card.classList.remove('opacity-50', 'bg-slate-50');
                     } else {
                         if (card) card.classList.add('opacity-50', 'bg-slate-50');
                     }
                 });
+
                 if (selectedCount) selectedCount.textContent = count;
+                if (totalBobotLabel) totalBobotLabel.textContent = totalBobot;
+
+                if (statusPill) {
+                    if (totalBobot === targetScore) {
+                        statusPill.className = 'inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200';
+                        statusPill.textContent = 'Pas ' + targetScore + ' Poin';
+                    } else {
+                        const selisih = totalBobot - targetScore;
+                        const tanda = selisih > 0 ? '+' : '';
+                        statusPill.className = 'inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 border border-amber-200';
+                        statusPill.textContent = 'Selisih ' + tanda + selisih + ' Poin';
+                    }
+                }
             };
 
             checkboxes.forEach(cb => {
-                cb.addEventListener('change', updateSelectedCount);
+                cb.addEventListener('change', updateSummary);
+            });
+
+            bobotInputs.forEach(inp => {
+                inp.addEventListener('input', updateSummary);
             });
 
             if (btnSelectAll) {
                 btnSelectAll.addEventListener('click', () => {
                     checkboxes.forEach(cb => cb.checked = true);
-                    updateSelectedCount();
+                    updateSummary();
                 });
             }
 
             if (btnDeselectAll) {
                 btnDeselectAll.addEventListener('click', () => {
                     checkboxes.forEach(cb => cb.checked = false);
-                    updateSelectedCount();
+                    updateSummary();
                 });
             }
 
-            updateSelectedCount();
+            updateSummary();
         });
     </script>
 </x-layouts.admin>
