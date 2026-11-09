@@ -3,6 +3,8 @@
     $ruteIndex = isset($quiz) ? route('admin.quizzes.questions.index', $quiz) : route('admin.quizzes.index');
     $ruteCreate = isset($quiz) ? route('admin.quizzes.questions.create', $quiz) : route('admin.quizzes.index');
     $ruteImport = isset($quiz) ? route('admin.quizzes.questions.import', $quiz) : route('admin.quizzes.index');
+    $ruteExport = isset($quiz) ? route('admin.quizzes.questions.export', $quiz) : '#';
+    $ruteAi = isset($quiz) ? route('admin.quizzes.questions.ai.form', $quiz) : '#';
 @endphp
 
 <x-layouts.admin :judul="$judulHalaman" :keterangan="isset($quiz) ? 'Daftar soal khusus untuk kuis ini. Soal pilihan ganda dinilai otomatis, essay dinilai manual.' : 'Kelola soal per kuis.'">
@@ -13,9 +15,17 @@
                     <x-icon name="arrow-left" :size="18" />
                     <span>Kembali</span>
                 </a>
+                <a href="{{ $ruteAi }}" class="btn btn-secondary">
+                    <x-icon name="sparkles" :size="18" />
+                    <span>Generate AI</span>
+                </a>
                 <a href="{{ $ruteImport }}" class="btn btn-secondary">
                     <x-icon name="upload" :size="18" />
                     <span>Impor CSV</span>
+                </a>
+                <a href="{{ $ruteExport }}" class="btn btn-secondary">
+                    <x-icon name="download" :size="18" />
+                    <span>Ekspor CSV</span>
                 </a>
                 <a href="{{ $ruteCreate }}" class="btn btn-primary">
                     <x-icon name="plus" :size="18" />
@@ -49,6 +59,10 @@
             @if ($cari === '' && isset($quiz))
                 <div class="mt-4 flex flex-wrap justify-center gap-3">
                     <a href="{{ $ruteCreate }}" class="btn btn-primary">Tambah soal pertama</a>
+                    <a href="{{ $ruteAi }}" class="btn btn-secondary">
+                        <x-icon name="sparkles" :size="18" />
+                        <span>Generate AI</span>
+                    </a>
                     <a href="{{ $ruteImport }}" class="btn btn-secondary">Impor via CSV</a>
                 </div>
             @endif

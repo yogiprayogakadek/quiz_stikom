@@ -56,6 +56,8 @@ class AiQuestionGenerationTest extends TestCase
         $response->assertViewIs('admin.questions.ai-form');
         $response->assertViewHas('quiz', $this->quiz);
         $response->assertViewHas('models');
+        $response->assertSee('Generate Soal AI');
+        $response->assertSee('ag/gemini-3.8-flash-medium');
     }
 
     public function test_cannot_access_ai_form_if_quiz_is_locked(): void
@@ -113,6 +115,9 @@ class AiQuestionGenerationTest extends TestCase
         $response->assertOk();
         $response->assertViewIs('admin.questions.ai-preview');
         $response->assertViewHas('questions');
+        $response->assertSee('Apa itu HTTP?');
+        $response->assertSee('Hypertext Transfer Protocol');
+        $response->assertSee('Simpan Soal ke Kuis');
     }
 
     public function test_ai_store_saves_selected_questions_and_options(): void
