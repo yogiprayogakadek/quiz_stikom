@@ -110,7 +110,12 @@ class AiQuestionService
         $topik = (string) ($params['topik'] ?? '');
         $jumlahPg = (int) ($params['jumlah_pg'] ?? 0);
         $jumlahEssay = (int) ($params['jumlah_essay'] ?? 0);
-        $level = (string) ($params['level'] ?? 'C3 - Penerapan');
+
+        $rawLevel = $params['level'] ?? ['C3 - Menerapkan'];
+        $levelStr = is_array($rawLevel) ? implode(', ', array_filter($rawLevel)) : (string) $rawLevel;
+        if (trim($levelStr) === '') {
+            $levelStr = 'C3 - Menerapkan';
+        }
 
         if ($jumlahPg <= 0 && $jumlahEssay <= 0) {
             throw new RuntimeException('Jumlah soal pilihan ganda atau essay minimal 1.');
@@ -154,7 +159,7 @@ ATURAN WAJIB:
 PROMPT;
 
         $userPrompt = "Topik Kajian: {$topik}\n";
-        $userPrompt .= "Tingkat Kesulitan: {$level}\n";
+        $userPrompt .= "Tingkat Kesulitan / Taksonomi Bloom: {$levelStr}\n";
         $userPrompt .= "Jumlah Pilihan Ganda: {$jumlahPg}\n";
         $userPrompt .= "Jumlah Essay: {$jumlahEssay}\n\n";
         $userPrompt .= "Konteks Silabus / RPS / CPMK:\n{$rpsText}";

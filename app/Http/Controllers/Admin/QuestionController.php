@@ -495,13 +495,16 @@ class QuestionController extends Controller
             'rps_text' => ['required', 'string', 'max:15000'],
             'jumlah_pg' => ['required', 'integer', 'min:0', 'max:50'],
             'jumlah_essay' => ['required', 'integer', 'min:0', 'max:20'],
-            'level' => ['required', 'string'],
+            'level' => ['required'],
         ], [
             'topik.required' => 'Topik kajian wajib diisi.',
             'rps_text.required' => 'Teks RPS / CPMK wajib diisi.',
             'jumlah_pg.min' => 'Jumlah pilihan ganda minimal 0.',
             'jumlah_essay.min' => 'Jumlah essay minimal 0.',
+            'level.required' => 'Pilih minimal satu tingkat Taksonomi Bloom.',
         ]);
+
+        $validated['level'] = is_array($validated['level']) ? $validated['level'] : [$validated['level']];
 
         if ((int) $validated['jumlah_pg'] + (int) $validated['jumlah_essay'] < 1) {
             return back()->withInput()->withErrors(['jumlah' => 'Pilih minimal 1 soal (pilihan ganda atau essay).']);

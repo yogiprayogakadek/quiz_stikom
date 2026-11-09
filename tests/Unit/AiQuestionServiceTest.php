@@ -173,4 +173,52 @@ class AiQuestionServiceTest extends TestCase
         $this->assertCount(1, $result);
         $this->assertStringContainsString("echo 'hello';", $result[0]['teks']);
     }
+
+    public function test_generate_questions_with_multiple_bloom_levels(): void
+    {
+        $mockPayload = [
+            'questions' => [
+                [
+                    'teks' => 'Soal C2 dan C4',
+                    'tipe' => 'pilihan_ganda',
+                    'bobot' => 1,
+                    'durasi_detik' => 60,
+                    'opsi' => [
+                        ['teks' => 'A', 'is_correct' => true],
+                        ['teks' => 'B', 'is_correct' => false],
+                    ],
+                ],
+            ],
+        ];
+
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => function ($request) use ($mockPayload) {
+                $body = json_decode($request->body(), true);
+                $userContent = $body['messages'][1]['content'];
+
+                // Verify multiple bloom levels are included in the prompt
+                if (! str_contains($userContent, 'C2 - Memahami, C4 - Menganalisis')) {
+                    return Http::response(['error' => 'Level not formatted properly'], 400);
+                }
+
+                return Http::response([
+                    'choices' => [
+                        ['message' => ['role' => 'assistant', 'content' => json_encode($mockPayload)]],
+                    ],
+                ], 200);
+            },
+        ]);
+
+        $service = new AiQuestionService();
+        $result = $service->generateQuestions([
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'rps_text' => 'Silabus Jaringan',
+            'topik' => 'Routing',
+            'jumlah_pg' => 1,
+            'jumlah_essay' => 0,
+            'level' => ['C2 - Memahami', 'C4 - Menganalisis'],
+        ]);
+
+        $this->assertCount(1, $result);
+    }
 }

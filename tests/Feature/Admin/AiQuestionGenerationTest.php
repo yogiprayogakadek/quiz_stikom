@@ -105,7 +105,7 @@ class AiQuestionGenerationTest extends TestCase
             'rps_text' => 'Dasar-dasar jaringan komputer dan web',
             'jumlah_pg' => 1,
             'jumlah_essay' => 0,
-            'level' => 'C2 - Pemahaman',
+            'level' => ['C2 - Memahami', 'C3 - Menerapkan'],
         ];
 
         $response = $this->actingAs($this->admin)
