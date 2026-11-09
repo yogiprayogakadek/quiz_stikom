@@ -5,16 +5,18 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuestionRequest;
 use App\Http\Requests\UpdateQuestionRequest;
+use App\Jobs\GenerateAiQuestionsJob;
+use App\Models\AiGeneration;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Services\AiQuestionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuestionController extends Controller
@@ -482,7 +484,7 @@ class QuestionController extends Controller
         return view('admin.questions.ai-form', compact('quiz', 'models'));
     }
 
-    public function aiGenerate(Request $request, Quiz $quiz, AiQuestionService $aiService): View|RedirectResponse
+    public function aiGenerate(Request $request, Quiz $quiz): View|RedirectResponse
     {
         if ($quiz->isLocked()) {
             return redirect()->route('admin.quizzes.questions.index', $quiz)
@@ -516,17 +518,63 @@ class QuestionController extends Controller
             return back()->withInput()->withErrors(['jumlah' => 'Pilih minimal 1 soal (pilihan ganda atau essay).']);
         }
 
-        try {
-            $questions = $aiService->generateQuestions($validated);
-        } catch (RuntimeException $e) {
-            return back()->withInput()->withErrors(['ai_error' => $e->getMessage()]);
+        $generation = AiGeneration::create([
+            'user_id' => $request->user()->id,
+            'quiz_id' => $quiz->id,
+            'status' => 'pending',
+            'params' => $validated,
+        ]);
+
+        GenerateAiQuestionsJob::dispatch($generation->id);
+
+        return redirect()->route('admin.quizzes.questions.ai.progress', [$quiz, $generation]);
+    }
+
+    public function aiProgress(Quiz $quiz, AiGeneration $generation): View|RedirectResponse
+    {
+        $this->pastikanGenerasi($quiz, $generation);
+
+        if ($generation->selesai()) {
+            return redirect()->route('admin.quizzes.questions.ai.preview', [$quiz, $generation]);
+        }
+
+        return view('admin.questions.ai-progress', compact('quiz', 'generation'));
+    }
+
+    public function aiProgressState(Quiz $quiz, AiGeneration $generation): JsonResponse
+    {
+        $this->pastikanGenerasi($quiz, $generation);
+
+        return response()->json([
+            'status' => $generation->status,
+            'done' => $generation->done,
+            'total' => $generation->total,
+            'error' => $generation->error,
+            'redirect' => $generation->selesai()
+                ? route('admin.quizzes.questions.ai.preview', [$quiz, $generation])
+                : null,
+        ]);
+    }
+
+    public function aiPreview(Quiz $quiz, AiGeneration $generation): View|RedirectResponse
+    {
+        $this->pastikanGenerasi($quiz, $generation);
+
+        if (! $generation->selesai()) {
+            return redirect()->route('admin.quizzes.questions.ai.progress', [$quiz, $generation]);
         }
 
         return view('admin.questions.ai-preview', [
             'quiz' => $quiz,
-            'questions' => $questions,
-            'params' => $validated,
+            'questions' => $generation->questions ?? [],
+            'params' => $generation->params,
         ]);
+    }
+
+    private function pastikanGenerasi(Quiz $quiz, AiGeneration $generation): void
+    {
+        abort_unless((int) $generation->quiz_id === (int) $quiz->id, 404);
+        abort_unless((int) $generation->user_id === (int) request()->user()->id, 403);
     }
 
     public function aiStore(Request $request, Quiz $quiz): RedirectResponse

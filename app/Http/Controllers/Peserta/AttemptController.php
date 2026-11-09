@@ -99,10 +99,20 @@ class AttemptController extends Controller
             ];
         })->values()->all();
 
+        // Buka lagi di soal pertama yang belum dijawab setelah refresh atau koneksi putus.
+        $mulaiIndex = max(0, count($questions) - 1);
+        foreach ($questions as $i => $question) {
+            if (! $jawaban->has($question['id'])) {
+                $mulaiIndex = $i;
+                break;
+            }
+        }
+
         $data = [
             'attempt' => $attempt,
             'session' => $attempt->quizSession,
             'questions' => $questions,
+            'mulai_index' => $mulaiIndex,
             'server_now' => now()->getTimestampMs(),
         ];
 
@@ -314,6 +324,8 @@ class AttemptController extends Controller
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
 
+        $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
+
         return response()->json([
             'status' => $attempt->status,
             'selesai' => $attempt->status === 'selesai',
@@ -374,6 +386,20 @@ class AttemptController extends Controller
         $attempt->loadMissing(['user', 'quizSession']);
 
         $tipe = $request->input('tipe');
+
+        // Durasi keluar layar ditempelkan ke kejadian terakhir, bukan kejadian baru,
+        // supaya tidak menambah hitungan pelanggaran.
+        if ($tipe === 'kembali') {
+            $attempt->events()
+                ->whereIn('tipe', ['fullscreen_exit', 'tab_hidden', 'blur_window'])
+                ->whereNull('durasi_detik')
+                ->latest('id')
+                ->first()
+                ?->update(['durasi_detik' => max(0, $request->integer('durasi_detik'))]);
+
+            return response()->json(['ok' => true]);
+        }
+
         $detail = $request->input('detail');
 
         $kejadian = $attempt->events()->create([

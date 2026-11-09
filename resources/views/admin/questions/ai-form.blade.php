@@ -22,16 +22,6 @@
         </a>
     </x-slot:aksi>
 
-    @if ($errors->has('ai_error'))
-        <div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            <div class="flex items-center gap-2 font-semibold">
-                <x-icon name="alert" :size="18" class="text-red-600" />
-                <span>Gagal Generate Soal</span>
-            </div>
-            <p class="mt-1">{{ $errors->first('ai_error') }}</p>
-        </div>
-    @endif
-
     @if ($errors->has('soal') || $errors->has('jumlah') || $errors->has('level'))
         <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             <div class="flex items-center gap-2 font-semibold">
@@ -273,123 +263,10 @@
         </form>
     </div>
 
-    <!-- Modal Progress Generator AI -->
-    <div
-        id="progress-modal"
-        class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs transition-opacity duration-200"
-        aria-modal="true"
-        role="dialog"
-    >
-        <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <!-- Header Progress -->
-            <div class="flex items-center gap-3">
-                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 animate-pulse">
-                    <x-icon name="sparkles" :size="24" />
-                </div>
-                <div>
-                    <h3 class="text-base font-semibold text-slate-900">
-                        AI Sedang Merumuskan Soal
-                    </h3>
-                    <p id="progress-model-info" class="text-xs text-slate-500">
-                        Memproses permintaan via 9router...
-                    </p>
-                </div>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="mt-5">
-                <div class="flex justify-between text-xs font-medium text-slate-600">
-                    <span id="progress-percent-label">Memulai...</span>
-                    <span id="progress-timer">0s</span>
-                </div>
-                <div class="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                        id="progress-bar-fill"
-                        class="h-full bg-indigo-600 transition-all duration-500 ease-out"
-                        style="width: 10%"
-                    ></div>
-                </div>
-            </div>
-
-            <!-- Detailed Steps Activity List -->
-            <div class="mt-6 space-y-3">
-                <div class="progress-step flex items-start gap-3 text-xs" data-step="1">
-                    <div class="step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-bold">
-                        1
-                    </div>
-                    <div>
-                        <div class="step-title font-semibold text-slate-800">
-                            Menghubungkan ke Gateway 9router
-                        </div>
-                        <div class="step-sub text-slate-500">
-                            Mengirim parameter soal, topik, dan teks RPS.
-                        </div>
-                    </div>
-                </div>
-
-                <div class="progress-step flex items-start gap-3 text-xs opacity-40" data-step="2">
-                    <div class="step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 font-bold">
-                        2
-                    </div>
-                    <div>
-                        <div class="step-title font-semibold text-slate-800">
-                            Menganalisis Silabus & Taksonomi Bloom
-                        </div>
-                        <div class="step-sub text-slate-500">
-                            Memetakan capaian pembelajaran ke tingkat kognitif yang dipilih.
-                        </div>
-                    </div>
-                </div>
-
-                <div class="progress-step flex items-start gap-3 text-xs opacity-40" data-step="3">
-                    <div class="step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 font-bold">
-                        3
-                    </div>
-                    <div>
-                        <div class="step-title font-semibold text-slate-800">
-                            Merumuskan Soal, Pilihan Distractor, & Kunci
-                        </div>
-                        <div class="step-sub text-slate-500">
-                            Membuat 4 opsi pilihan ganda dan rubrik penilaian essay.
-                        </div>
-                    </div>
-                </div>
-
-                <div class="progress-step flex items-start gap-3 text-xs opacity-40" data-step="4">
-                    <div class="step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 font-bold">
-                        4
-                    </div>
-                    <div>
-                        <div class="step-title font-semibold text-slate-800">
-                            Validasi Struktur JSON & Lembar Pratinjau
-                        </div>
-                        <div class="step-sub text-slate-500">
-                            Memastikan integritas format data sebelum ditampilkan ke halaman review.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Footer Tip -->
-            <div class="mt-6 rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500 border border-slate-100">
-                Mohon jangan menutup atau me-refresh browser. Waktu proses berkisar antara 3 - 10 detik tergantung model AI yang digunakan.
-            </div>
-        </div>
-    </div>
-
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const rpsText = document.getElementById('rps_text');
             const charCount = document.getElementById('char-count');
-            const form = document.getElementById('ai-generate-form');
-            const btnSubmit = document.getElementById('btn-submit');
-            const btnText = document.getElementById('btn-text');
-            const modal = document.getElementById('progress-modal');
-            const progressBar = document.getElementById('progress-bar-fill');
-            const percentLabel = document.getElementById('progress-percent-label');
-            const timerLabel = document.getElementById('progress-timer');
-            const modelSelect = document.getElementById('model');
-            const modelInfo = document.getElementById('progress-model-info');
 
             // Quick select Bloom buttons
             const bloomCheckboxes = document.querySelectorAll('.bloom-checkbox');
@@ -483,89 +360,6 @@
                 }
             });
             updateEstimasi();
-
-            // Form submit & progress modal
-            if (form && btnSubmit && modal) {
-                form.addEventListener('submit', function (e) {
-                    // Check at least one bloom checkbox
-                    const anyBloomChecked = Array.from(bloomCheckboxes).some(cb => cb.checked);
-                    if (!anyBloomChecked) {
-                        e.preventDefault();
-                        alert('Silakan pilih minimal satu tingkat Taksonomi Bloom.');
-                        return;
-                    }
-
-                    // Check total questions > 0
-                    const pg = parseInt(document.getElementById('jumlah_pg').value) || 0;
-                    const essay = parseInt(document.getElementById('jumlah_essay').value) || 0;
-                    if (pg + essay < 1) {
-                        e.preventDefault();
-                        alert('Jumlah soal pilihan ganda atau essay minimal 1.');
-                        return;
-                    }
-
-                    // Show progress modal
-                    modal.classList.remove('hidden');
-                    modal.classList.add('flex');
-                    btnSubmit.disabled = true;
-
-                    if (modelSelect && modelInfo) {
-                        modelInfo.textContent = 'Model: ' + modelSelect.value;
-                    }
-
-                    let seconds = 0;
-                    const timerInterval = setInterval(() => {
-                        seconds++;
-                        if (timerLabel) timerLabel.textContent = seconds + 's';
-                    }, 1000);
-
-                    // Step transitions based on elapsed time
-                    const steps = document.querySelectorAll('.progress-step');
-
-                    const setStepActive = (stepNum, percent, label) => {
-                        if (progressBar) progressBar.style.width = percent + '%';
-                        if (percentLabel) percentLabel.textContent = label;
-
-                        steps.forEach(st => {
-                            const n = parseInt(st.dataset.step);
-                            const icon = st.querySelector('.step-icon');
-                            if (n < stepNum) {
-                                st.classList.remove('opacity-40');
-                                if (icon) {
-                                    icon.className = 'step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-xs';
-                                    icon.innerHTML = '✓';
-                                }
-                            } else if (n === stepNum) {
-                                st.classList.remove('opacity-40');
-                                if (icon) {
-                                    icon.className = 'step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs animate-pulse';
-                                    icon.innerHTML = n;
-                                }
-                            } else {
-                                st.classList.add('opacity-40');
-                                if (icon) {
-                                    icon.className = 'step-icon mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 font-bold text-xs';
-                                    icon.innerHTML = n;
-                                }
-                            }
-                        });
-                    };
-
-                    setStepActive(1, 15, 'Menghubungkan ke 9router...');
-
-                    setTimeout(() => {
-                        setStepActive(2, 40, 'Menganalisis silabus RPS...');
-                    }, 1500);
-
-                    setTimeout(() => {
-                        setStepActive(3, 70, 'Menyusun soal & kunci jawaban...');
-                    }, 3500);
-
-                    setTimeout(() => {
-                        setStepActive(4, 90, 'Memvalidasi format JSON...');
-                    }, 6000);
-                });
-            }
         });
     </script>
 </x-layouts.admin>

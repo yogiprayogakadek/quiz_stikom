@@ -13,6 +13,9 @@
                     <span class="font-mono text-slate-500 font-normal">({{ $kejadian->attempt?->user?->username ?? '-' }})</span>
                 </p>
                 <p class="text-slate-600 mt-0.5">{{ $label['pesan'] }}</p>
+                @if ($kejadian->durasi_detik)
+                    <p class="text-slate-500 mt-0.5">Kembali ke layar ujian setelah {{ $kejadian->durasi_detik }} detik.</p>
+                @endif
             </div>
         </div>
         <span class="font-mono text-[11px] text-slate-400 shrink-0">

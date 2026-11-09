@@ -134,8 +134,8 @@
     </section>
 
     <section class="mt-6 card" aria-labelledby="persentase-soal">
-        <h2 id="persentase-soal" class="text-2xl">Persentase benar soal pilihan ganda</h2>
-        <p class="mt-1 text-base text-ink-muted">Diurutkan dari soal tersulit. Penyebut mengikuti jumlah peserta yang benar-benar menerima soal tersebut. Essay dinilai manual dan tidak masuk statistik ini.</p>
+        <h2 id="persentase-soal" class="text-2xl">Analisis butir soal pilihan ganda</h2>
+        <p class="mt-1 text-base text-ink-muted">Diurutkan dari soal tersulit. Penyebut mengikuti jumlah peserta yang benar-benar menerima soal tersebut. Daya beda membandingkan 27% peserta dengan skor tertinggi dan terendah (butuh minimal 6 peserta). Essay dinilai manual dan tidak masuk statistik ini.</p>
 
         @if ($essayBelumDinilai > 0)
             <div class="mt-4 rounded-2xl bg-sun-soft px-4 py-3">
@@ -164,6 +164,10 @@
                                 <span style="width: {{ $stat['persen'] }}%"></span>
                             </div>
                             <span class="w-16 text-right font-mono text-base font-bold text-ink">{{ $stat['persen'] }}%</span>
+                        </div>
+                        <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
+                            <span>Rata-rata waktu: <strong class="text-ink">{{ $stat['rata_detik'] !== null ? $stat['rata_detik'].' dtk' : '—' }}</strong></span>
+                            <span>Daya beda: <strong class="text-ink">{{ $stat['daya_beda'] !== null ? number_format($stat['daya_beda'], 2) : 'butuh minimal 6 peserta' }}</strong></span>
                         </div>
                     </li>
                 @endforeach

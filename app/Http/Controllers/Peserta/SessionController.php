@@ -73,6 +73,8 @@ class SessionController extends Controller
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 
+        $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
+
         $base = [
             'status' => $session->status,
             'fase' => $session->fase,

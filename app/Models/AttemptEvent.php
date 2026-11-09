@@ -21,6 +21,7 @@ class AttemptEvent extends Model
         'attempt_id',
         'tipe',
         'detail',
+        'durasi_detik',
         'ip',
         'created_at',
     ];
@@ -29,6 +30,7 @@ class AttemptEvent extends Model
     {
         return [
             'created_at' => 'datetime',
+            'durasi_detik' => 'integer',
         ];
     }
 

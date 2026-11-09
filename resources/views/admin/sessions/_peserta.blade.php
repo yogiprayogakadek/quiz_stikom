@@ -31,6 +31,13 @@
                                 <div class="mt-2">
                                     <span class="pill pill-sun">Belum bergabung</span>
                                 </div>
+                            @elseif (in_array($session->status, ['lobby', 'berjalan'], true))
+                                @php
+                                    $online = $attempt->isOnline();
+                                @endphp
+                                <div class="mt-2">
+                                    <span class="pill {{ $online ? 'pill-leaf' : 'pill-neutral' }}">{{ $online ? 'Online' : 'Offline' }}</span>
+                                </div>
                             @endif
                         </td>
                         <td class="font-mono">{{ $attempt->jumlah_benar }}</td>

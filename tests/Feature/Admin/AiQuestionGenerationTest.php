@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Jobs\GenerateAiQuestionsJob;
+use App\Models\AiGeneration;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
@@ -9,6 +11,7 @@ use App\Models\User;
 use App\Services\AiQuestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
 
@@ -79,25 +82,9 @@ class AiQuestionGenerationTest extends TestCase
         $response->assertSessionHasErrors(['soal']);
     }
 
-    public function test_ai_generate_returns_preview_view(): void
+    public function test_ai_generate_mengantrekan_job_dan_pratinjau_menampilkan_hasil(): void
     {
-        $mockService = Mockery::mock(AiQuestionService::class);
-        $mockService->shouldReceive('generateQuestions')
-            ->once()
-            ->andReturn([
-                [
-                    'teks' => 'Apa itu HTTP?',
-                    'tipe' => 'pilihan_ganda',
-                    'bobot' => 1,
-                    'durasi_detik' => 60,
-                    'pembahasan' => 'Protokol transfer hypertext',
-                    'opsi' => [
-                        ['teks' => 'Hypertext Transfer Protocol', 'is_correct' => true],
-                        ['teks' => 'High Text Protocol', 'is_correct' => false],
-                    ],
-                ],
-            ]);
-        $this->app->instance(AiQuestionService::class, $mockService);
+        Queue::fake();
 
         $payload = [
             'model' => 'ag/gemini-3.8-flash-medium',
@@ -114,14 +101,73 @@ class AiQuestionGenerationTest extends TestCase
             ->withSession(['auth_token' => 'admin-token'])
             ->post(route('admin.quizzes.questions.ai.generate', $this->quiz), $payload);
 
+        $generation = AiGeneration::first();
+        $this->assertNotNull($generation);
+        $this->assertSame('pending', $generation->status);
+
+        $response->assertRedirect(route('admin.quizzes.questions.ai.progress', [$this->quiz, $generation]));
+        Queue::assertPushed(GenerateAiQuestionsJob::class, fn ($job) => $job->generationId === $generation->id);
+
+        $mockService = Mockery::mock(AiQuestionService::class);
+        $mockService->shouldReceive('generateQuestions')
+            ->once()
+            ->andReturn([
+                [
+                    'teks' => 'Apa itu HTTP?',
+                    'tipe' => 'pilihan_ganda',
+                    'bobot' => 1,
+                    'durasi_detik' => 60,
+                    'pembahasan' => 'Protokol transfer hypertext',
+                    'opsi' => [
+                        ['teks' => 'Hypertext Transfer Protocol', 'is_correct' => true],
+                        ['teks' => 'High Text Protocol', 'is_correct' => false],
+                    ],
+                ],
+            ]);
+
+        (new GenerateAiQuestionsJob($generation->id))->handle($mockService);
+
+        $generation->refresh();
+        $this->assertSame('selesai', $generation->status);
+        $this->assertCount(1, $generation->questions);
+
+        $preview = $this->actingAs($this->admin)
+            ->withSession(['auth_token' => 'admin-token'])
+            ->get(route('admin.quizzes.questions.ai.preview', [$this->quiz, $generation]));
+
+        $preview->assertOk();
+        $preview->assertViewIs('admin.questions.ai-preview');
+        $preview->assertViewHas('questions');
+        $preview->assertViewHas('params');
+        $this->assertEquals(100, $preview->viewData('params')['nilai_maksimal']);
+        $preview->assertSee('Apa itu HTTP?');
+        $preview->assertSee('Hypertext Transfer Protocol');
+        $preview->assertSee('Simpan Soal ke Kuis');
+    }
+
+    public function test_halaman_progres_ai_menampilkan_status_antrean(): void
+    {
+        $generation = AiGeneration::create([
+            'user_id' => $this->admin->id,
+            'quiz_id' => $this->quiz->id,
+            'status' => 'pending',
+            'params' => ['jumlah_pg' => 1, 'jumlah_essay' => 0, 'nilai_maksimal' => 100],
+            'total' => 1,
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->withSession(['auth_token' => 'admin-token'])
+            ->get(route('admin.quizzes.questions.ai.progress', [$this->quiz, $generation]));
+
         $response->assertOk();
-        $response->assertViewIs('admin.questions.ai-preview');
-        $response->assertViewHas('questions');
-        $response->assertViewHas('params');
-        $this->assertEquals(100, $response->viewData('params')['nilai_maksimal']);
-        $response->assertSee('Apa itu HTTP?');
-        $response->assertSee('Hypertext Transfer Protocol');
-        $response->assertSee('Simpan Soal ke Kuis');
+        $response->assertViewIs('admin.questions.ai-progress');
+        $response->assertSee('AI sedang menyusun soal');
+
+        $this->actingAs($this->admin)
+            ->withSession(['auth_token' => 'admin-token'])
+            ->getJson(route('admin.quizzes.questions.ai.state', [$this->quiz, $generation]))
+            ->assertOk()
+            ->assertJsonPath('status', 'pending');
     }
 
     public function test_ai_store_saves_selected_questions_and_options(): void

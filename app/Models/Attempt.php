@@ -17,6 +17,7 @@ class Attempt extends Model
         'batas_akhir_at',
         'selesai_at',
         'bergabung_at',
+        'last_seen_at',
         'jumlah_benar',
         'skor_total',
         'poin_total',
@@ -30,6 +31,7 @@ class Attempt extends Model
             'batas_akhir_at' => 'integer',
             'selesai_at' => 'integer',
             'bergabung_at' => 'datetime',
+            'last_seen_at' => 'integer',
             'jumlah_benar' => 'integer',
             'skor_total' => 'integer',
             'poin_total' => 'integer',
@@ -53,6 +55,12 @@ class Attempt extends Model
     public function scopeBergabung(Builder $query): Builder
     {
         return $query->whereNotNull('bergabung_at');
+    }
+
+    public function isOnline(int $jendelaMs = 30000): bool
+    {
+        return $this->last_seen_at !== null
+            && $this->last_seen_at >= now()->getTimestampMs() - $jendelaMs;
     }
 
     public function user(): BelongsTo

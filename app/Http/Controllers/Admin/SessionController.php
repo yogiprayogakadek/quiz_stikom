@@ -111,6 +111,7 @@ class SessionController extends Controller
             'peserta' => view('admin.sessions._peserta', $data)->render(),
             'proctoring' => view('admin.sessions._proctoring', $data)->render(),
             'proctoring_count' => $data['kejadianTerbaru']->count(),
+            'online_count' => $data['onlineCount'],
         ]);
     }
 
@@ -151,6 +152,7 @@ class SessionController extends Controller
             'soalAktif' => $soalAktif,
             'sudahMenjawab' => $sudahMenjawab,
             'totalPeserta' => $attempts->whereNotNull('bergabung_at')->count(),
+            'onlineCount' => $attempts->filter(fn (Attempt $attempt) => $attempt->isOnline())->count(),
             'kejadianTerbaru' => $kejadianTerbaru,
         ];
     }

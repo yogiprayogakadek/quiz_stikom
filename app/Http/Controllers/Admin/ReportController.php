@@ -230,6 +230,7 @@ class ReportController extends Controller
                     ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
                     ->whereNull('dinilai_at'),
             ])
+            ->withSum(['events as detik_luar' => fn ($q) => $q->whereNotNull('durasi_detik')], 'durasi_detik')
             ->orderByDesc('skor_total')
             ->orderBy('created_at')
             ->get();
@@ -254,6 +255,7 @@ class ReportController extends Controller
                 'mulai',
                 'selesai',
                 'pelanggaran',
+                'detik_di_luar_layar',
                 'perlu_ditinjau',
             ]);
 
@@ -275,6 +277,7 @@ class ReportController extends Controller
                     $this->waktu($attempt->mulai_at),
                     $this->waktu($attempt->selesai_at),
                     $attempt->events_count,
+                    $attempt->detik_luar ?? 0,
                     $attempt->events_count >= 3 ? 'ya' : 'tidak',
                 ]);
             }
@@ -335,21 +338,76 @@ class ReportController extends Controller
             ->where('tipe', 'pilihan_ganda')
             ->get();
 
-        return $questions->map(function (Question $question) use ($session) {
-            $peserta = AttemptQuestion::query()
-                ->where('question_id', $question->id)
-                ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
-                ->count();
+        if ($questions->isEmpty()) {
+            return [];
+        }
 
-            $benar = Answer::query()
-                ->where('answers.question_id', $question->id)
-                ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
-                ->join('options', 'options.id', '=', 'answers.option_id')
-                ->where('options.is_correct', true)
-                ->count();
+        $attempts = $session->attempts()->bergabung()->get(['id', 'skor_total']);
+        $attemptIds = $attempts->pluck('id')->all();
 
+        $answers = Answer::query()
+            ->whereIn('attempt_id', $attemptIds)
+            ->leftJoin('options', 'options.id', '=', 'answers.option_id')
+            ->get([
+                'answers.attempt_id',
+                'answers.question_id',
+                'answers.waktu_jawab_ms',
+                'options.is_correct',
+            ]);
+
+        $penerima = AttemptQuestion::query()
+            ->whereIn('attempt_id', $attemptIds)
+            ->get(['attempt_id', 'question_id'])
+            ->groupBy('question_id')
+            ->map(fn ($rows) => $rows->pluck('attempt_id')->all());
+
+        $benarPerSoal = $answers
+            ->where('is_correct', true)
+            ->groupBy('question_id')
+            ->map->count();
+
+        // Waktu per soal = selisih waktu_jawab_ms antar jawaban dalam satu attempt.
+        $waktuPerSoal = [];
+        foreach ($answers->groupBy('attempt_id') as $jawabanAttempt) {
+            $sebelumnya = 0;
+            foreach ($jawabanAttempt->sortBy('waktu_jawab_ms') as $jawaban) {
+                $ms = (int) ($jawaban->waktu_jawab_ms ?? 0);
+                $waktuPerSoal[$jawaban->question_id][] = max(0, $ms - $sebelumnya);
+                $sebelumnya = $ms;
+            }
+        }
+
+        // Daya beda: selisih proporsi benar kelompok atas dan bawah (27%).
+        $batas = (int) floor($attempts->count() * 0.27);
+        $kelompokAtas = [];
+        $kelompokBawah = [];
+        if ($attempts->count() >= 6 && $batas >= 1) {
+            $urut = $attempts->sortByDesc('skor_total')->values();
+            $kelompokAtas = $urut->take($batas)->pluck('id')->all();
+            $kelompokBawah = $urut->reverse()->take($batas)->pluck('id')->all();
+        }
+
+        return $questions->map(function (Question $question) use ($answers, $penerima, $benarPerSoal, $waktuPerSoal, $kelompokAtas, $kelompokBawah) {
+            $penerimaSoal = $penerima->get($question->id, []);
+            $peserta = count($penerimaSoal);
+            $benar = (int) ($benarPerSoal[$question->id] ?? 0);
             $persen = $peserta > 0 ? round($benar / $peserta * 100, 1) : 0.0;
             $kategori = $persen < 30 ? 'Sukar' : ($persen <= 70 ? 'Sedang' : 'Mudah');
+
+            $dayaBeda = null;
+            if ($kelompokAtas !== [] && $kelompokBawah !== []) {
+                $atas = count(array_intersect($penerimaSoal, $kelompokAtas));
+                $bawah = count(array_intersect($penerimaSoal, $kelompokBawah));
+
+                if ($atas > 0 && $bawah > 0) {
+                    $jawabanSoal = $answers->where('question_id', $question->id)->where('is_correct', true);
+                    $benarAtas = $jawabanSoal->whereIn('attempt_id', $kelompokAtas)->count();
+                    $benarBawah = $jawabanSoal->whereIn('attempt_id', $kelompokBawah)->count();
+                    $dayaBeda = round($benarAtas / $atas - $benarBawah / $bawah, 2);
+                }
+            }
+
+            $waktu = $waktuPerSoal[$question->id] ?? [];
 
             return [
                 'teks' => $question->teks,
@@ -357,6 +415,8 @@ class ReportController extends Controller
                 'benar' => $benar,
                 'persen' => $persen,
                 'kategori' => $kategori,
+                'daya_beda' => $dayaBeda,
+                'rata_detik' => $waktu === [] ? null : (int) round(array_sum($waktu) / count($waktu) / 1000),
             ];
         })->sortBy('persen')->values()->all();
     }

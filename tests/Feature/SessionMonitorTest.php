@@ -259,6 +259,81 @@ class SessionMonitorTest extends TestCase
         $this->assertStringContainsString($peserta->nama, $response->json('proctoring'));
     }
 
+    public function test_polling_peserta_menandai_online_di_monitor_admin(): void
+    {
+        [$admin, $session, $attempt, $peserta] = $this->sesiAcakBerjalan();
+        $peserta->update(['current_session_token' => 'token-peserta']);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->getJson(route('peserta.attempt.status', $attempt))
+            ->assertOk();
+
+        $this->assertNotNull($attempt->fresh()->last_seen_at);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->getJson(route('admin.sessions.monitor', $session));
+
+        $response->assertOk();
+        $this->assertSame(1, $response->json('online_count'));
+        $this->assertStringContainsString('Online', $response->json('peserta'));
+    }
+
+    public function test_kembali_mencatat_durasi_keluar_layar_pada_kejadian_terakhir(): void
+    {
+        [$admin, $session, $attempt, $peserta] = $this->sesiAcakBerjalan();
+        $peserta->update(['current_session_token' => 'token-peserta']);
+
+        $kejadian = AttemptEvent::create([
+            'attempt_id' => $attempt->id,
+            'tipe' => 'fullscreen_exit',
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.events', $attempt), [
+                'tipe' => 'kembali',
+                'durasi_detik' => 12,
+            ])
+            ->assertOk();
+
+        $this->assertSame(12, $kejadian->fresh()->durasi_detik);
+        $this->assertSame(1, $attempt->events()->count());
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('12 detik di luar layar');
+    }
+
+    public function test_halaman_ujian_lanjut_di_soal_pertama_yang_belum_dijawab(): void
+    {
+        [$admin, $session, $attempt, $peserta] = $this->sesiAcakBerjalan();
+        $peserta->update(['current_session_token' => 'token-peserta']);
+
+        $question = Question::create([
+            'quiz_id' => $session->quiz_id,
+            'teks' => 'Soal kedua',
+            'durasi_detik' => 60,
+        ]);
+
+        AttemptQuestion::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'urutan' => 2,
+            'urutan_opsi_json' => [],
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertViewHas('mulai_index', 1);
+    }
+
     private function sesiAcakBerjalan(): array
     {
         $admin = User::create([

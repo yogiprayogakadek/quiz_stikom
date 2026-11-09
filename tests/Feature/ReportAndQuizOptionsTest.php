@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Answer;
 use App\Models\Attempt;
+use App\Models\AttemptQuestion;
 use App\Models\Kelas;
 use App\Models\Option;
 use App\Models\Question;
@@ -248,5 +250,95 @@ class ReportAndQuizOptionsTest extends TestCase
         $this->assertStringContainsString('Citra Lestari', $content);
         $this->assertStringContainsString('citra123', $content);
         $this->assertStringContainsString('100', $content);
+    }
+
+    public function test_laporan_menampilkan_daya_beda_dan_rata_rata_waktu_soal(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Analisis',
+            'username' => 'admin_analisis',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'token-analisis',
+        ]);
+
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Analisis Butir',
+            'jumlah_soal' => 1,
+            'created_by' => $admin->id,
+        ]);
+
+        $question = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal untuk analisis butir',
+            'tipe' => 'pilihan_ganda',
+            'bobot' => 1,
+            'durasi_detik' => 60,
+        ]);
+
+        $benar = Option::create([
+            'question_id' => $question->id,
+            'teks' => 'Jawaban benar',
+            'is_correct' => true,
+        ]);
+
+        $salah = Option::create([
+            'question_id' => $question->id,
+            'teks' => 'Jawaban salah',
+            'is_correct' => false,
+        ]);
+
+        $session = QuizSession::create([
+            'quiz_id' => $quiz->id,
+            'nama' => 'Sesi Analisis',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-analisis-sesi',
+            'created_by' => $admin->id,
+        ]);
+
+        foreach (range(1, 6) as $nomor) {
+            $peserta = User::create([
+                'nama' => 'Peserta Analisis '.$nomor,
+                'username' => 'analisis-'.$nomor,
+                'password' => Hash::make('password'),
+                'role' => 'peserta',
+            ]);
+
+            $attempt = Attempt::create([
+                'user_id' => $peserta->id,
+                'quiz_session_id' => $session->id,
+                'status' => 'selesai',
+                'bergabung_at' => now(),
+                'skor_total' => $nomor * 10,
+            ]);
+
+            AttemptQuestion::create([
+                'attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'urutan' => 1,
+                'urutan_opsi_json' => [$benar->id, $salah->id],
+            ]);
+
+            Answer::create([
+                'attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'option_id' => $nomor >= 4 ? $benar->id : $salah->id,
+                'waktu_jawab_ms' => $nomor * 1000,
+                'skor' => 0,
+                'answered_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-analisis'])
+            ->get(route('admin.reports.session', $session));
+
+        $response->assertOk();
+        $response->assertSee('Analisis butir soal pilihan ganda');
+        $response->assertSee('Rata-rata waktu');
+        $response->assertSee('Daya beda');
+        $response->assertSee('1.00');
+        $response->assertSee('4 dtk');
     }
 }

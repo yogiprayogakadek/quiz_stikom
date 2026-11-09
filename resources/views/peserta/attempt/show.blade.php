@@ -2,7 +2,7 @@
     <script>
         window.kuisAcak = (config) => ({
             questions: config.questions,
-            index: 0,
+            index: config.mulaiIndex ?? 0,
             jawaban: config.jawaban,
             jawabanTeks: config.jawabanTeks,
             teksTersimpan: { ...config.jawabanTeks },
@@ -22,6 +22,7 @@
             selesaiOtomatis: false,
             konfirmasiSelesai: false,
             kejadianTerakhir: {},
+            keluarSejak: 0,
             sudahMulai: false,
             layarPenuhAktif: false,
             peringatanKeluar: false,
@@ -606,6 +607,9 @@
                 }
                 this.peringatanKeluar = true;
                 this.sisaToleransi = 10;
+                if (! this.keluarSejak) {
+                    this.keluarSejak = Date.now();
+                }
                 this.timerToleransi = setInterval(() => {
                     this.sisaToleransi--;
                     if (this.sisaToleransi <= 0) {
@@ -614,6 +618,18 @@
                 }, 1000);
             },
             batalkanToleransi() {
+                if (this.keluarSejak) {
+                    const detik = Math.round((Date.now() - this.keluarSejak) / 1000);
+                    this.keluarSejak = 0;
+
+                    if (detik > 0 && ! this.berhenti && ! this.memprosesPelanggaran) {
+                        window.kuisFetch(config.eventUrl, {
+                            method: 'POST',
+                            body: { tipe: 'kembali', durasi_detik: detik }
+                        });
+                    }
+                }
+
                 if (this.timerToleransi) {
                     clearInterval(this.timerToleransi);
                     this.timerToleransi = null;
@@ -625,9 +641,9 @@
                 if (this.memprosesPelanggaran || this.berhenti) {
                     return;
                 }
-                this.batalkanToleransi();
                 this.memprosesPelanggaran = true;
                 this.berhenti = true;
+                this.batalkanToleransi();
                 const form = document.getElementById('form-pelanggaran');
                 if (form) {
                     form.submit();
@@ -709,7 +725,6 @@
     <div
         id="area-kuis"
         x-data="kuisAcak({
-            attemptId: {{ $attempt->id }},
             questions: {{ Illuminate\Support\Js::from($questions) }},
             jawaban: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_option_id']])->filter()->all()) }},
             jawabanTeks: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_teks'] ?? ''])->all()) }},
@@ -718,6 +733,7 @@
             sessionId: {{ $session->id }},
             userId: {{ auth()->id() }},
             attemptId: {{ $attempt->id }},
+            mulaiIndex: {{ $mulai_index }},
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
             statusUrl: '{{ route('peserta.attempt.status', $attempt) }}',

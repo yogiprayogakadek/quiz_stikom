@@ -140,6 +140,8 @@ php artisan route:cache
 php artisan view:cache
 ```
 
+Untuk pembaruan berikutnya, jalankan `./deploy.sh` dari root proyek. Skrip itu menarik kode, memasang dependensi, menjalankan migrasi, membangun aset, dan menyegarkan cache. Reverb dan queue worker tetap dijalankan oleh supervisor/systemd.
+
 ### 2. Nginx dan PHP-FPM
 
 Contoh `/etc/nginx/sites-available/skylearn-kuis`:

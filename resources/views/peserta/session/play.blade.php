@@ -13,6 +13,7 @@
             offset: 0,
             berhenti: false,
             kejadianTerakhir: {},
+            keluarSejak: 0,
             sudahMulai: false,
             layarPenuhAktif: false,
             peringatanKeluar: false,
@@ -282,6 +283,9 @@
                 }
                 this.peringatanKeluar = true;
                 this.sisaToleransi = 10;
+                if (! this.keluarSejak) {
+                    this.keluarSejak = Date.now();
+                }
                 this.timerToleransi = setInterval(() => {
                     this.sisaToleransi--;
                     if (this.sisaToleransi <= 0) {
@@ -290,6 +294,18 @@
                 }, 1000);
             },
             batalkanToleransi() {
+                if (this.keluarSejak) {
+                    const detik = Math.round((Date.now() - this.keluarSejak) / 1000);
+                    this.keluarSejak = 0;
+
+                    if (detik > 0 && ! this.berhenti && ! this.memprosesPelanggaran) {
+                        window.kuisFetch(config.eventUrl, {
+                            method: 'POST',
+                            body: { tipe: 'kembali', durasi_detik: detik }
+                        });
+                    }
+                }
+
                 if (this.timerToleransi) {
                     clearInterval(this.timerToleransi);
                     this.timerToleransi = null;
@@ -301,9 +317,9 @@
                 if (this.memprosesPelanggaran || this.berhenti) {
                     return;
                 }
-                this.batalkanToleransi();
                 this.memprosesPelanggaran = true;
                 this.berhenti = true;
+                this.batalkanToleransi();
                 const form = document.getElementById('form-pelanggaran');
                 if (form) {
                     form.submit();

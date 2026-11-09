@@ -271,6 +271,10 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    <span id="online-count">{{ $onlineCount }}</span> Online
+                </span>
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
                     <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
                     <span id="proctoring-count">{{ $kejadianTerbaru->count() }}</span> Pelanggaran
@@ -302,6 +306,7 @@
                     proctoring: document.getElementById('proctoring-stream-list'),
                 };
                 const proctoringCount = document.getElementById('proctoring-count');
+                const onlineCount = document.getElementById('online-count');
                 let terakhir = null;
 
                 const perbarui = async () => {
@@ -320,6 +325,7 @@
                         if (bagian.peserta) bagian.peserta.innerHTML = data.peserta;
                         if (bagian.proctoring) bagian.proctoring.innerHTML = data.proctoring;
                         if (proctoringCount) proctoringCount.textContent = data.proctoring_count;
+                        if (onlineCount) onlineCount.textContent = data.online_count;
                     } catch (e) {
                         // Jaringan putus sesaat. Putaran berikutnya mencoba lagi.
                     }

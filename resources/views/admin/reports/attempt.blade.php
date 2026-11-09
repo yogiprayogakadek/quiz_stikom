@@ -33,11 +33,19 @@
     <section class="mt-6 card" aria-labelledby="log-kejadian">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 id="log-kejadian" class="text-2xl">Log kejadian</h2>
-            @if ($attempt->events->count() >= 3)
-                <span class="pill pill-coral">Perlu ditinjau</span>
-            @else
-                <span class="pill pill-neutral">{{ $attempt->events->count() }} kejadian</span>
-            @endif
+            <div class="flex flex-wrap items-center gap-2">
+                @php
+                    $detikLuar = $attempt->events->sum(fn ($event) => (int) $event->durasi_detik);
+                @endphp
+                @if ($detikLuar > 0)
+                    <span class="pill pill-sun">{{ $detikLuar }} detik di luar layar</span>
+                @endif
+                @if ($attempt->events->count() >= 3)
+                    <span class="pill pill-coral">Perlu ditinjau</span>
+                @else
+                    <span class="pill pill-neutral">{{ $attempt->events->count() }} kejadian</span>
+                @endif
+            </div>
         </div>
 
         <p class="mt-1 text-base text-ink-muted">Kejadian hanya dicatat. Peserta tidak didiskualifikasi otomatis.</p>
@@ -69,7 +77,12 @@
                             <tr>
                                 <td class="font-mono text-base">{{ $event->created_at?->format('d M Y H:i:s') }}</td>
                                 <td class="font-bold text-ink">{{ $label }}</td>
-                                <td class="text-ink-muted">{{ $event->detail ?? '-' }}</td>
+                                <td class="text-ink-muted">
+                                    {{ $event->detail ?? '-' }}
+                                    @if ($event->durasi_detik)
+                                        <span class="mt-1 block text-sm text-slate-500">{{ $event->durasi_detik }} detik di luar layar</span>
+                                    @endif
+                                </td>
                                 <td class="font-mono text-base">{{ $event->ip ?? '-' }}</td>
                             </tr>
                         @endforeach

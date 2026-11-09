@@ -63,6 +63,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiForm'])->name('quizzes.questions.ai.form');
     Route::post('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiGenerate'])->name('quizzes.questions.ai.generate');
     Route::post('quizzes/{quiz}/questions/ai-store', [QuestionController::class, 'aiStore'])->name('quizzes.questions.ai.store');
+    Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/progress', [QuestionController::class, 'aiProgress'])->name('quizzes.questions.ai.progress');
+    Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/state', [QuestionController::class, 'aiProgressState'])->name('quizzes.questions.ai.state');
+    Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/pratinjau', [QuestionController::class, 'aiPreview'])->name('quizzes.questions.ai.preview');
     Route::resource('quizzes.questions', QuestionController::class);
 
     // Backward-compatible question routes (redirects / fallback if needed)
