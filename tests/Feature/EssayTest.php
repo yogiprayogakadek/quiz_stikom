@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
+use App\Models\AuditLog;
 use App\Models\Option;
 use App\Models\Question;
 use App\Models\Quiz;
@@ -53,6 +54,10 @@ class EssayTest extends TestCase
         $this->assertNotNull($jawabanEssay->dinilai_at);
         $this->assertSame(8, $jawabanEssay->skor);
         $this->assertSame($admin->id, $jawabanEssay->dinilai_oleh);
+        $audit = AuditLog::where('action', 'essay_score_changed')->where('subject_id', $jawabanEssay->id)->firstOrFail();
+        $this->assertNull($audit->metadata['from']);
+        $this->assertSame(8, $audit->metadata['to']);
+        $this->assertSame($admin->id, $audit->actor_id);
     }
 
     public function test_peserta_bisa_menyimpan_dan_menghapus_jawaban_essay(): void
@@ -165,6 +170,16 @@ class EssayTest extends TestCase
         $this->assertSame(91, $answer->ai_confidence);
         $this->assertSame(0, $answer->skor);
         $this->assertNull($answer->dinilai_at);
+        $audit = AuditLog::where('action', 'essay_ai_suggested')->where('subject_id', $answer->id)->firstOrFail();
+        $this->assertSame('ai.example.test', $audit->metadata['provider']);
+        $this->assertSame('test-model', $audit->metadata['model']);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('Riwayat penilaian (1)')
+            ->assertSee('ai.example.test');
     }
 
     /**

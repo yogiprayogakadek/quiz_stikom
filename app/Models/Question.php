@@ -24,6 +24,7 @@ class Question extends Model
         'bobot',
         'pembahasan',
         'kunci_essay',
+        'rubrik_essay',
     ];
 
     protected function casts(): array
@@ -32,6 +33,7 @@ class Question extends Model
             'quiz_id' => 'integer',
             'durasi_detik' => 'integer',
             'bobot' => 'integer',
+            'rubrik_essay' => 'array',
         ];
     }
 

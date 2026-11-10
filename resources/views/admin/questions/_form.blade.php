@@ -3,12 +3,15 @@
     $benarAwal = (int) old('correct', $question?->options->search(fn ($o) => $o->is_correct) ?: 0);
     $tipeAwal = old('tipe', $question?->tipe ?? 'pilihan_ganda');
     $bobotAwal = (int) old('bobot', $question?->bobot ?? ($tipeAwal === 'essay' ? 10 : 1));
+    $rubrikAwal = array_values(old('rubrik_essay', $question?->rubrik_essay ?? []));
 @endphp
 
 <div
     x-data="{
         tipe: {{ Illuminate\Support\Js::from($tipeAwal) }},
+        bobot: {{ $bobotAwal }},
         opsi: {{ Illuminate\Support\Js::from(array_values($opsiAwal)) }},
+        rubrik: {{ Illuminate\Support\Js::from($rubrikAwal) }},
         correct: {{ $benarAwal }},
         tambah() {
             if (this.opsi.length < 6) {
@@ -24,6 +27,14 @@
                     this.correct--;
                 }
             }
+        },
+        tambahKriteria() {
+            if (this.rubrik.length < 10) {
+                this.rubrik.push({ label: '', points: 1 });
+            }
+        },
+        hapusKriteria(index) {
+            this.rubrik.splice(index, 1);
         }
     }"
     class="space-y-6"
@@ -72,7 +83,7 @@
 
         <div>
             <label for="bobot" class="label">Bobot / nilai maksimal</label>
-            <input id="bobot" name="bobot" type="number" min="1" max="1000" value="{{ $bobotAwal }}" class="input" required x-on:change="if (tipe === 'essay' && $event.target.value === '1') { $event.target.value = 10 }" @error('bobot') aria-invalid="true" @enderror>
+            <input id="bobot" name="bobot" type="number" min="1" max="1000" value="{{ $bobotAwal }}" class="input" required x-model.number="bobot" x-on:change="if (tipe === 'essay' && bobot === 1) { bobot = 10 }" @error('bobot') aria-invalid="true" @enderror>
             <p class="help mt-2">Poin jika benar untuk pilihan ganda, atau nilai maksimal untuk essay. Mode Serempak tetap memakai poin kecepatan.</p>
             @error('bobot') <p class="field-error">{{ $message }}</p> @enderror
         </div>
@@ -142,10 +153,49 @@
         @error('correct') <p class="field-error">{{ $message }}</p> @enderror
     </fieldset>
 
-    <div x-show="tipe === 'essay'" x-cloak>
-        <label for="kunci_essay" class="label">Kunci / panduan penilaian (opsional)</label>
+    <div x-show="tipe === 'essay'" x-cloak class="space-y-5">
+        <div>
+        <label for="kunci_essay" class="label">Jawaban acuan (opsional)</label>
         <textarea id="kunci_essay" name="kunci_essay" rows="4" class="input" maxlength="5000" x-bind:disabled="tipe !== 'essay'" @error('kunci_essay') aria-invalid="true" @enderror>{{ old('kunci_essay', $question?->kunci_essay) }}</textarea>
-        <p class="help mt-2">Dipakai admin saat menilai. Tidak ditampilkan ke peserta kecuali pembahasan sesi diaktifkan.</p>
+        <p class="help mt-2">Contoh jawaban yang benar. Tidak ditampilkan ke peserta kecuali pembahasan sesi diaktifkan.</p>
         @error('kunci_essay') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <fieldset class="border-t border-outline pt-5">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <legend class="label">Kriteria penilaian</legend>
+                    <p class="help">Opsional. Total poin kriteria harus sama dengan nilai maksimal essay.</p>
+                </div>
+                <button type="button" class="btn btn-secondary" x-on:click="tambahKriteria()" x-bind:disabled="rubrik.length >= 10">
+                    <x-icon name="plus" :size="18" />
+                    Tambah kriteria
+                </button>
+            </div>
+
+            <div class="mt-3 divide-y divide-outline border-y border-outline">
+                <template x-for="(criterion, index) in rubrik" :key="index">
+                    <div class="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
+                        <div>
+                            <label class="label" x-bind:for="'rubrik-label-' + index">Kriteria <span x-text="index + 1"></span></label>
+                            <input type="text" x-bind:id="'rubrik-label-' + index" x-bind:name="'rubrik_essay[' + index + '][label]'" x-model="criterion.label" class="input" maxlength="200" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'">
+                        </div>
+                        <div>
+                            <label class="label" x-bind:for="'rubrik-points-' + index">Poin maksimal</label>
+                            <input type="number" x-bind:id="'rubrik-points-' + index" x-bind:name="'rubrik_essay[' + index + '][points]'" x-model.number="criterion.points" class="input" min="1" max="1000" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'">
+                        </div>
+                        <button type="button" class="btn btn-ghost min-h-11 px-3 text-coral-deep" x-on:click="hapusKriteria(index)" x-bind:aria-label="'Hapus kriteria ' + (index + 1)">
+                            <x-icon name="x" :size="18" />
+                        </button>
+                    </div>
+                </template>
+                <p x-show="rubrik.length === 0" class="py-4 text-sm text-ink-muted">Belum ada kriteria. Admin tetap dapat memberi nilai total secara manual.</p>
+            </div>
+            <p x-show="rubrik.length > 0" class="mt-2 text-sm font-semibold" x-bind:class="rubrik.reduce((total, item) => total + (Number(item.points) || 0), 0) === Number(bobot) ? 'text-leaf-deep' : 'text-coral-deep'">
+                Total kriteria: <span x-text="rubrik.reduce((total, item) => total + (Number(item.points) || 0), 0)"></span> / <span x-text="bobot"></span> poin
+            </p>
+            @error('rubrik_essay') <p class="field-error">{{ $message }}</p> @enderror
+            @error('rubrik_essay.*') <p class="field-error">{{ $message }}</p> @enderror
+        </fieldset>
     </div>
 </div>

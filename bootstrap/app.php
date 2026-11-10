@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureOrganizationMember;
+use App\Http\Middleware\EnsureEmailVerifiedWhenPresent;
 use App\Http\Middleware\EnsureOrganizationOwner;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePlatformAdmin;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureSingleSession::class,
             PreventAccessDuringMaintenance::class,
             EnsurePasswordChanged::class,
+            EnsureEmailVerifiedWhenPresent::class,
         ]);
 
         $middleware->alias([

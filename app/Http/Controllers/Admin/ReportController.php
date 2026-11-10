@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
+use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\QuizSession;
 use App\Services\AiQuestionService;
@@ -105,8 +106,17 @@ class ReportController extends Controller
 
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
+        $history = AuditLog::query()
+            ->where('organization_id', $attempt->organization_id)
+            ->where('subject_type', 'answer')
+            ->whereIn('subject_id', $jawaban->pluck('id'))
+            ->whereIn('action', ['essay_score_changed', 'essay_ai_suggested'])
+            ->with('actor')
+            ->latest()
+            ->get()
+            ->groupBy('subject_id');
 
-        $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban) {
+        $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban, $history) {
             $question = $aq->question;
             $answer = $jawaban->get($question->id);
             $essay = $question->isEssay();
@@ -121,6 +131,7 @@ class ReportController extends Controller
                 'jawaban_saya' => $essay ? $answer?->jawaban_teks : $answer?->option?->teks,
                 'jawaban_benar' => $essay ? null : $question->correctOption()?->teks,
                 'kunci_essay' => $essay ? $question->kunci_essay : null,
+                'rubrik_essay' => $essay ? ($question->rubrik_essay ?? []) : [],
                 'benar' => $essay ? null : ($answer?->option?->is_correct === true),
                 'dinilai_at' => $answer?->dinilai_at,
                 'skor' => $answer?->skor ?? 0,
@@ -128,6 +139,7 @@ class ReportController extends Controller
                 'ai_confidence' => $answer?->ai_confidence,
                 'ai_feedback' => $answer?->ai_feedback,
                 'ai_reviewed_at' => $answer?->ai_reviewed_at,
+                'history' => $answer ? ($history->get($answer->id) ?? collect()) : collect(),
             ];
         });
 
@@ -187,11 +199,20 @@ class ReportController extends Controller
                 continue;
             }
 
+            $previousScore = $answer->dinilai_at ? $answer->skor : null;
             $answer->update([
                 'skor' => (int) $nilai,
                 'dinilai_at' => now(),
                 'dinilai_oleh' => $request->user()->id,
             ]);
+            AuditLog::record('essay_score_changed', 'answer', $answer->id, [
+                'attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'from' => $previousScore,
+                'to' => (int) $nilai,
+                'ai_suggested_score' => $answer->ai_suggested_score,
+                'ai_model' => $answer->ai_model,
+            ], $attempt->organization_id);
         }
 
         if ($errors !== []) {
@@ -238,6 +259,7 @@ class ReportController extends Controller
             $suggestion = $ai->evaluateEssay(
                 $answer->question->teks,
                 $answer->question->kunci_essay,
+                $answer->question->rubrik_essay ?? [],
                 $answer->jawaban_teks,
                 (int) $answer->question->bobot,
             );
@@ -252,6 +274,14 @@ class ReportController extends Controller
             'ai_model' => $suggestion['model'],
             'ai_reviewed_at' => now(),
         ]);
+        AuditLog::record('essay_ai_suggested', 'answer', $answer->id, [
+            'attempt_id' => $answer->attempt_id,
+            'question_id' => $answer->question_id,
+            'score' => $suggestion['score'],
+            'confidence' => $suggestion['confidence'],
+            'model' => $suggestion['model'],
+            'provider' => $suggestion['provider'],
+        ], $answer->attempt->organization_id);
 
         return back()->with('sukses', 'Saran AI dibuat. Periksa hasilnya sebelum menyimpan nilai final.');
     }

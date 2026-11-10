@@ -201,7 +201,7 @@
                         </div>
 
                         {{-- Remember Me --}}
-                        <div class="flex items-center justify-between pt-1">
+                        <div class="flex items-center justify-between gap-3 pt-1">
                             <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-ink-muted select-none">
                                 <input
                                     type="checkbox"
@@ -211,6 +211,9 @@
                                 >
                                 <span>Ingat saya di perangkat ini</span>
                             </label>
+                            <a href="{{ route('password.request') }}" class="text-xs font-semibold text-brand-deep underline-offset-2 hover:underline">
+                                Lupa password?
+                            </a>
                         </div>
 
                         {{-- Submit Button --}}

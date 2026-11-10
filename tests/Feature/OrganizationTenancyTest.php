@@ -71,12 +71,14 @@ class OrganizationTenancyTest extends TestCase
                 'timezone' => 'Asia/Jakarta',
                 'owner_name' => 'Owner Sekolah',
                 'owner_username' => 'owner_harapan',
+                'owner_email' => 'owner-harapan@example.test',
                 'owner_password' => 'rahasia123',
             ])
             ->assertRedirect();
 
         $organization = Organization::where('slug', 'sekolah-harapan')->firstOrFail();
         $owner = User::where('username', 'owner_harapan')->firstOrFail();
+        $this->assertSame('owner-harapan@example.test', $owner->email);
         $this->assertTrue($organization->users()->whereKey($owner->id)->wherePivot('role', 'owner')->exists());
         $this->assertTrue($owner->must_change_password);
     }
@@ -191,13 +193,22 @@ class OrganizationTenancyTest extends TestCase
             ->post(route('admin.team.store'), [
                 'nama' => 'Admin Kedua',
                 'username' => 'admin_kedua',
+                'email' => 'admin-kedua@example.test',
                 'password' => 'password123',
             ])
             ->assertRedirect();
 
         $admin = User::where('username', 'admin_kedua')->firstOrFail();
+        $this->assertSame('admin-kedua@example.test', $admin->email);
         $this->assertTrue($organization->users()->whereKey($admin->id)->wherePivot('role', 'admin')->exists());
         $this->assertTrue($admin->must_change_password);
+        $this->assertDatabaseHas('audit_logs', [
+            'organization_id' => $organization->id,
+            'action' => 'admin_added',
+            'subject_type' => 'user',
+            'subject_id' => $admin->id,
+            'actor_id' => $owner->id,
+        ]);
     }
 
     public function test_admin_baru_di_organisasi_tunggal_tidak_menjadi_owner(): void
@@ -217,6 +228,7 @@ class OrganizationTenancyTest extends TestCase
             ->post(route('admin.team.store'), [
                 'nama' => 'Admin Terbatas',
                 'username' => 'admin_terbatas',
+                'email' => 'admin-terbatas@example.test',
                 'password' => 'password123',
             ])
             ->assertRedirect();

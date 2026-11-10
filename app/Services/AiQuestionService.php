@@ -210,9 +210,10 @@ PROMPT;
     }
 
     /**
-     * @return array{score: int, confidence: int, feedback: string, model: string}
+     * @param  array<int, array{label: string, points: int}>  $criteria
+     * @return array{score: int, confidence: int, feedback: string, model: string, provider: string}
      */
-    public function evaluateEssay(string $question, ?string $rubric, string $answer, int $maxScore): array
+    public function evaluateEssay(string $question, ?string $referenceAnswer, array $criteria, string $answer, int $maxScore): array
     {
         if (blank($this->apiKey)) {
             throw new RuntimeException('API key AI belum dikonfigurasi.');
@@ -224,7 +225,13 @@ Kembalikan JSON valid saja dengan bentuk:
 {"score":0,"confidence":0,"feedback":"Alasan singkat dalam bahasa Indonesia."}
 score harus bilangan bulat dari 0 sampai nilai maksimum. confidence harus bilangan bulat dari 0 sampai 100. Jangan menebak fakta di luar rubrik.
 PROMPT;
-        $userPrompt = "Pertanyaan:\n{$question}\n\nRubrik:\n".($rubric ?: 'Tidak ada rubrik khusus.')."\n\nJawaban peserta:\n{$answer}\n\nNilai maksimum: {$maxScore}";
+        $criteriaText = $criteria === []
+            ? 'Tidak ada kriteria terstruktur.'
+            : implode("\n", array_map(
+                fn (array $criterion) => '- '.$criterion['label'].' (maksimal '.$criterion['points'].' poin)',
+                $criteria,
+            ));
+        $userPrompt = "Pertanyaan:\n{$question}\n\nJawaban acuan:\n".($referenceAnswer ?: 'Tidak ada jawaban acuan.')."\n\nKriteria:\n{$criteriaText}\n\nJawaban peserta:\n{$answer}\n\nNilai maksimum: {$maxScore}";
 
         try {
             $response = Http::withToken($this->apiKey)
@@ -256,6 +263,7 @@ PROMPT;
             'confidence' => max(0, min(100, (int) $data['confidence'])),
             'feedback' => Str::limit(trim((string) $data['feedback']), 1500, ''),
             'model' => $this->defaultModel,
+            'provider' => parse_url($this->baseUrl, PHP_URL_HOST) ?: $this->baseUrl,
         ];
     }
 

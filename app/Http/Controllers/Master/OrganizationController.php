@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Master;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -38,10 +39,15 @@ class OrganizationController extends Controller
             'timezone' => ['required', 'timezone:all'],
             'owner_name' => ['required', 'string', 'max:120'],
             'owner_username' => ['required', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')],
+            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'owner_password' => ['nullable', 'string', Password::min(8)],
+        ], [
+            'owner_email.required' => 'Email owner wajib diisi.',
+            'owner_email.email' => 'Format email owner tidak valid.',
+            'owner_email.unique' => 'Email owner sudah dipakai akun lain.',
         ]);
 
-        $temporaryPassword = $data['owner_password'] ?: Str::password(12, symbols: false);
+        $temporaryPassword = $data['owner_password'] ?? Str::password(12, symbols: false);
 
         [$organization, $owner] = DB::transaction(function () use ($data, $temporaryPassword) {
             $organization = Organization::create([
@@ -54,6 +60,7 @@ class OrganizationController extends Controller
             $owner = User::create([
                 'nama' => $data['owner_name'],
                 'username' => $data['owner_username'],
+                'email' => $data['owner_email'],
                 'password' => $temporaryPassword,
                 'role' => 'admin',
                 'must_change_password' => true,
@@ -61,6 +68,11 @@ class OrganizationController extends Controller
             $organization->users()->syncWithoutDetaching([
                 $owner->id => ['role' => 'owner', 'status' => 'active'],
             ]);
+            AuditLog::record('organization_created', 'organization', $organization->id, [
+                'name' => $organization->name,
+                'owner_id' => $owner->id,
+                'owner_username' => $owner->username,
+            ], $organization->id);
 
             return [$organization, $owner];
         });
@@ -73,7 +85,13 @@ class OrganizationController extends Controller
     public function updateStatus(Request $request, Organization $organization): RedirectResponse
     {
         $data = $request->validate(['is_active' => ['required', 'boolean']]);
+        $previous = $organization->is_active;
         $organization->update(['is_active' => $request->boolean('is_active')]);
+        AuditLog::record('organization_status_changed', 'organization', $organization->id, [
+            'name' => $organization->name,
+            'from' => $previous,
+            'to' => $organization->is_active,
+        ], $organization->id);
 
         return back()->with(
             'sukses',

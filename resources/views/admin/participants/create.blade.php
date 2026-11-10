@@ -23,6 +23,13 @@
         </div>
 
         <div>
+            <label for="email" class="label">Email</label>
+            <input id="email" name="email" type="email" value="{{ old('email') }}" class="input" required maxlength="255" autocomplete="email" placeholder="nama@contoh.com" @error('email') aria-invalid="true" @enderror>
+            <p class="help mt-2">Dipakai untuk verifikasi akun dan reset password mandiri.</p>
+            @error('email') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
             <label for="password" class="label">Password (opsional)</label>
             <input id="password" name="password" type="text" class="input" autocomplete="new-password" @error('password') aria-invalid="true" @enderror>
             <p class="help mt-2">Kosongkan untuk membuat password acak 8 karakter. Password hasil buatan akan ditampilkan sekali setelah disimpan.</p>

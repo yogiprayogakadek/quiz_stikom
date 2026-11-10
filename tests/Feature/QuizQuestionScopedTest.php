@@ -126,6 +126,53 @@ class QuizQuestionScopedTest extends TestCase
         $this->assertFalse($question1->fresh()->trashed());
     }
 
+    public function test_admin_dapat_menyimpan_rubrik_essay_dengan_total_sesuai_nilai_maksimal(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Rubrik',
+            'username' => 'admin-rubrik',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-rubrik-token',
+        ]);
+        $quiz = Quiz::create(['judul' => 'Kuis Rubrik', 'created_by' => $admin->id]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), [
+                'teks' => 'Jelaskan perlindungan data saat transit.',
+                'tipe' => 'essay',
+                'bobot' => 10,
+                'durasi_detik' => 120,
+                'kunci_essay' => 'Data dilindungi dengan TLS.',
+                'rubrik_essay' => [
+                    ['label' => 'Menjelaskan tujuan TLS', 'points' => 4],
+                    ['label' => 'Menjelaskan enkripsi transit', 'points' => 6],
+                ],
+            ])
+            ->assertRedirect();
+
+        $question = Question::where('teks', 'Jelaskan perlindungan data saat transit.')->firstOrFail();
+        $this->assertSame('Data dilindungi dengan TLS.', $question->kunci_essay);
+        $this->assertSame([
+            ['label' => 'Menjelaskan tujuan TLS', 'points' => 4],
+            ['label' => 'Menjelaskan enkripsi transit', 'points' => 6],
+        ], $question->rubrik_essay);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), [
+                'teks' => 'Rubrik tidak seimbang.',
+                'tipe' => 'essay',
+                'bobot' => 10,
+                'durasi_detik' => 120,
+                'rubrik_essay' => [
+                    ['label' => 'Kriteria tunggal', 'points' => 5],
+                ],
+            ])
+            ->assertSessionHasErrors('rubrik_essay');
+    }
+
     public function test_deleting_quiz_cascades_to_its_questions(): void
     {
         $admin = User::create([

@@ -16,6 +16,9 @@ class StoreQuestionRequest extends FormRequest
             'durasi_detik' => ['required', 'integer', 'min:5', 'max:300'],
             'pembahasan' => ['nullable', 'string', 'max:5000'],
             'kunci_essay' => ['nullable', 'string', 'max:5000'],
+            'rubrik_essay' => ['nullable', 'array', 'max:10'],
+            'rubrik_essay.*.label' => ['required', 'string', 'max:200'],
+            'rubrik_essay.*.points' => ['required', 'integer', 'min:1', 'max:1000'],
             'opsi' => ['required_if:tipe,pilihan_ganda', 'array', 'min:2', 'max:6'],
             'opsi.*.teks' => ['required_if:tipe,pilihan_ganda', 'string', 'max:500'],
             'correct' => ['required_if:tipe,pilihan_ganda', 'integer', 'min:0', 'max:5'],
@@ -25,6 +28,15 @@ class StoreQuestionRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            if ($this->input('tipe') === 'essay') {
+                $rubric = $this->input('rubrik_essay', []);
+                if ($rubric !== [] && collect($rubric)->sum(fn ($criterion) => (int) ($criterion['points'] ?? 0)) !== (int) $this->input('bobot')) {
+                    $validator->errors()->add('rubrik_essay', 'Total poin kriteria harus sama dengan nilai maksimal essay.');
+                }
+
+                return;
+            }
+
             if ($this->input('tipe') !== 'pilihan_ganda') {
                 return;
             }
@@ -53,6 +65,9 @@ class StoreQuestionRequest extends FormRequest
             'opsi.min' => 'Soal butuh minimal 2 opsi.',
             'opsi.max' => 'Soal maksimal 6 opsi.',
             'opsi.*.teks.required' => 'Setiap opsi wajib berisi teks.',
+            'rubrik_essay.max' => 'Rubrik maksimal memiliki 10 kriteria.',
+            'rubrik_essay.*.label.required' => 'Nama setiap kriteria wajib diisi.',
+            'rubrik_essay.*.points.required' => 'Poin setiap kriteria wajib diisi.',
         ];
     }
 }

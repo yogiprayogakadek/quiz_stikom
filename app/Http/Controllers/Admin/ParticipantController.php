@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreParticipantRequest;
 use App\Http\Requests\UpdateParticipantRequest;
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +58,7 @@ class ParticipantController extends Controller
         $participant = User::create([
             'nama' => $data['nama'],
             'username' => $data['username'],
+            'email' => $data['email'],
             'password' => $password,
             'role' => 'peserta',
             'must_change_password' => true,
@@ -66,6 +68,10 @@ class ParticipantController extends Controller
                 'role' => 'participant',
                 'status' => 'active',
             ],
+        ]);
+        AuditLog::record('participant_added', 'user', $participant->id, [
+            'name' => $participant->nama,
+            'username' => $participant->username,
         ]);
 
         return redirect()
@@ -89,6 +95,10 @@ class ParticipantController extends Controller
 
         $participant->nama = $data['nama'];
         $participant->username = $data['username'];
+
+        if (array_key_exists('email', $data)) {
+            $participant->email = $data['email'];
+        }
 
         if (filled($data['password'] ?? null)) {
             $participant->password = $data['password'];
@@ -122,6 +132,10 @@ class ParticipantController extends Controller
         $classIds = $participant->kelas()->where('kelas.organization_id', $organizationId)->pluck('kelas.id');
         $participant->kelas()->detach($classIds);
         $participant->organizations()->detach($organizationId);
+        AuditLog::record('participant_removed', 'user', $participant->id, [
+            'name' => $participant->nama,
+            'username' => $participant->username,
+        ]);
         $pesan = 'Peserta dikeluarkan dari organisasi. Riwayat kuis tetap tersimpan.';
 
         return redirect()->route('admin.participants.index')->with('sukses', $pesan);
@@ -239,6 +253,11 @@ class ParticipantController extends Controller
                 'status' => 'active',
                 'created_at' => now(),
                 'updated_at' => now(),
+            ]);
+            AuditLog::record('participant_added', 'user', $userId, [
+                'name' => $nama,
+                'username' => $username,
+                'source' => 'csv_import',
             ]);
 
             $hasil[] = [

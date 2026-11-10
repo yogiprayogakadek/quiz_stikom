@@ -186,6 +186,20 @@
                         <p class="mt-1 text-base text-ink-muted whitespace-pre-line">{{ \Illuminate\Support\Str::limit($baris['teks'], 240) }}</p>
                         <p class="mt-3 whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
 
+                        @if ($baris['rubrik_essay'] !== [])
+                            <div class="mt-3 border-y border-outline py-3">
+                                <p class="text-sm font-bold text-ink">Rubrik penilaian</p>
+                                <ul class="mt-2 space-y-1 text-sm text-ink-muted">
+                                    @foreach ($baris['rubrik_essay'] as $criterion)
+                                        <li class="flex justify-between gap-4">
+                                            <span>{{ $criterion['label'] }}</span>
+                                            <span class="flex-none font-mono text-ink">{{ $criterion['points'] }} poin</span>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
                         @if ($baris['jawaban_saya'])
                             <div class="mt-3 rounded-xl border border-outline bg-surface p-3">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
@@ -221,6 +235,37 @@
                             >
                             @error('nilai.'.$baris['question_id']) <p class="field-error">{{ $message }}</p> @enderror
                         </div>
+
+                        @if ($baris['history']->isNotEmpty())
+                            <details class="mt-4 border-t border-outline pt-3">
+                                <summary class="cursor-pointer text-sm font-bold text-brand-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                                    Riwayat penilaian ({{ $baris['history']->count() }})
+                                </summary>
+                                <ol class="mt-3 divide-y divide-outline text-sm">
+                                    @foreach ($baris['history'] as $log)
+                                        <li class="grid gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
+                                            <div>
+                                                @if ($log->action === 'essay_score_changed')
+                                                    <p class="font-bold text-ink">
+                                                        Nilai final {{ $log->metadata['from'] === null ? 'ditetapkan' : 'diubah' }} menjadi {{ $log->metadata['to'] }}.
+                                                    </p>
+                                                    @if ($log->metadata['from'] !== null)
+                                                        <p class="mt-1 text-ink-muted">Nilai sebelumnya {{ $log->metadata['from'] }}.</p>
+                                                    @endif
+                                                @else
+                                                    <p class="font-bold text-ink">AI menyarankan {{ $log->metadata['score'] }} poin dengan confidence {{ $log->metadata['confidence'] }}%.</p>
+                                                    <p class="mt-1 text-ink-muted">{{ $log->metadata['provider'] }} · {{ $log->metadata['model'] }}</p>
+                                                @endif
+                                            </div>
+                                            <p class="text-xs text-ink-subtle sm:text-right">
+                                                {{ $log->actor?->nama ?? 'Sistem' }}<br>
+                                                <time datetime="{{ $log->created_at->toIso8601String() }}">{{ $log->created_at->format('d M Y, H:i') }}</time>
+                                            </p>
+                                        </li>
+                                    @endforeach
+                                </ol>
+                            </details>
+                        @endif
                     </div>
                 @endforeach
 

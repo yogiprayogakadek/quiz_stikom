@@ -23,6 +23,13 @@
         </div>
 
         <div>
+            <label for="email" class="label">Email</label>
+            <input id="email" name="email" type="email" value="{{ old('email', $participant->email) }}" class="input" maxlength="255" autocomplete="email" placeholder="nama@contoh.com" @error('email') aria-invalid="true" @enderror>
+            <p class="help mt-2">Kosongkan jika akun lama belum punya email. Mengubah email akan meminta verifikasi ulang.</p>
+            @error('email') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
             <label for="password" class="label">Password baru (opsional)</label>
             <input id="password" name="password" type="text" class="input" autocomplete="new-password" @error('password') aria-invalid="true" @enderror>
             <p class="help mt-2">Kosongkan bila password tidak diubah. Mengubah password akan mengakhiri sesi login peserta yang sedang aktif.</p>

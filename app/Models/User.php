@@ -9,16 +9,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
+use Illuminate\Auth\MustVerifyEmail;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmailContract
 {
-    use HasFactory, Notifiable, SoftDeletes;
+    use HasFactory, MustVerifyEmail, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'nama',
         'username',
+        'email',
         'password',
         'role',
         'is_platform_admin',
@@ -37,6 +40,7 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'email_verified_at' => 'datetime',
             'must_change_password' => 'boolean',
             'is_platform_admin' => 'boolean',
             'tour_completed_at' => 'datetime',
@@ -58,11 +62,22 @@ class User extends Authenticatable
                 ],
             ]);
         });
+
+        static::updating(function (User $user) {
+            if ($user->isDirty('email')) {
+                $user->email_verified_at = null;
+            }
+        });
     }
 
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return blank($this->email) || ! is_null($this->email_verified_at);
     }
 
     public function isPlatformAdmin(): bool

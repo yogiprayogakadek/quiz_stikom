@@ -60,6 +60,7 @@ class QuestionController extends Controller
                 'durasi_detik' => $data['durasi_detik'],
                 'pembahasan' => $data['pembahasan'] ?? null,
                 'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
+                'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
             ]);
 
             if ($data['tipe'] === 'pilihan_ganda') {
@@ -88,6 +89,7 @@ class QuestionController extends Controller
 
         if ($question->isLocked()) {
             $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+
             return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
         }
 
@@ -109,6 +111,7 @@ class QuestionController extends Controller
 
         if ($question->isLocked()) {
             $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+
             return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa diedit.']);
         }
 
@@ -122,6 +125,7 @@ class QuestionController extends Controller
                 'durasi_detik' => $data['durasi_detik'],
                 'pembahasan' => $data['pembahasan'] ?? null,
                 'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
+                'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
             ]);
 
             $question->options()->delete();
@@ -151,6 +155,7 @@ class QuestionController extends Controller
 
         if ($question->isLocked()) {
             $target = $quiz ? redirect()->route('admin.quizzes.questions.index', $quiz) : redirect()->route('admin.quizzes.index');
+
             return $target->withErrors(['soal' => 'Soal ini dipakai sesi yang sudah dibuka, jadi tidak bisa dihapus.']);
         }
 
@@ -217,6 +222,7 @@ class QuestionController extends Controller
                     return $idx;
                 }
             }
+
             return false;
         };
 
@@ -336,6 +342,7 @@ class QuestionController extends Controller
                     'status' => 'gagal',
                     'alasan' => $alasan,
                 ];
+
                 continue;
             }
 
@@ -455,7 +462,7 @@ class QuestionController extends Controller
             }
 
             fclose($out);
-        }, 'soal-' . Str::slug($quiz->judul) . '.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }, 'soal-'.Str::slug($quiz->judul).'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function template(): StreamedResponse

@@ -11,6 +11,8 @@ use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\Auth\AccountRecoveryController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\Master\OrganizationController;
@@ -37,6 +39,10 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::get('/o/{organization:slug}/login', [LoginController::class, 'showOrganization'])->name('organizations.login');
     Route::post('/login', [LoginController::class, 'login'])->name('login.store');
+    Route::get('/lupa-password', [AccountRecoveryController::class, 'requestForm'])->name('password.request');
+    Route::post('/lupa-password', [AccountRecoveryController::class, 'sendResetLink'])->name('password.email');
+    Route::get('/reset-password/{token}', [AccountRecoveryController::class, 'resetForm'])->name('password.reset');
+    Route::post('/reset-password', [AccountRecoveryController::class, 'reset'])->name('password.update');
 });
 
 Route::prefix('master')->name('master.')->middleware('guest')->group(function () {
@@ -49,6 +55,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/ganti-password', [PasswordController::class, 'update'])->name('password.change.update');
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::post('/organisasi/aktif', OrganizationSwitchController::class)->name('organizations.switch');
+    Route::get('/email/verifikasi', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+    Route::get('/email/verifikasi/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('verification.verify');
+    Route::post('/email/verifikasi', [EmailVerificationController::class, 'send'])
+        ->middleware('throttle:6,1')
+        ->name('verification.send');
 });
 
 Route::get('/display/{token}', [DisplayController::class, 'show'])

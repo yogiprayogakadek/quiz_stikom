@@ -146,6 +146,12 @@
                     <input id="owner_username" name="owner_username" class="input" required maxlength="60" value="{{ old('owner_username') }}">
                 </div>
                 <div>
+                    <label for="owner_email" class="label">Email owner</label>
+                    <input id="owner_email" name="owner_email" type="email" class="input" required maxlength="255" autocomplete="email" placeholder="nama@contoh.com" value="{{ old('owner_email') }}">
+                    <p class="help mt-1">Dipakai untuk verifikasi akun dan reset password.</p>
+                    @error('owner_email') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+                <div>
                     <label for="owner_password" class="label">Password sementara <span class="font-normal text-ink-subtle">(opsional)</span></label>
                     <input id="owner_password" name="owner_password" type="password" class="input" minlength="8" autocomplete="new-password">
                     <p class="help mt-1">Kosongkan agar sistem membuat password acak.</p>
