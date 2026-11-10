@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\EssayDinilai;
 use App\Jobs\AutoGradeEssayJob;
 use App\Models\Answer;
 use App\Models\Attempt;
@@ -19,6 +20,7 @@ use App\Services\AiQuestionService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -342,6 +344,40 @@ class EssayTest extends TestCase
             'kind' => 'essay',
             'requests' => 1,
         ]);
+    }
+
+    public function test_job_auto_grade_mengirim_event_setelah_skor_total_dihitung(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 90,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [, , , $attempt] = $this->buatAcakBerjalan(true, true);
+
+        $skorSaatEvent = null;
+        Event::listen(EssayDinilai::class, function () use ($attempt, &$skorSaatEvent) {
+            $skorSaatEvent = Attempt::find($attempt->id)?->skor_total;
+        });
+
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->assertSame($attempt->fresh()->skor_total, $skorSaatEvent);
+        $this->assertSame(83, $skorSaatEvent);
     }
 
     public function test_job_auto_grade_tidak_menimpa_nilai_admin(): void

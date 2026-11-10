@@ -135,6 +135,6 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 
 - Status: kuis dapat mengaktifkan **Nilai essay otomatis dengan AI**. Flag `quizzes.auto_grade_essay` default mati. Saat attempt Mode Acak selesai atau sesi ditutup, `AutoGradeEssayJob` menilai essay yang belum dinilai. Nilai AI langsung menjadi nilai final, tercatat di audit sebagai **Sistem**, dan tetap bisa diubah admin. Job memakai provider organisasi dan menghormati kuota AI; kuota habis atau AI gagal meninggalkan essay untuk penilaian manual.
 - Commit fitur: `34eade0` (`feat: auto grade essay for opted-in quizzes`).
-- Verifikasi: `125 passed (594 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000010_add_auto_grade_essay_to_quizzes_table` berhasil dijalankan lokal.
+- Verifikasi: `126 passed (596 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000010_add_auto_grade_essay_to_quizzes_table` berhasil dijalankan lokal.
 - Risiko tersisa: auto-grade memakai satu request AI per essay dan tidak mengulang otomatis jika AI gagal; hasil AI bisa keliru dan tetap perlu dipantau admin. Job hanya berjalan untuk Mode Acak.
 - Item berikutnya: **Riwayat perubahan nilai, model, provider, dan pemberi nilai**.

@@ -52,6 +52,7 @@ class AutoGradeEssayJob implements ShouldQueue
 
         try {
             $grader = app(EssayGrader::class);
+            $dinilai = [];
 
             foreach ($answers as $answer) {
                 try {
@@ -68,13 +69,10 @@ class AutoGradeEssayJob implements ShouldQueue
                         continue;
                     }
 
-                    EssayDinilai::safeDispatch(
-                        $attempt->quiz_session_id,
-                        $attempt->user_id,
-                        $attempt->id,
-                        $answer->question_id,
-                        (int) $suggestion['score'],
-                    );
+                    $dinilai[] = [
+                        'question_id' => $answer->question_id,
+                        'score' => (int) $suggestion['score'],
+                    ];
                 } catch (RuntimeException $e) {
                     Log::warning('Auto-grade essay dilewati: '.$e->getMessage(), [
                         'attempt_id' => $attempt->id,
@@ -93,6 +91,16 @@ class AutoGradeEssayJob implements ShouldQueue
             }
 
             $engine->hitungSkorAcak($attempt);
+
+            foreach ($dinilai as $item) {
+                EssayDinilai::safeDispatch(
+                    $attempt->quiz_session_id,
+                    $attempt->user_id,
+                    $attempt->id,
+                    $item['question_id'],
+                    $item['score'],
+                );
+            }
 
             SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
                 'action' => 'essay_graded',
