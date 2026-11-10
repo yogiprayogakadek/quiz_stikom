@@ -84,7 +84,7 @@
                         </div>
                         <p class="text-xs text-ink-subtle sm:text-right">
                             {{ $log->actor?->nama ?? 'Sistem' }}<br>
-                            <time datetime="{{ $log->created_at->toIso8601String() }}">{{ $log->created_at->format('d M Y, H:i') }}</time>
+                            <time datetime="{{ $log->created_at->timezone($orgTimezone)->toIso8601String() }}">{{ $log->created_at->timezone($orgTimezone)->format('d M Y, H:i') }}</time>
                         </p>
                     </li>
                 @endforeach

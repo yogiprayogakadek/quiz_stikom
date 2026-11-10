@@ -15,8 +15,10 @@
                     <div class="flex flex-wrap items-center gap-2">
                         @if ($ikut)
                             <span class="pill pill-leaf">Sudah bergabung</span>
-                        @else
+                        @elseif ($appSettings->allow_pin_enrollment)
                             <span class="pill pill-sun">Perlu PIN</span>
+                        @else
+                            <span class="pill pill-neutral">Belum terdaftar</span>
                         @endif
                         <span class="pill pill-neutral">{{ $k->quizzes_count }} kuis</span>
                         <span class="pill pill-neutral">{{ $k->sessions_count }} sesi</span>
@@ -24,7 +26,7 @@
 
                     <div class="mt-auto pt-5">
                         <a href="{{ route('peserta.kelas.show', $k) }}" class="btn btn-primary btn-anak w-full">
-                            {{ $ikut ? 'Buka kelas' : 'Masukkan PIN' }}
+                            {{ $ikut ? 'Buka kelas' : ($appSettings->allow_pin_enrollment ? 'Masukkan PIN' : 'Lihat detail') }}
                         </a>
                     </div>
                     </div>

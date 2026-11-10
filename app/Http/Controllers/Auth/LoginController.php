@@ -24,6 +24,7 @@ class LoginController extends Controller
         }
 
         session()->forget('organization_id');
+        app(OrganizationContext::class)->applyLocale();
 
         return view('auth.login');
     }
@@ -36,6 +37,7 @@ class LoginController extends Controller
         }
 
         $context->set($organization);
+        $context->applyLocale($organization);
 
         return view('auth.login');
     }
@@ -47,6 +49,7 @@ class LoginController extends Controller
         }
 
         session()->forget('organization_id');
+        app(OrganizationContext::class)->applyLocale();
 
         return view('auth.login', ['masterLogin' => true]);
     }

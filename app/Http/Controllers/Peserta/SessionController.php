@@ -15,6 +15,7 @@ use App\Models\ParticipantLoginActivity;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\QuizEngine;
+use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -328,7 +329,7 @@ class SessionController extends Controller
                     'tipe' => 'fullscreen_exit_timeout',
                     'pesan' => $label['pesan'],
                     'level' => $label['level'],
-                    'waktu' => now()->format('H:i:s'),
+                    'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                     'jumlah_pelanggaran' => $attempt->events()->count(),
                 ]);
             }

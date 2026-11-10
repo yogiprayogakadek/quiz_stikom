@@ -325,7 +325,7 @@
         {{-- Judul Dokumen --}}
         <div class="doc-title">
             <h3>BERITA ACARA PELAKSANAAN UJIAN</h3>
-            <p>Nomor Dokumen: BA/{{ date('Y') }}/{{ str_pad($session->id, 5, '0', STR_PAD_LEFT) }}</p>
+            <p>Nomor Dokumen: BA/{{ now()->timezone($orgTimezone)->format('Y') }}/{{ str_pad($session->id, 5, '0', STR_PAD_LEFT) }}</p>
         </div>
 
         {{-- Rincian Sesi Ujian --}}
@@ -348,11 +348,11 @@
             </div>
             <div class="meta-row">
                 <span class="meta-label">Waktu Buka:</span>
-                <span class="meta-value">{{ $session->dibuka_at ? $session->dibuka_at->translatedFormat('d F Y, H:i') : '-' }}</span>
+                <span class="meta-value">{{ $session->dibuka_at ? $session->dibuka_at->timezone($orgTimezone)->translatedFormat('d F Y, H:i') : '-' }}</span>
             </div>
             <div class="meta-row">
                 <span class="meta-label">Waktu Tutup:</span>
-                <span class="meta-value">{{ $session->ditutup_at ? $session->ditutup_at->translatedFormat('d F Y, H:i') : 'Selesai' }}</span>
+                <span class="meta-value">{{ $session->ditutup_at ? $session->ditutup_at->timezone($orgTimezone)->translatedFormat('d F Y, H:i') : 'Selesai' }}</span>
             </div>
         </div>
 

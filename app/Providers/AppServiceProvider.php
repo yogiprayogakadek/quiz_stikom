@@ -28,7 +28,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        View::composer('*', fn ($view) => $view->with('appSettings', app('app.settings')));
+        View::composer('*', fn ($view) => $view->with([
+            'appSettings' => app('app.settings'),
+            'orgTimezone' => app(OrganizationContext::class)->timezone(),
+        ]));
 
         // TLS diterminasi di edge, jadi request ke PHP selalu http. Paksa https
         // hanya kalau APP_URL memang https, supaya redirect dan asset tidak

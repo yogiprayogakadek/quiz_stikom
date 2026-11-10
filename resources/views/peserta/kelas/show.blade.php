@@ -9,13 +9,19 @@
     <x-class-cover :kelas="$kelas" :show-title="true" class="mb-6 max-h-72 w-full rounded-2xl" />
 
     @unless ($anggota)
-        <form method="POST" action="{{ route('peserta.kelas.masuk', $kelas) }}" class="card max-w-md">
-            @csrf
-            <label for="pin" class="label">PIN kelas</label>
-            <input id="pin" name="pin" type="text" class="input" required maxlength="12" autocomplete="off" autofocus>
-            <p class="help mt-2">Minta PIN ke admin kelas kalau belum punya.</p>
-            <button type="submit" class="btn btn-primary mt-4 w-full">Masuk kelas</button>
-        </form>
+        @if ($appSettings->allow_pin_enrollment)
+            <form method="POST" action="{{ route('peserta.kelas.masuk', $kelas) }}" class="card max-w-md">
+                @csrf
+                <label for="pin" class="label">PIN kelas</label>
+                <input id="pin" name="pin" type="text" class="input" required maxlength="12" autocomplete="off" autofocus>
+                <p class="help mt-2">Minta PIN ke admin kelas kalau belum punya.</p>
+                <button type="submit" class="btn btn-primary mt-4 w-full">Masuk kelas</button>
+            </form>
+        @else
+            <x-alert jenis="info">
+                Pendaftaran kelas lewat PIN dinonaktifkan. Hubungi admin untuk menambahkanmu ke kelas ini.
+            </x-alert>
+        @endif
     @else
         <div class="grid gap-6 lg:grid-cols-2">
             <section aria-labelledby="kuis-kelas">

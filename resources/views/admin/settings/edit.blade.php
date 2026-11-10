@@ -70,6 +70,61 @@
             </div>
         </section>
 
+        <section class="card" aria-labelledby="workspace-heading">
+            <div class="border-b border-outline pb-4">
+                <h2 id="workspace-heading" class="text-2xl">Workspace</h2>
+                <p class="mt-1 text-base text-ink-muted">Alamat login, zona waktu, dan bahasa pesan sistem untuk workspace ini.</p>
+            </div>
+            <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                @if ($activeOrganization)
+                    <div class="sm:col-span-2">
+                        <label for="organization_slug" class="label">Slug alamat login</label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-semibold text-ink-muted">/o/</span>
+                            <input id="organization_slug" name="organization_slug" class="input min-w-0 flex-1 font-mono" required maxlength="80" pattern="[A-Za-z0-9_-]+" value="{{ old('organization_slug', $activeOrganization->slug) }}">
+                            <span class="text-sm font-semibold text-ink-muted">/login</span>
+                        </div>
+                        <p class="help mt-1">Mengubah slug membuat tautan login lama tidak berlaku.</p>
+                        @error('organization_slug') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="organization_timezone" class="label">Zona waktu</label>
+                        <input id="organization_timezone" name="organization_timezone" class="input" required list="timezone-options" value="{{ old('organization_timezone', $activeOrganization->timezone) }}">
+                        <datalist id="timezone-options">
+                            @foreach (['Asia/Jakarta', 'Asia/Makassar', 'Asia/Jayapura', 'Asia/Singapore', 'UTC'] as $timezone)
+                                <option value="{{ $timezone }}"></option>
+                            @endforeach
+                        </datalist>
+                        <p class="help mt-1">Dipakai untuk tanggal dan jam di laporan.</p>
+                        @error('organization_timezone') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
+                @endif
+                <div>
+                    <label for="locale" class="label">Bahasa pesan sistem</label>
+                    <select id="locale" name="locale" class="input" required>
+                        <option value="id" @selected(old('locale', $settings->locale) === 'id')>Indonesia</option>
+                        <option value="en" @selected(old('locale', $settings->locale) === 'en')>English</option>
+                    </select>
+                    <p class="help mt-1">Mengatur bahasa bawaan sistem dan nama bulan. Teks utama aplikasi tetap Bahasa Indonesia.</p>
+                    @error('locale') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="peserta-heading">
+            <div class="border-b border-outline pb-4">
+                <h2 id="peserta-heading" class="text-2xl">Kebijakan peserta</h2>
+                <p class="mt-1 text-base text-ink-muted">Atur cara peserta masuk ke kelas pada workspace ini.</p>
+            </div>
+            <label class="mt-5 flex items-start gap-3 rounded-2xl border border-outline bg-page p-4">
+                <input type="checkbox" name="allow_pin_enrollment" value="1" class="mt-1 h-5 w-5" @checked((bool) old('allow_pin_enrollment', $settings->allow_pin_enrollment))>
+                <span>
+                    <span class="block text-base font-bold text-ink">Izinkan peserta masuk kelas sendiri dengan PIN</span>
+                    <span class="block text-base text-ink-muted">Jika dimatikan, admin harus menambahkan peserta ke kelas dari halaman kelas.</span>
+                </span>
+            </label>
+        </section>
+
         <section class="card" aria-labelledby="ai-heading">
             <div class="border-b border-outline pb-4">
                 <h2 id="ai-heading" class="text-2xl">Provider AI soal</h2>

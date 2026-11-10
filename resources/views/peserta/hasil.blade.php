@@ -77,11 +77,11 @@
             <dl class="mt-5 space-y-3 text-base">
                 <div class="flex items-center justify-between gap-3 border-b border-outline pb-2">
                     <dt class="text-ink-muted">Mulai</dt>
-                    <dd class="font-mono text-ink">{{ $attempt->mulai_at ? date('H:i', intdiv($attempt->mulai_at, 1000)) : '-' }}</dd>
+                    <dd class="font-mono text-ink">{{ $attempt->mulai_at ? \Illuminate\Support\Carbon::createFromTimestampMs($attempt->mulai_at, $orgTimezone)->format('H:i') : '-' }}</dd>
                 </div>
                 <div class="flex items-center justify-between gap-3 border-b border-outline pb-2">
                     <dt class="text-ink-muted">Selesai</dt>
-                    <dd class="font-mono text-ink">{{ $attempt->selesai_at ? date('H:i', intdiv($attempt->selesai_at, 1000)) : '-' }}</dd>
+                    <dd class="font-mono text-ink">{{ $attempt->selesai_at ? \Illuminate\Support\Carbon::createFromTimestampMs($attempt->selesai_at, $orgTimezone)->format('H:i') : '-' }}</dd>
                 </div>
                 <div class="flex items-center justify-between gap-3">
                     <dt class="text-ink-muted">Nilai tersimpan</dt>

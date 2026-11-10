@@ -9,6 +9,8 @@ use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class SettingController extends Controller
@@ -20,7 +22,9 @@ class SettingController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $data = $request->validate([
+        $organization = app(OrganizationContext::class)->current();
+
+        $rules = [
             'site_name' => ['required', 'string', 'max:80'],
             'site_tagline' => ['required', 'string', 'max:160'],
             'organization_name' => ['nullable', 'string', 'max:120'],
@@ -39,6 +43,8 @@ class SettingController extends Controller
             'login_title' => ['required', 'string', 'max:100'],
             'login_description' => ['required', 'string', 'max:300'],
             'login_layout' => ['required', 'in:split,centered'],
+            'locale' => ['required', 'in:id,en'],
+            'allow_pin_enrollment' => ['boolean'],
             'ai_base_url' => ['nullable', 'url', 'max:255'],
             'ai_api_key' => ['nullable', 'string', 'max:500'],
             'ai_default_model' => ['nullable', 'string', 'max:150'],
@@ -47,12 +53,33 @@ class SettingController extends Controller
             'image_base_url' => ['nullable', 'url', 'max:255'],
             'image_api_key' => ['nullable', 'string', 'max:500'],
             'image_model' => ['nullable', 'required_if:class_cover_mode,ai', 'string', 'max:150'],
-        ], [
+        ];
+
+        if ($organization !== null) {
+            $rules['organization_slug'] = [
+                'required', 'string', 'max:80', 'alpha_dash',
+                Rule::unique('organizations', 'slug')->ignore($organization->id),
+            ];
+            $rules['organization_timezone'] = ['required', 'timezone:all'];
+        }
+
+        $data = $request->validate($rules, [
             'primary_color.regex' => 'Warna utama harus memakai format heksadesimal, misalnya #2563eb.',
             'logo.max' => 'Ukuran logo maksimal 2 MB.',
+            'organization_slug.unique' => 'Slug ini sudah dipakai organisasi lain.',
         ]);
 
-        $organizationId = app(OrganizationContext::class)->id();
+        $data['allow_pin_enrollment'] = $request->boolean('allow_pin_enrollment');
+
+        if ($organization !== null) {
+            $organization->update([
+                'slug' => Str::lower($data['organization_slug']),
+                'timezone' => $data['organization_timezone'],
+            ]);
+            unset($data['organization_slug'], $data['organization_timezone']);
+        }
+
+        $organizationId = $organization?->id;
         $settings = $organizationId === null
             ? AppSetting::query()->firstOrNew(['id' => 1])
             : OrganizationSetting::query()->firstOrNew(['organization_id' => $organizationId]);

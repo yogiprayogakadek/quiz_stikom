@@ -44,7 +44,7 @@
                                 <td class="font-mono text-sm font-bold text-ink">{{ $file['nama'] }}</td>
                                 <td class="text-ink-muted">{{ number_format($file['ukuran'] / 1024, 1) }} KB</td>
                                 <td class="text-ink-muted">
-                                    {{ \Illuminate\Support\Carbon::createFromTimestamp($file['diubah'])->format('d M Y, H:i') }}
+                                    {{ \Illuminate\Support\Carbon::createFromTimestamp($file['diubah'])->timezone($orgTimezone)->format('d M Y, H:i') }}
                                 </td>
                                 <td>
                                     <div class="flex flex-wrap justify-end gap-2">

@@ -17,6 +17,8 @@ class OrganizationSetting extends Model
         'login_title',
         'login_description',
         'login_layout',
+        'locale',
+        'allow_pin_enrollment',
         'ai_base_url',
         'ai_api_key',
         'ai_default_model',
@@ -33,6 +35,7 @@ class OrganizationSetting extends Model
             'ai_api_key' => 'encrypted',
             'image_api_key' => 'encrypted',
             'ai_timeout' => 'integer',
+            'allow_pin_enrollment' => 'boolean',
         ];
     }
 

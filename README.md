@@ -270,7 +270,7 @@ Token layar dibuat saat sesi dibuat dan dipakai lagi saat lobby dibuka. Siapa pu
 
 ## Pengaturan publik dan AI
 
-Admin dapat mengubah nama aplikasi, organisasi, logo, warna utama, dan teks login dari menu **Pengaturan**. Nilai ini berlaku pada halaman login, navigasi admin/peserta, dan layar kelas. Logo serta cover AI disimpan di disk `public`, sehingga `php artisan storage:link` harus sudah dijalankan.
+Admin dapat mengubah nama aplikasi, organisasi, logo, warna utama, teks login, slug alamat login, zona waktu, bahasa pesan sistem, dan kebijakan masuk kelas lewat PIN dari menu **Pengaturan**. Nilai ini berlaku pada halaman login, navigasi admin/peserta, layar kelas, laporan, dan riwayat akses workspace tersebut. Logo serta cover AI disimpan di disk `public`, sehingga `php artisan storage:link` harus sudah dijalankan.
 
 Provider pembuat soal dapat diganti dengan endpoint yang kompatibel dengan OpenAI Chat Completions. Konfigurasi database dari halaman Pengaturan mengalahkan `AI_BASE_URL`, `AI_API_KEY`, dan `AI_DEFAULT_MODEL` di `.env`; nilai `.env` tetap menjadi fallback. API key disimpan terenkripsi menggunakan `APP_KEY`.
 

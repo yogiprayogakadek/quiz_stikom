@@ -14,6 +14,7 @@ use App\Models\AttemptQuestion;
 use App\Models\ParticipantLoginActivity;
 use App\Models\User;
 use App\Services\QuizEngine;
+use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -279,7 +280,7 @@ class AttemptController extends Controller
                 'tipe' => 'fullscreen_exit_timeout',
                 'pesan' => $label['pesan'],
                 'level' => $label['level'],
-                'waktu' => now()->format('H:i:s'),
+                'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                 'jumlah_pelanggaran' => $attempt->events()->count(),
             ]);
         }
@@ -430,7 +431,7 @@ class AttemptController extends Controller
                     'tipe' => $tipe,
                     'pesan' => $label['pesan'],
                     'level' => $label['level'],
-                    'waktu' => now()->format('H:i:s'),
+                    'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                     'jumlah_pelanggaran' => $jumlah,
                 ]);
             }

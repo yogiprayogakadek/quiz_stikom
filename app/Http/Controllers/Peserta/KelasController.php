@@ -43,6 +43,12 @@ class KelasController extends Controller
 
     public function masuk(Request $request, Kelas $kelas): RedirectResponse
     {
+        if (! app('app.settings')->allow_pin_enrollment) {
+            throw ValidationException::withMessages([
+                'pin' => 'Pendaftaran kelas lewat PIN dinonaktifkan oleh organisasi. Hubungi admin kelas.',
+            ]);
+        }
+
         $data = $request->validate([
             'pin' => ['required', 'string', 'max:12'],
         ], [

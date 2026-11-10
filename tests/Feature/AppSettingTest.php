@@ -23,9 +23,13 @@ class AppSettingTest extends TestCase
             'current_session_token' => 'admin-settings-token',
         ]);
 
+        $organization = $admin->organizations()->firstOrFail();
+
         $response = $this->actingAs($admin)
-            ->withSession(['auth_token' => 'admin-settings-token'])
+            ->withSession(['auth_token' => 'admin-settings-token', 'organization_id' => $organization->id])
             ->put(route('admin.settings.update'), [
+                'organization_slug' => $organization->slug,
+                'organization_timezone' => $organization->timezone,
                 'site_name' => 'Kuis Publik',
                 'site_tagline' => 'Belajar dan evaluasi bersama',
                 'organization_name' => 'Organisasi Uji',
@@ -33,6 +37,8 @@ class AppSettingTest extends TestCase
                 'login_title' => 'Masuk ke kelas',
                 'login_description' => 'Gunakan akun yang telah diberikan.',
                 'login_layout' => 'centered',
+                'locale' => 'en',
+                'allow_pin_enrollment' => 1,
                 'ai_base_url' => 'https://ai.example.test/v1',
                 'ai_api_key' => 'secret-ai-key',
                 'ai_default_model' => 'provider/model',
@@ -47,6 +53,8 @@ class AppSettingTest extends TestCase
         $settings = OrganizationSetting::query()->firstOrFail();
         $this->assertSame('Kuis Publik', $settings->site_name);
         $this->assertSame('centered', $settings->login_layout);
+        $this->assertSame('en', $settings->locale);
+        $this->assertTrue($settings->allow_pin_enrollment);
         $this->assertSame('secret-ai-key', $settings->ai_api_key);
         $this->assertNotSame('secret-ai-key', DB::table('organization_settings')->value('ai_api_key'));
     }

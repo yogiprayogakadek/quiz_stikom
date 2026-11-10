@@ -551,7 +551,7 @@
                         </div>
                         <div class="absolute -bottom-2 -left-2 bg-slate-900/95 backdrop-blur-md rounded-xl px-3 py-1.5 shadow-sm border border-slate-700/80 flex items-center gap-2">
                             <x-icon name="clock" :size="16" class="text-blue-400" />
-                            <span class="text-xs font-semibold text-slate-200">{{ now()->translatedFormat('d F Y') }}</span>
+                            <span class="text-xs font-semibold text-slate-200">{{ now()->timezone($orgTimezone)->translatedFormat('d F Y') }}</span>
                         </div>
                     </div>
                 </div>
@@ -898,7 +898,7 @@
             <div class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-display text-base font-extrabold text-slate-900">Aktivitas Hari Ini</h3>
-                    <span class="text-xs font-bold text-slate-400">{{ now()->translatedFormat('d M') }}</span>
+                    <span class="text-xs font-bold text-slate-400">{{ now()->timezone($orgTimezone)->translatedFormat('d M') }}</span>
                 </div>
 
                 <div class="flex items-center gap-5">

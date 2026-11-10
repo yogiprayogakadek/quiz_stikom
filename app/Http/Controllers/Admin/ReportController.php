@@ -13,8 +13,10 @@ use App\Models\Question;
 use App\Models\QuizSession;
 use App\Services\AiQuestionService;
 use App\Services\QuizEngine;
+use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -494,7 +496,7 @@ class ReportController extends Controller
             return '';
         }
 
-        return date('Y-m-d H:i:s', intdiv($ms, 1000));
+        return Carbon::createFromTimestampMs($ms, app(OrganizationContext::class)->timezone())->format('Y-m-d H:i:s');
     }
 
     private function slug(string $teks): string

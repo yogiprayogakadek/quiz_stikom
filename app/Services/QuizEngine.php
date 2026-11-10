@@ -18,6 +18,7 @@ use App\Models\Question;
 use App\Models\QuizSession;
 use App\Models\SessionQuestion;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -786,7 +787,7 @@ class QuizEngine
                     'tipe' => $kejadian->tipe,
                     'pesan' => $label['pesan'],
                     'level' => $label['level'],
-                    'waktu' => $kejadian->created_at?->format('H:i:s'),
+                    'waktu' => $kejadian->created_at?->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                     'jumlah_pelanggaran' => $kejadian->attempt?->events_count ?? 1,
                 ];
             })

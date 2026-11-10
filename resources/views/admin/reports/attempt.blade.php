@@ -75,7 +75,7 @@
                                 };
                             @endphp
                             <tr>
-                                <td class="font-mono text-base">{{ $event->created_at?->format('d M Y H:i:s') }}</td>
+                                <td class="font-mono text-base">{{ $event->created_at?->timezone($orgTimezone)->format('d M Y H:i:s') }}</td>
                                 <td class="font-bold text-ink">{{ $label }}</td>
                                 <td class="text-ink-muted">
                                     {{ $event->detail ?? '-' }}
@@ -259,7 +259,7 @@
                                             </div>
                                             <p class="text-xs text-ink-subtle sm:text-right">
                                                 {{ $log->actor?->nama ?? 'Sistem' }}<br>
-                                                <time datetime="{{ $log->created_at->toIso8601String() }}">{{ $log->created_at->format('d M Y, H:i') }}</time>
+                                                <time datetime="{{ $log->created_at->timezone($orgTimezone)->toIso8601String() }}">{{ $log->created_at->timezone($orgTimezone)->format('d M Y, H:i') }}</time>
                                             </p>
                                         </li>
                                     @endforeach

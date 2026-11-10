@@ -19,7 +19,7 @@
             </div>
         </div>
         <span class="font-mono text-[11px] text-slate-400 shrink-0">
-            {{ $kejadian->created_at ? $kejadian->created_at->format('H:i:s') : '-' }}
+            {{ $kejadian->created_at ? $kejadian->created_at->timezone($orgTimezone)->format('H:i:s') : '-' }}
         </span>
     </div>
 @empty
