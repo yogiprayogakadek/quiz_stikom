@@ -65,7 +65,7 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 - [x] Preview branding sebelum disimpan.
   - Halaman **Pengaturan** menampilkan pratinjau login live untuk nama aplikasi, tagline, logo, warna utama, teks login, dan layout.
   - Logo baru dari input file langsung dipratinjau sebelum disimpan. Nilai teks memakai `old()` saat validasi gagal; file yang gagal divalidasi tidak dapat dipulihkan oleh browser.
-- [ ] Kuota pemakaian AI dan penyimpanan.
+- [x] Kuota pemakaian AI dan penyimpanan.
 
 ## Fase 6: Penilaian essay
 
@@ -122,3 +122,11 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 - Verifikasi: `105 passed (544 assertions)`, build Vite berhasil, Blade cache berhasil, dan `git diff --check` bersih.
 - Risiko tersisa: pratinjau bergantung pada Alpine dan belum diuji lewat browser otomatis atau screenshot; yang diuji adalah markup dan data awal. Preview menampilkan halaman login, belum menampilkan navigasi admin. Logo yang dipilih harus diunggah ulang jika validasi form gagal.
 - Item berikutnya: **Kuota pemakaian AI dan penyimpanan**.
+
+## Checkpoint 10 November 2026 — kuota AI dan penyimpanan
+
+- Status: setiap workspace punya batas AI bulanan dan penyimpanan. Pemakaian AI dicatat di `ai_usage_events`; generate soal, saran nilai essay, dan cover AI dihitung per request. Logo dan cover kelas dihitung terhadap kuota penyimpanan, sedangkan backup database tidak. Halaman **Pengaturan** menampilkan pemakaian, sisa, dan peringatan saat kuota penuh.
+- Commit checkpoint: `f4a704c` (`feat: enforce workspace ai and storage quotas`).
+- Verifikasi: `112 passed (560 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000009_create_ai_usage_events` berhasil dijalankan lokal.
+- Risiko tersisa: kuota masih global lewat env `PLATFORM_AI_MONTHLY_REQUESTS` dan `PLATFORM_STORAGE_MB`, belum bisa diatur per workspace dari UI master. Pemakaian essay dan cover dicatat setelah panggilan AI berhasil; generate soal mereservasi di muka sehingga job yang gagal tetap memakai kuota. Job AI di queue masih memakai pengaturan platform karena `OrganizationContext` tidak di-set di worker; ini perlu diperiksa saat kuota per workspace dibuat.
+- Item berikutnya: **Mode otomatis hanya untuk kuis yang mengaktifkannya**.
