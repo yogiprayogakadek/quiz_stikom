@@ -74,18 +74,19 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 - [x] Rekomendasi nilai AI dengan confidence dan umpan balik.
 - [x] Admin mengonfirmasi atau mengubah rekomendasi.
 - [x] Mode otomatis hanya untuk kuis yang mengaktifkannya.
-- [ ] Riwayat perubahan nilai, model, provider, dan pemberi nilai.
+- [x] Riwayat perubahan nilai, model, provider, dan pemberi nilai.
 
 ## Fase 7: Kesiapan publik
 
 - [x] Pisahkan login master dari login pengguna organisasi.
 - [x] Master dapat mengaktifkan maintenance dan pengguna menerima halaman status 503.
-- [ ] Pendaftaran organisasi mandiri dan verifikasi email.
-- [ ] Rate limit serta proteksi bot pada pendaftaran.
-- [ ] Kuota organisasi, admin, peserta, kelas, dan AI.
-- [ ] Export dan penghapusan data organisasi.
-- [ ] Syarat penggunaan dan kebijakan privasi.
-- [ ] Monitoring error, backup, dan prosedur pemulihan.
+- [x] Pendaftaran organisasi mandiri dan verifikasi email.
+- [x] Rate limit serta proteksi bot pada pendaftaran.
+- [x] Kuota organisasi, admin, peserta, kelas, dan AI.
+- [x] Export dan penghapusan data organisasi.
+- [x] Syarat penggunaan dan kebijakan privasi.
+- [x] Monitoring error, backup, dan prosedur pemulihan.
+- [x] SMTP platform dan email uji dari panel master.
 
 ## Verifikasi wajib setiap checkpoint
 
@@ -138,3 +139,19 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 - Verifikasi: `126 passed (596 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000010_add_auto_grade_essay_to_quizzes_table` berhasil dijalankan lokal.
 - Risiko tersisa: auto-grade memakai satu request AI per essay dan tidak mengulang otomatis jika AI gagal; hasil AI bisa keliru dan tetap perlu dipantau admin. Job hanya berjalan untuk Mode Acak.
 - Item berikutnya: **Riwayat perubahan nilai, model, provider, dan pemberi nilai**.
+
+## Catatan terbuka
+
+- Terjemahan penuh antarmuka belum dikerjakan. Locale `id`/`en` mengganti pesan sistem dan nama bulan, tetapi teks utama masih Bahasa Indonesia.
+- Halaman Syarat Penggunaan dan Kebijakan Privasi masih berlabel **Draf** dan perlu ditinjau sebelum peluncuran publik.
+- Export organisasi berupa JSON dan tidak membundel file biner logo atau cover; hanya path yang diekspor.
+- SMTP kosong memakai fallback env. Jika diisi dari panel master, pengaturan platform dipakai tanpa deploy ulang.
+- Langkah produksi yang butuh akses server ada di `docs/operations/production-checklist.md`; prosedur restore ada di `docs/operations/recovery.md`.
+
+## Checkpoint 10 November 2026: kesiapan platform publik
+
+- Status: seluruh item Fase 6 dan Fase 7 selesai, ditambah SMTP platform dari panel master. Riwayat nilai menyimpan provider, model, confidence, dan pemberi nilai. Pendaftaran organisasi mandiri aktif dengan verifikasi email, honeypot, dan `throttle:5,1`. Kuota per organisasi mencakup AI, penyimpanan, admin, peserta, dan kelas. Master dapat export JSON dan menghapus organisasi dengan konfirmasi slug. Halaman legal memakai draf berlabel. Monitoring, backup, retry atau hapus failed job, dan prosedur pemulihan tersedia.
+- Commit fitur: `2cc903d` (`feat: complete public platform readiness`).
+- Verifikasi: `163 passed (778 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000010_add_mail_settings_to_app_settings` serta `2026_11_10_000011_add_quotas_to_organizations` berhasil dijalankan lokal.
+- Risiko tersisa: teks legal masih draf; terjemahan penuh belum ada; export JSON tidak membundel file biner; job AI baru harus memanggil `OrganizationContext::force()` sebelum resolve service; backup memerlukan `mysqldump` dan file storage dicadangkan terpisah.
+- Item berikutnya: tidak ada item checklist tersisa. Pekerjaan lanjutan: finalisasi teks legal, terjemahan penuh, dan uji restore di staging.
