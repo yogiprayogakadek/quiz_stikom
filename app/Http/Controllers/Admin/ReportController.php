@@ -11,8 +11,7 @@ use App\Models\AttemptQuestion;
 use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\QuizSession;
-use App\Services\AiQuestionService;
-use App\Services\OrganizationUsage;
+use App\Services\EssayGrader;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -149,7 +148,7 @@ class ReportController extends Controller
         return view('admin.reports.attempt', compact('attempt', 'rincian'));
     }
 
-    public function nilaiEssay(Request $request, Attempt $attempt, QuizEngine $engine): RedirectResponse
+    public function nilaiEssay(Request $request, Attempt $attempt, QuizEngine $engine, EssayGrader $grader): RedirectResponse
     {
         $attempt->loadMissing('quizSession');
 
@@ -202,20 +201,7 @@ class ReportController extends Controller
                 continue;
             }
 
-            $previousScore = $answer->dinilai_at ? $answer->skor : null;
-            $answer->update([
-                'skor' => (int) $nilai,
-                'dinilai_at' => now(),
-                'dinilai_oleh' => $request->user()->id,
-            ]);
-            AuditLog::record('essay_score_changed', 'answer', $answer->id, [
-                'attempt_id' => $attempt->id,
-                'question_id' => $question->id,
-                'from' => $previousScore,
-                'to' => (int) $nilai,
-                'ai_suggested_score' => $answer->ai_suggested_score,
-                'ai_model' => $answer->ai_model,
-            ], $attempt->organization_id);
+            $grader->applyFinal($answer, (int) $nilai, $request->user()->id);
         }
 
         if ($errors !== []) {
@@ -251,50 +237,18 @@ class ReportController extends Controller
         return back()->with('sukses', 'Nilai essay disimpan dan skor attempt diperbarui.');
     }
 
-    public function saranNilaiEssay(Answer $answer, AiQuestionService $ai, OrganizationUsage $usage): RedirectResponse
+    public function saranNilaiEssay(Answer $answer, EssayGrader $grader): RedirectResponse
     {
         $answer->loadMissing(['question', 'attempt.quizSession']);
         abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
         abort_unless($answer->attempt->status === 'selesai', 422);
         abort_unless(filled($answer->jawaban_teks), 422);
 
-        $organizationId = $answer->attempt->organization_id;
-
         try {
-            if ($organizationId !== null) {
-                $usage->assertAiQuota($organizationId);
-            }
-
-            $suggestion = $ai->evaluateEssay(
-                $answer->question->teks,
-                $answer->question->kunci_essay,
-                $answer->question->rubrik_essay ?? [],
-                $answer->jawaban_teks,
-                (int) $answer->question->bobot,
-            );
+            $grader->suggest($answer);
         } catch (\Throwable $e) {
             return back()->withErrors(['ai_essay' => $e->getMessage()]);
         }
-
-        if ($organizationId !== null) {
-            $usage->recordAi($organizationId, 'essay');
-        }
-
-        $answer->update([
-            'ai_suggested_score' => $suggestion['score'],
-            'ai_confidence' => $suggestion['confidence'],
-            'ai_feedback' => $suggestion['feedback'],
-            'ai_model' => $suggestion['model'],
-            'ai_reviewed_at' => now(),
-        ]);
-        AuditLog::record('essay_ai_suggested', 'answer', $answer->id, [
-            'attempt_id' => $answer->attempt_id,
-            'question_id' => $answer->question_id,
-            'score' => $suggestion['score'],
-            'confidence' => $suggestion['confidence'],
-            'model' => $suggestion['model'],
-            'provider' => $suggestion['provider'],
-        ], $answer->attempt->organization_id);
 
         return back()->with('sukses', 'Saran AI dibuat. Periksa hasilnya sebelum menyimpan nilai final.');
     }

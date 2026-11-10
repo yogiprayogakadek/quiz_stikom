@@ -9,8 +9,14 @@ use Illuminate\Support\Carbon;
 
 class OrganizationContext
 {
+    protected ?Organization $forced = null;
+
     public function current(): ?Organization
     {
+        if ($this->forced !== null) {
+            return $this->forced;
+        }
+
         $user = auth()->user();
         if (! $user instanceof User) {
             $requestedId = session('organization_id');
@@ -36,6 +42,12 @@ class OrganizationContext
     public function set(Organization $organization): void
     {
         session(['organization_id' => $organization->id]);
+    }
+
+    public function force(?Organization $organization): void
+    {
+        $this->forced = $organization;
+        app()->forgetInstance('app.settings');
     }
 
     public function timezone(): string

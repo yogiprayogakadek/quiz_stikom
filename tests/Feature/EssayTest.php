@@ -8,11 +8,15 @@ use App\Models\AttemptQuestion;
 use App\Models\AuditLog;
 use App\Models\Kelas;
 use App\Models\Option;
+use App\Models\Organization;
+use App\Models\OrganizationSetting;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Services\AiQuestionService;
 use App\Services\QuizEngine;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -178,6 +182,88 @@ class EssayTest extends TestCase
             ->withSession(['auth_token' => 'token-auto-flag'])
             ->get(route('admin.quizzes.edit', $quiz))
             ->assertSee('Nilai essay otomatis dengan AI');
+    }
+
+    public function test_force_organisasi_memakai_pengaturan_ai_organisasi(): void
+    {
+        $organization = Organization::query()->firstOrFail();
+
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'ai_base_url' => 'https://org.example.test/v1',
+            'ai_api_key' => 'org-key',
+            'ai_default_model' => 'org-model',
+        ]);
+
+        config([
+            'services.ai.base_url' => 'https://platform.example.test/v1',
+            'services.ai.api_key' => 'platform-key',
+            'services.ai.default_model' => 'platform-model',
+        ]);
+
+        Http::fake([
+            'https://org.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 7,
+                            'confidence' => 80,
+                            'feedback' => 'Cukup.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $context = app(OrganizationContext::class);
+        $context->force($organization);
+
+        try {
+            $result = app(AiQuestionService::class)
+                ->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10);
+        } finally {
+            $context->force(null);
+        }
+
+        $this->assertSame('org-model', $result['model']);
+        Http::assertSent(fn ($request) => $request->url() === 'https://org.example.test/v1/chat/completions');
+    }
+
+    public function test_essay_grader_menyimpan_saran_dan_nilai_final(): void
+    {
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 90,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $grader = app(\App\Services\EssayGrader::class);
+
+        $suggestion = $grader->suggest($answer);
+        $this->assertTrue($grader->applyFinal($answer->fresh(), $suggestion['score'], $admin->id));
+
+        $answer->refresh();
+        $this->assertSame(8, $answer->skor);
+        $this->assertNotNull($answer->dinilai_at);
+        $this->assertSame($admin->id, $answer->dinilai_oleh);
     }
 
     public function test_admin_dapat_meminta_saran_ai_tanpa_menetapkan_nilai_final(): void
