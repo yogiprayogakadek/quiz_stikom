@@ -62,7 +62,9 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
   - Bahasa `id`/`en` diterapkan sebagai locale Laravel dan Carbon. Teks antarmuka utama masih Bahasa Indonesia; terjemahan penuh belum dibuat.
   - Kebijakan peserta saat ini adalah izin masuk kelas sendiri lewat PIN. Jika dimatikan, admin harus menambahkan peserta ke kelas.
 - [x] Provider AI platform atau API key organisasi yang terenkripsi.
-- [ ] Preview branding sebelum disimpan.
+- [x] Preview branding sebelum disimpan.
+  - Halaman **Pengaturan** menampilkan pratinjau login live untuk nama aplikasi, tagline, logo, warna utama, teks login, dan layout.
+  - Logo baru dari input file langsung dipratinjau sebelum disimpan. Nilai teks memakai `old()` saat validasi gagal; file yang gagal divalidasi tidak dapat dipulihkan oleh browser.
 - [ ] Kuota pemakaian AI dan penyimpanan.
 
 ## Fase 6: Penilaian essay
@@ -112,3 +114,11 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 - Verifikasi: `104 passed (537 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000008_add_locale_and_participant_policy_to_settings` berhasil dijalankan lokal.
 - Risiko tersisa: locale baru mengganti pesan sistem dan nama bulan; teks antarmuka utama masih Indonesia sampai terjemahan penuh ditambahkan. Mengubah slug membuat tautan login lama tidak berlaku. Jika PIN dinonaktifkan, peserta harus ditambahkan admin; belum ada undangan atau pendaftaran mandiri.
 - Item berikutnya: **Preview branding sebelum disimpan**.
+
+## Checkpoint 10 November 2026 — preview branding
+
+- Status: pratinjau branding live sudah ada di halaman **Pengaturan**. Perubahan nama, tagline, logo, warna, teks login, dan layout langsung terlihat sebelum disimpan.
+- Commit checkpoint: `afa353f` (`feat: preview branding before saving`).
+- Verifikasi: `105 passed (544 assertions)`, build Vite berhasil, Blade cache berhasil, dan `git diff --check` bersih.
+- Risiko tersisa: pratinjau bergantung pada Alpine dan belum diuji lewat browser otomatis atau screenshot; yang diuji adalah markup dan data awal. Preview menampilkan halaman login, belum menampilkan navigasi admin. Logo yang dipilih harus diunggah ulang jika validasi form gagal.
+- Item berikutnya: **Kuota pemakaian AI dan penyimpanan**.
