@@ -276,6 +276,8 @@ Provider pembuat soal dapat diganti dengan endpoint yang kompatibel dengan OpenA
 
 Cover kelas dapat memakai ilustrasi lokal deterministik atau endpoint kompatibel OpenAI Images. Proses AI berjalan melalui queue dan selalu kembali ke cover lokal bila konfigurasi belum lengkap atau layanan gambar gagal.
 
+Setiap workspace memiliki kuota AI bulanan dan penyimpanan. Generate soal, saran nilai essay, dan cover AI dihitung per request AI; logo serta cover kelas dihitung terhadap kuota penyimpanan, sedangkan backup database tidak. Batas diatur operator platform lewat `PLATFORM_AI_MONTHLY_REQUESTS` (default 1000 request per bulan) dan `PLATFORM_STORAGE_MB` (default 1024 MB). Pemakaian dan sisa kuota tampil di halaman **Pengaturan**.
+
 ## Format CSV peserta
 
 Unduh contoh dari `/admin/participants/template`. Kolom yang dibaca: `nama` dan `username`. Password boleh dikosongkan, lalu sistem membuatkannya dan menampilkan daftar password satu kali setelah impor. Unduh daftar itu sebelum meninggalkan halaman.

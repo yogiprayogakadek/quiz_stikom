@@ -2,15 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Models\AiUsageEvent;
 use App\Models\AuditLog;
 use App\Models\Kelas;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class OrganizationTenancyTest extends TestCase
@@ -357,6 +360,47 @@ class OrganizationTenancyTest extends TestCase
             ->assertSee('x-text="siteName"', false)
             ->assertSee('x-text="loginTitle"', false)
             ->assertSee('logoPreview', false);
+    }
+
+    public function test_upload_logo_ditolak_saat_kuota_penyimpanan_habis(): void
+    {
+        config(['platform.storage_mb' => 0]);
+        [$organization, $admin] = $this->organizationWithUser('alpha', 'admin_alpha', 'admin');
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->put(route('admin.settings.update'), $this->settingsPayload($organization, [
+                'logo' => UploadedFile::fake()->image('logo.png', 64, 64),
+            ]))
+            ->assertSessionHasErrors('logo');
+
+        $this->assertDatabaseMissing('organization_settings', [
+            'organization_id' => $organization->id,
+        ]);
+    }
+
+    public function test_halaman_pengaturan_menampilkan_pemakaian_ai_dan_penyimpanan(): void
+    {
+        config(['platform.ai_monthly_requests' => 10, 'platform.storage_mb' => 1]);
+        [$organization, $admin] = $this->organizationWithUser('alpha', 'admin_alpha', 'admin');
+        AiUsageEvent::create([
+            'organization_id' => $organization->id,
+            'kind' => 'questions',
+            'requests' => 3,
+        ]);
+        Storage::fake('public');
+        Storage::disk('public')->put('branding/logo.png', str_repeat('a', 1024));
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'logo_path' => 'branding/logo.png',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('admin.settings.edit'))
+            ->assertOk()
+            ->assertSee('Pemakaian dan kuota')
+            ->assertSee('3 / 10 request');
     }
 
     public function test_bahasa_organisasi_mengubah_nama_bulan(): void

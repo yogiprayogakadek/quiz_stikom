@@ -11,6 +11,7 @@ use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -120,6 +121,10 @@ class KelasController extends Controller
         }
 
         $kelas->delete();
+
+        if ($kelas->cover_path) {
+            Storage::disk('public')->delete($kelas->cover_path);
+        }
 
         return redirect()->route('admin.classes.index')->with('sukses', 'Kelas dihapus.');
     }

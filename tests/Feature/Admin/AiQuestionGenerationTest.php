@@ -4,6 +4,7 @@ namespace Tests\Feature\Admin;
 
 use App\Jobs\GenerateAiQuestionsJob;
 use App\Models\AiGeneration;
+use App\Models\Organization;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
@@ -86,16 +87,7 @@ class AiQuestionGenerationTest extends TestCase
     {
         Queue::fake();
 
-        $payload = [
-            'model' => 'ag/gemini-3.8-flash-medium',
-            'topik' => 'Protokol Web',
-            'rps_text' => 'Dasar-dasar jaringan komputer dan web',
-            'jumlah_pg' => 1,
-            'jumlah_essay' => 0,
-            'level' => ['C2 - Memahami', 'C3 - Menerapkan'],
-            'nilai_maksimal' => 100,
-            'porsi_pg' => 60,
-        ];
+        $payload = $this->aiPayload();
 
         $response = $this->actingAs($this->admin)
             ->withSession(['auth_token' => 'admin-token'])
@@ -143,6 +135,41 @@ class AiQuestionGenerationTest extends TestCase
         $preview->assertSee('Apa itu HTTP?');
         $preview->assertSee('Hypertext Transfer Protocol');
         $preview->assertSee('Simpan Soal ke Kuis');
+    }
+
+    public function test_generate_soal_ditolak_saat_kuota_ai_habis(): void
+    {
+        config(['platform.ai_monthly_requests' => 0]);
+        $organization = Organization::firstOrFail();
+        $this->quiz->update(['organization_id' => $organization->id]);
+
+        $response = $this->actingAs($this->admin)
+            ->withSession(['auth_token' => 'admin-token'])
+            ->post(route('admin.quizzes.questions.ai.generate', $this->quiz), $this->aiPayload());
+
+        $response->assertSessionHasErrors('ai');
+        $this->assertDatabaseCount('ai_generations', 0);
+    }
+
+    public function test_generate_soal_mencatat_pemakaian_ai(): void
+    {
+        Queue::fake();
+        config(['platform.ai_monthly_requests' => 10]);
+        $organization = Organization::firstOrFail();
+        $this->quiz->update(['organization_id' => $organization->id]);
+
+        $this->actingAs($this->admin)
+            ->withSession(['auth_token' => 'admin-token'])
+            ->post(route('admin.quizzes.questions.ai.generate', $this->quiz), array_merge($this->aiPayload(), [
+                'jumlah_pg' => 6,
+            ]))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ai_usage_events', [
+            'organization_id' => $organization->id,
+            'kind' => 'questions',
+            'requests' => 2,
+        ]);
     }
 
     public function test_halaman_progres_ai_menampilkan_status_antrean(): void
@@ -233,5 +260,19 @@ class AiQuestionGenerationTest extends TestCase
         $this->assertNotNull($savedQuestion);
         $this->assertCount(2, $savedQuestion->options);
         $this->assertEquals('Model View Controller', $savedQuestion->correctOption()?->teks);
+    }
+
+    private function aiPayload(): array
+    {
+        return [
+            'model' => 'ag/gemini-3.8-flash-medium',
+            'topik' => 'Protokol Web',
+            'rps_text' => 'Dasar-dasar jaringan komputer dan web',
+            'jumlah_pg' => 1,
+            'jumlah_essay' => 0,
+            'level' => ['C2 - Memahami', 'C3 - Menerapkan'],
+            'nilai_maksimal' => 100,
+            'porsi_pg' => 60,
+        ];
     }
 }

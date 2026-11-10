@@ -5,22 +5,29 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\OrganizationSetting;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class SettingController extends Controller
 {
-    public function edit(): View
+    public function edit(OrganizationUsage $usage): View
     {
-        return view('admin.settings.edit', ['settings' => app('app.settings')]);
+        $organization = app(OrganizationContext::class)->current();
+
+        return view('admin.settings.edit', [
+            'settings' => app('app.settings'),
+            'usage' => $organization ? $usage->summary($organization->id) : null,
+        ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, OrganizationUsage $usage): RedirectResponse
     {
         $organization = app(OrganizationContext::class)->current();
 
@@ -71,6 +78,18 @@ class SettingController extends Controller
 
         $data['allow_pin_enrollment'] = $request->boolean('allow_pin_enrollment');
 
+        $organizationId = $organization?->id;
+        $settings = $organizationId === null
+            ? AppSetting::query()->firstOrNew(['id' => 1])
+            : OrganizationSetting::query()->firstOrNew(['organization_id' => $organizationId]);
+
+        if ($organizationId !== null && $request->hasFile('logo')
+            && ! $usage->canStore($organizationId, $request->file('logo')->getSize(), $settings->logo_path)) {
+            throw ValidationException::withMessages([
+                'logo' => 'Kuota penyimpanan workspace tidak cukup untuk logo ini.',
+            ]);
+        }
+
         if ($organization !== null) {
             $organization->update([
                 'slug' => Str::lower($data['organization_slug']),
@@ -78,11 +97,6 @@ class SettingController extends Controller
             ]);
             unset($data['organization_slug'], $data['organization_timezone']);
         }
-
-        $organizationId = $organization?->id;
-        $settings = $organizationId === null
-            ? AppSetting::query()->firstOrNew(['id' => 1])
-            : OrganizationSetting::query()->firstOrNew(['organization_id' => $organizationId]);
 
         if ($request->hasFile('logo')) {
             if ($settings->logo_path) {

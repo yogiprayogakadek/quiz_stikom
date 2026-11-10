@@ -173,6 +173,11 @@ class EssayTest extends TestCase
         $audit = AuditLog::where('action', 'essay_ai_suggested')->where('subject_id', $answer->id)->firstOrFail();
         $this->assertSame('ai.example.test', $audit->metadata['provider']);
         $this->assertSame('test-model', $audit->metadata['model']);
+        $this->assertDatabaseHas('ai_usage_events', [
+            'organization_id' => $attempt->organization_id,
+            'kind' => 'essay',
+            'requests' => 1,
+        ]);
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-admin'])

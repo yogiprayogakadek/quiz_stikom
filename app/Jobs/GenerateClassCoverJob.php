@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Kelas;
+use App\Services\OrganizationUsage;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -19,7 +20,7 @@ class GenerateClassCoverJob implements ShouldQueue
 
     public function __construct(public int $kelasId) {}
 
-    public function handle(): void
+    public function handle(OrganizationUsage $usage): void
     {
         $kelas = Kelas::find($this->kelasId);
         $settings = app('app.settings');
@@ -37,6 +38,19 @@ class GenerateClassCoverJob implements ShouldQueue
         }
 
         try {
+            if ($kelas->organization_id !== null) {
+                $usage->assertAiQuota($kelas->organization_id);
+            }
+        } catch (\RuntimeException $e) {
+            Log::warning('Cover AI dilewati karena kuota AI habis.', [
+                'kelas_id' => $this->kelasId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        try {
             $response = Http::withToken($apiKey)
                 ->timeout(150)
                 ->post($baseUrl.'/images/generations', [
@@ -48,6 +62,10 @@ class GenerateClassCoverJob implements ShouldQueue
 
             if (! $response->successful()) {
                 throw new RuntimeException('Image API merespons status '.$response->status());
+            }
+
+            if ($kelas->organization_id !== null) {
+                $usage->recordAi($kelas->organization_id, 'cover');
             }
 
             $base64 = $response->json('data.0.b64_json');
@@ -70,6 +88,12 @@ class GenerateClassCoverJob implements ShouldQueue
                 'image/webp' => 'webp',
                 default => 'png',
             };
+
+            if ($kelas->organization_id !== null && ! $usage->canStore($kelas->organization_id, strlen($bytes), $kelas->cover_path)) {
+                Log::warning('Cover AI dibuang karena kuota penyimpanan workspace habis.', ['kelas_id' => $this->kelasId]);
+
+                return;
+            }
 
             $path = 'class-covers/'.$kelas->id.'-'.now()->timestamp.'.'.$extension;
             Storage::disk('public')->put($path, $bytes);

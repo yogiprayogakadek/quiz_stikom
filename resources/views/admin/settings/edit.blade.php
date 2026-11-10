@@ -297,6 +297,40 @@
             </div>
         </section>
 
+        @if ($usage)
+            <section class="card" aria-labelledby="usage-heading">
+                <div class="border-b border-outline pb-4">
+                    <h2 id="usage-heading" class="text-2xl">Pemakaian dan kuota</h2>
+                    <p class="mt-1 text-base text-ink-muted">Batas berlaku untuk workspace ini dan ditetapkan operator platform.</p>
+                </div>
+                <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-outline bg-page p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-base font-bold text-ink">AI bulan ini</p>
+                            <p class="text-sm font-semibold text-ink-muted">{{ number_format($usage['ai_used'], 0, ',', '.') }} / {{ number_format($usage['ai_limit'], 0, ',', '.') }} request</p>
+                        </div>
+                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" aria-valuenow="{{ $usage['ai_percent'] }}" aria-valuemin="0" aria-valuemax="100" aria-label="Pemakaian kuota AI">
+                            <div @class(['h-full rounded-full', 'bg-coral' => $usage['ai_percent'] >= 100, 'bg-brand' => $usage['ai_percent'] < 100]) style="width: {{ $usage['ai_percent'] }}%"></div>
+                        </div>
+                        <p class="mt-2 text-sm text-ink-muted">Sisa {{ number_format(max(0, $usage['ai_limit'] - $usage['ai_used']), 0, ',', '.') }} request. Generate soal, saran nilai essay, dan cover AI memakai kuota ini.</p>
+                    </div>
+                    <div class="rounded-2xl border border-outline bg-page p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-base font-bold text-ink">Penyimpanan</p>
+                            <p class="text-sm font-semibold text-ink-muted">{{ number_format($usage['storage_used'] / 1048576, 1, ',', '.') }} / {{ number_format($usage['storage_limit'] / 1048576, 0, ',', '.') }} MB</p>
+                        </div>
+                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" aria-valuenow="{{ $usage['storage_percent'] }}" aria-valuemin="0" aria-valuemax="100" aria-label="Pemakaian kuota penyimpanan">
+                            <div @class(['h-full rounded-full', 'bg-coral' => $usage['storage_percent'] >= 100, 'bg-brand' => $usage['storage_percent'] < 100]) style="width: {{ $usage['storage_percent'] }}%"></div>
+                        </div>
+                        <p class="mt-2 text-sm text-ink-muted">Sisa {{ number_format(max(0, $usage['storage_limit'] - $usage['storage_used']) / 1048576, 1, ',', '.') }} MB. Logo dan cover kelas dihitung; backup database tidak.</p>
+                    </div>
+                </div>
+                @if ($usage['ai_percent'] >= 100 || $usage['storage_percent'] >= 100)
+                    <p class="mt-4 rounded-xl border border-coral-deep/30 bg-coral-soft px-4 py-3 text-sm font-semibold text-coral-deep">Kuota habis. Hapus file lama atau hubungi operator platform sebelum memakai fitur AI atau mengunggah file baru.</p>
+                @endif
+            </section>
+        @endif
+
         <div class="sticky bottom-4 flex justify-end rounded-2xl border border-outline bg-page/95 p-3 shadow-modal backdrop-blur-sm">
             <button type="submit" class="btn btn-primary">Simpan pengaturan</button>
         </div>

@@ -10,6 +10,7 @@ use App\Models\AiGeneration;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Services\AiQuestionService;
+use App\Services\OrganizationUsage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -491,7 +492,7 @@ class QuestionController extends Controller
         return view('admin.questions.ai-form', compact('quiz', 'models'));
     }
 
-    public function aiGenerate(Request $request, Quiz $quiz): View|RedirectResponse
+    public function aiGenerate(Request $request, Quiz $quiz, OrganizationUsage $usage): View|RedirectResponse
     {
         if ($quiz->isLocked()) {
             return redirect()->route('admin.quizzes.questions.index', $quiz)
@@ -523,6 +524,16 @@ class QuestionController extends Controller
 
         if ((int) $validated['jumlah_pg'] + (int) $validated['jumlah_essay'] < 1) {
             return back()->withInput()->withErrors(['jumlah' => 'Pilih minimal 1 soal (pilihan ganda atau essay).']);
+        }
+
+        if ($quiz->organization_id !== null) {
+            $requests = (int) ceil((int) $validated['jumlah_pg'] / 5) + (int) ceil((int) $validated['jumlah_essay'] / 5);
+
+            try {
+                $usage->reserveAi($quiz->organization_id, 'questions', max(1, $requests));
+            } catch (\RuntimeException $e) {
+                return back()->withInput()->withErrors(['ai' => $e->getMessage()]);
+            }
         }
 
         $generation = AiGeneration::create([

@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\QuizSession;
 use App\Services\AiQuestionService;
+use App\Services\OrganizationUsage;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -250,14 +251,20 @@ class ReportController extends Controller
         return back()->with('sukses', 'Nilai essay disimpan dan skor attempt diperbarui.');
     }
 
-    public function saranNilaiEssay(Answer $answer, AiQuestionService $ai): RedirectResponse
+    public function saranNilaiEssay(Answer $answer, AiQuestionService $ai, OrganizationUsage $usage): RedirectResponse
     {
         $answer->loadMissing(['question', 'attempt.quizSession']);
         abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
         abort_unless($answer->attempt->status === 'selesai', 422);
         abort_unless(filled($answer->jawaban_teks), 422);
 
+        $organizationId = $answer->attempt->organization_id;
+
         try {
+            if ($organizationId !== null) {
+                $usage->assertAiQuota($organizationId);
+            }
+
             $suggestion = $ai->evaluateEssay(
                 $answer->question->teks,
                 $answer->question->kunci_essay,
@@ -267,6 +274,10 @@ class ReportController extends Controller
             );
         } catch (\Throwable $e) {
             return back()->withErrors(['ai_essay' => $e->getMessage()]);
+        }
+
+        if ($organizationId !== null) {
+            $usage->recordAi($organizationId, 'essay');
         }
 
         $answer->update([
