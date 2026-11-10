@@ -1,7 +1,33 @@
 @php($activeOrganization = app(\App\Support\OrganizationContext::class)->current())
 
 <x-layouts.admin judul="Pengaturan" :keterangan="$activeOrganization ? 'Pengaturan ini berlaku untuk workspace '.$activeOrganization->name.'.' : 'Sesuaikan identitas platform, layanan AI, dan cover kelas.'">
-    <form method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="max-w-5xl space-y-8" data-progress-message="Menyimpan pengaturan publik...">
+    <form
+        method="POST"
+        action="{{ route('admin.settings.update') }}"
+        enctype="multipart/form-data"
+        class="max-w-5xl space-y-8"
+        data-progress-message="Menyimpan pengaturan publik..."
+        x-data="{
+            siteName: @js(old('site_name', $settings->site_name)),
+            siteTagline: @js(old('site_tagline', $settings->site_tagline)),
+            primaryColor: @js(old('primary_color', $settings->primary_color)),
+            loginTitle: @js(old('login_title', $settings->login_title)),
+            loginDescription: @js(old('login_description', $settings->login_description)),
+            layout: @js(old('login_layout', $settings->login_layout)),
+            logoPreview: @js($settings->logoUrl()),
+            logoObjectUrl: null,
+            previewStyle() {
+                return `--preview-soft: color-mix(in srgb, ${this.primaryColor} 15%, white); --preview-deep: color-mix(in srgb, ${this.primaryColor} 72%, #0f172a);`;
+            },
+            previewLogo(event) {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                if (this.logoObjectUrl) URL.revokeObjectURL(this.logoObjectUrl);
+                this.logoObjectUrl = URL.createObjectURL(file);
+                this.logoPreview = this.logoObjectUrl;
+            }
+        }"
+    >
         @csrf
         @method('PUT')
 
@@ -13,7 +39,7 @@
             <div class="mt-5 grid gap-5 sm:grid-cols-2">
                 <div>
                     <label for="site_name" class="label">Nama aplikasi</label>
-                    <input id="site_name" name="site_name" class="input" required maxlength="80" value="{{ old('site_name', $settings->site_name) }}">
+                    <input id="site_name" name="site_name" class="input" required maxlength="80" value="{{ old('site_name', $settings->site_name) }}" x-model="siteName">
                     @error('site_name') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div>
@@ -23,50 +49,125 @@
                 </div>
                 <div class="sm:col-span-2">
                     <label for="site_tagline" class="label">Deskripsi singkat</label>
-                    <input id="site_tagline" name="site_tagline" class="input" required maxlength="160" value="{{ old('site_tagline', $settings->site_tagline) }}">
+                    <input id="site_tagline" name="site_tagline" class="input" required maxlength="160" value="{{ old('site_tagline', $settings->site_tagline) }}" x-model="siteTagline">
                     @error('site_tagline') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="primary_color" class="label">Warna utama</label>
                     <div class="flex items-center gap-3">
-                        <input id="primary_color_picker" type="color" aria-label="Pilih warna utama" class="h-12 w-16 cursor-pointer rounded-xl border border-outline bg-page p-1" value="{{ old('primary_color', $settings->primary_color) }}" oninput="document.getElementById('primary_color').value = this.value">
-                        <input id="primary_color" name="primary_color" class="input font-mono" required pattern="#[0-9A-Fa-f]{6}" value="{{ old('primary_color', $settings->primary_color) }}" oninput="document.getElementById('primary_color_picker').value = this.value">
+                        <input id="primary_color_picker" type="color" aria-label="Pilih warna utama" class="h-12 w-16 cursor-pointer rounded-xl border border-outline bg-page p-1" value="{{ old('primary_color', $settings->primary_color) }}" :value="primaryColor" x-on:input="primaryColor = $event.target.value">
+                        <input id="primary_color" name="primary_color" class="input font-mono" required pattern="#[0-9A-Fa-f]{6}" value="{{ old('primary_color', $settings->primary_color) }}" x-model="primaryColor">
                     </div>
                     @error('primary_color') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="logo" class="label">Logo</label>
                     <div class="flex items-center gap-3">
-                        <img src="{{ $settings->logoUrl() }}" alt="Logo saat ini" class="h-12 w-12 rounded-xl border border-outline bg-page object-contain p-1">
-                        <input id="logo" name="logo" type="file" class="input" accept=".png,.jpg,.jpeg,.webp,.svg">
+                        <img :src="logoPreview" alt="Logo saat ini" class="h-12 w-12 rounded-xl border border-outline bg-page object-contain p-1">
+                        <input id="logo" name="logo" type="file" class="input" accept=".png,.jpg,.jpeg,.webp,.svg" x-on:change="previewLogo($event)">
                     </div>
                     <p class="help mt-1">PNG, JPG, WebP, atau SVG. Maksimal 2 MB.</p>
                     @error('logo') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="login_title" class="label">Judul halaman login</label>
-                    <input id="login_title" name="login_title" class="input" required maxlength="100" value="{{ old('login_title', $settings->login_title) }}">
+                    <input id="login_title" name="login_title" class="input" required maxlength="100" value="{{ old('login_title', $settings->login_title) }}" x-model="loginTitle">
                     @error('login_title') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="login_description" class="label">Petunjuk login</label>
-                    <textarea id="login_description" name="login_description" class="input min-h-24" required maxlength="300">{{ old('login_description', $settings->login_description) }}</textarea>
+                    <textarea id="login_description" name="login_description" class="input min-h-24" required maxlength="300" x-model="loginDescription">{{ old('login_description', $settings->login_description) }}</textarea>
                     @error('login_description') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <fieldset class="sm:col-span-2">
                     <legend class="label">Layout halaman login</legend>
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
-                            <input type="radio" name="login_layout" value="split" @checked(old('login_layout', $settings->login_layout) === 'split')>
+                            <input type="radio" name="login_layout" value="split" @checked(old('login_layout', $settings->login_layout) === 'split') x-model="layout">
                             <span><strong class="block text-ink">Split</strong><span class="text-sm text-ink-muted">Ilustrasi di samping formulir pada layar lebar.</span></span>
                         </label>
                         <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
-                            <input type="radio" name="login_layout" value="centered" @checked(old('login_layout', $settings->login_layout) === 'centered')>
+                            <input type="radio" name="login_layout" value="centered" @checked(old('login_layout', $settings->login_layout) === 'centered') x-model="layout">
                             <span><strong class="block text-ink">Terpusat</strong><span class="text-sm text-ink-muted">Formulir ringkas tanpa panel ilustrasi.</span></span>
                         </label>
                     </div>
                     @error('login_layout') <p class="field-error">{{ $message }}</p> @enderror
                 </fieldset>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="preview-heading">
+            <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
+                <div>
+                    <h2 id="preview-heading" class="text-2xl">Pratinjau branding</h2>
+                    <p class="mt-1 text-base text-ink-muted">Pratinjau mengikuti isian di atas. Perubahan baru dipakai setelah kamu menekan tombol simpan.</p>
+                </div>
+                <span class="pill pill-neutral">Pratinjau</span>
+            </div>
+
+            <div class="mt-5 rounded-2xl border border-outline bg-surface-sunken p-3 sm:p-5" :style="previewStyle()" aria-hidden="true">
+                <div class="overflow-hidden rounded-xl border border-outline bg-page shadow-lift">
+                    <div :class="layout === 'split' ? 'grid md:grid-cols-2' : 'flex flex-col'">
+                        <div
+                            x-show="layout === 'split'"
+                            x-cloak
+                            class="relative hidden flex-col justify-between gap-6 overflow-hidden p-5 md:flex"
+                            style="background: linear-gradient(145deg, var(--preview-soft), var(--color-surface), var(--preview-soft));"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-outline bg-page p-1.5">
+                                    <img :src="logoPreview" alt="" class="h-full w-full object-contain">
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="truncate font-display text-base font-bold text-ink" x-text="siteName"></p>
+                                    <p class="truncate text-xs text-ink-subtle" x-text="siteTagline"></p>
+                                </div>
+                            </div>
+                            <div class="rounded-xl border border-outline bg-page/70 p-3">
+                                <div class="flex h-36 items-center justify-center rounded-lg" style="background: var(--preview-soft);">
+                                    <span class="text-xs font-bold" style="color: var(--preview-deep);">Ilustrasi login</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-ink-subtle">
+                                <span>Mode layar penuh</span>
+                                <span>Sinkron realtime</span>
+                            </div>
+                        </div>
+
+                        <div
+                            :class="layout === 'split' ? 'p-5 sm:p-6' : 'p-5 sm:p-8'"
+                            :style="layout === 'centered' ? 'background: linear-gradient(145deg, var(--preview-soft), var(--color-surface), var(--preview-soft));' : ''"
+                        >
+                            <div class="mx-auto w-full max-w-sm">
+                                <div class="mb-4 flex items-center justify-center gap-2" :class="layout === 'centered' ? '' : 'md:hidden'">
+                                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-outline bg-page p-1.5">
+                                        <img :src="logoPreview" alt="" class="h-full w-full object-contain">
+                                    </div>
+                                    <span class="min-w-0 truncate font-display text-lg font-bold tracking-tight text-ink" x-text="siteName"></span>
+                                </div>
+
+                                <div class="rounded-xl border border-outline bg-page p-4 shadow-lift sm:p-5">
+                                    <p class="font-display text-xl font-extrabold tracking-tight text-ink" x-text="loginTitle"></p>
+                                    <p class="mt-1 text-xs leading-relaxed text-ink-muted" x-text="loginDescription"></p>
+
+                                    <div class="mt-4 space-y-2.5">
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Username</p>
+                                            <div class="mt-1 h-9 rounded-lg border border-outline bg-page"></div>
+                                        </div>
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Password</p>
+                                            <div class="mt-1 h-9 rounded-lg border border-outline bg-page"></div>
+                                        </div>
+                                        <div class="rounded-lg px-3 py-2 text-center text-xs font-bold text-white" :style="'background-color: ' + primaryColor">Masuk akun</div>
+                                    </div>
+                                </div>
+
+                                <p class="mt-3 text-center text-[10px] text-ink-subtle">Kendala akun? Hubungi admin kelas.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 

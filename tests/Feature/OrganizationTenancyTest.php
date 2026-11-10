@@ -334,6 +334,31 @@ class OrganizationTenancyTest extends TestCase
             ->assertSee('01 Jan 2026, 09:00');
     }
 
+    public function test_admin_melihat_pratinjau_branding_di_halaman_pengaturan(): void
+    {
+        [$organization, $admin] = $this->organizationWithUser('alpha', 'admin_alpha', 'admin');
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'site_name' => 'Kuis Alpha',
+            'site_tagline' => 'Belajar bersama',
+            'primary_color' => '#166534',
+            'login_title' => 'Masuk Alpha',
+            'login_description' => 'Gunakan akun Alpha.',
+            'login_layout' => 'split',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('admin.settings.edit'))
+            ->assertOk()
+            ->assertSee('Pratinjau branding')
+            ->assertSee('x-model="siteName"', false)
+            ->assertSee('x-model="loginTitle"', false)
+            ->assertSee('x-text="siteName"', false)
+            ->assertSee('x-text="loginTitle"', false)
+            ->assertSee('logoPreview', false);
+    }
+
     public function test_bahasa_organisasi_mengubah_nama_bulan(): void
     {
         [$organization, $admin] = $this->organizationWithUser('alpha', 'admin_alpha', 'admin');
