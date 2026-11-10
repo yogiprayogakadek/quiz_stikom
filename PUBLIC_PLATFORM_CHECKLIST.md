@@ -73,7 +73,7 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 - [x] Antrean penilaian manual.
 - [x] Rekomendasi nilai AI dengan confidence dan umpan balik.
 - [x] Admin mengonfirmasi atau mengubah rekomendasi.
-- [ ] Mode otomatis hanya untuk kuis yang mengaktifkannya.
+- [x] Mode otomatis hanya untuk kuis yang mengaktifkannya.
 - [ ] Riwayat perubahan nilai, model, provider, dan pemberi nilai.
 
 ## Fase 7: Kesiapan publik
@@ -130,3 +130,11 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 - Verifikasi: `112 passed (560 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000009_create_ai_usage_events` berhasil dijalankan lokal.
 - Risiko tersisa: kuota masih global lewat env `PLATFORM_AI_MONTHLY_REQUESTS` dan `PLATFORM_STORAGE_MB`, belum bisa diatur per workspace dari UI master. Pemakaian essay dan cover dicatat setelah panggilan AI berhasil; generate soal mereservasi di muka sehingga job yang gagal tetap memakai kuota. Job AI di queue masih memakai pengaturan platform karena `OrganizationContext` tidak di-set di worker; ini perlu diperiksa saat kuota per workspace dibuat.
 - Item berikutnya: **Mode otomatis hanya untuk kuis yang mengaktifkannya**.
+
+## Checkpoint 10 November 2026 — auto-grade essay
+
+- Status: kuis dapat mengaktifkan **Nilai essay otomatis dengan AI**. Flag `quizzes.auto_grade_essay` default mati. Saat attempt Mode Acak selesai atau sesi ditutup, `AutoGradeEssayJob` menilai essay yang belum dinilai. Nilai AI langsung menjadi nilai final, tercatat di audit sebagai **Sistem**, dan tetap bisa diubah admin. Job memakai provider organisasi dan menghormati kuota AI; kuota habis atau AI gagal meninggalkan essay untuk penilaian manual.
+- Commit fitur: `34eade0` (`feat: auto grade essay for opted-in quizzes`).
+- Verifikasi: `125 passed (594 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000010_add_auto_grade_essay_to_quizzes_table` berhasil dijalankan lokal.
+- Risiko tersisa: auto-grade memakai satu request AI per essay dan tidak mengulang otomatis jika AI gagal; hasil AI bisa keliru dan tetap perlu dipantau admin. Job hanya berjalan untuk Mode Acak.
+- Item berikutnya: **Riwayat perubahan nilai, model, provider, dan pemberi nilai**.
