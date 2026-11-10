@@ -235,12 +235,23 @@
 
                     {{-- Help Note --}}
                     <div class="mt-6 border-t border-outline/70 pt-4 text-center">
+                        @if (! $masterLogin)
+                            <p class="mb-2 text-xs text-ink-subtle">
+                                Belum punya workspace?
+                                <a href="{{ route('register.organization') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Daftarkan organisasi</a>.
+                            </p>
+                        @endif
                         <p class="text-xs text-ink-subtle">
                             @if ($masterLogin)
                                 Bukan master? <a href="{{ route('login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke login pengguna</a>.
                             @else
                                 Kendala akun? Hubungi admin kelas. Master platform <a href="{{ route('master.login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">masuk di sini</a>.
                             @endif
+                        </p>
+                        <p class="mt-3 text-xs text-ink-subtle">
+                            <a href="{{ route('terms.show') }}" class="underline-offset-2 hover:underline">Syarat</a>
+                            ·
+                            <a href="{{ route('privacy.show') }}" class="underline-offset-2 hover:underline">Privasi</a>
                         </p>
                     </div>
                 </div>

@@ -582,6 +582,71 @@ class EssayTest extends TestCase
             ->assertDontSee('Portal Peserta');
     }
 
+    public function test_riwayat_nilai_final_menampilkan_provider_model_dan_pemberi_nilai(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 91,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.answers.ai-suggestion', $answer));
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.attempts.nilai', $attempt), ['nilai' => [$essay->id => 8]]);
+
+        $final = AuditLog::where('action', 'essay_score_changed')->where('subject_id', $answer->id)->firstOrFail();
+        $this->assertSame('ai.example.test', $final->metadata['ai_provider']);
+        $this->assertSame('test-model', $final->metadata['ai_model']);
+        $this->assertSame($admin->id, $final->actor_id);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('ai.example.test')
+            ->assertSee('test-model')
+            ->assertSee('Admin');
+    }
+
+    public function test_riwayat_nilai_manual_tanpa_ai_tetap_menampilkan_pemberi_nilai(): void
+    {
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.attempts.nilai', $attempt), ['nilai' => [$essay->id => 7]]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('Nilai final ditetapkan menjadi 7.')
+            ->assertSee('Admin')
+            ->assertDontSee('Saran AI 7 poin');
+    }
+
     private function buatAcakBerjalan(bool $denganJawaban = true, bool $autoGrade = false): array
     {
         $admin = User::create([

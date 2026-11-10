@@ -10,13 +10,17 @@ use App\Http\Controllers\Admin\SessionController as AdminSessionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\OrganizationRegistrationController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\DisplayController;
+use App\Http\Controllers\Master\MailSettingController;
 use App\Http\Controllers\Master\OrganizationController;
 use App\Http\Controllers\Master\SystemController;
+use App\Http\Controllers\Master\SystemHealthController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
@@ -35,8 +39,15 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
+Route::get('/syarat', [LegalController::class, 'terms'])->name('terms.show');
+Route::get('/privasi', [LegalController::class, 'privacy'])->name('privacy.show');
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
+    Route::get('/daftar', [OrganizationRegistrationController::class, 'create'])->name('register.organization');
+    Route::post('/daftar', [OrganizationRegistrationController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('register.organization.store');
     Route::get('/o/{organization:slug}/login', [LoginController::class, 'showOrganization'])->name('organizations.login');
     Route::post('/login', [LoginController::class, 'login'])->name('login.store');
     Route::get('/lupa-password', [AccountRecoveryController::class, 'requestForm'])->name('password.request');
@@ -75,7 +86,27 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
+    Route::get('organizations/{organization}/kuota', [OrganizationController::class, 'editLimits'])->name('organizations.limits.edit');
+    Route::put('organizations/{organization}/kuota', [OrganizationController::class, 'updateLimits'])->name('organizations.limits.update');
+    Route::get('organizations/{organization}/export', [OrganizationController::class, 'export'])->name('organizations.export');
+    Route::get('organizations/{organization}/delete', [OrganizationController::class, 'showDelete'])->name('organizations.delete');
+    Route::delete('organizations/{organization}', [OrganizationController::class, 'destroy'])->name('organizations.destroy');
     Route::put('organizations/{organization}/status', [OrganizationController::class, 'updateStatus'])->name('organizations.status.update');
+    Route::get('email', [MailSettingController::class, 'edit'])->name('mail.edit');
+    Route::put('email', [MailSettingController::class, 'update'])->name('mail.update');
+    Route::post('email/test', [MailSettingController::class, 'sendTest'])->middleware('throttle:3,1')->name('mail.test');
+    Route::get('system', [SystemHealthController::class, 'index'])->name('system.index');
+    Route::post('system/backups', [SystemHealthController::class, 'backupStore'])->name('system.backups.store');
+    Route::get('system/backups/{nama}', [SystemHealthController::class, 'backupDownload'])
+        ->where('nama', '[A-Za-z0-9._-]+')
+        ->name('system.backups.download');
+    Route::delete('system/backups/{nama}', [SystemHealthController::class, 'backupDestroy'])
+        ->where('nama', '[A-Za-z0-9._-]+')
+        ->name('system.backups.destroy');
+    Route::post('system/failed-jobs/{id}/retry', [SystemHealthController::class, 'retryFailedJob'])
+        ->name('system.failed-jobs.retry');
+    Route::delete('system/failed-jobs/{id}', [SystemHealthController::class, 'forgetFailedJob'])
+        ->name('system.failed-jobs.forget');
     Route::put('system/maintenance', [SystemController::class, 'updateMaintenance'])->name('maintenance.update');
 });
 

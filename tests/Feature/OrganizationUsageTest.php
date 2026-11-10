@@ -9,6 +9,7 @@ use App\Models\Kelas;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
 use App\Services\OrganizationUsage;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -103,7 +104,10 @@ class OrganizationUsageTest extends TestCase
             '*/images/generations' => Http::response(['data' => [['b64_json' => base64_encode($png)]]]),
         ]);
 
-        (new GenerateClassCoverJob($kelas->id))->handle(app(OrganizationUsage::class));
+        (new GenerateClassCoverJob($kelas->id))->handle(
+            app(OrganizationUsage::class),
+            app(OrganizationContext::class),
+        );
 
         $this->assertNull($kelas->fresh()->cover_path);
         $this->assertDatabaseHas('ai_usage_events', [

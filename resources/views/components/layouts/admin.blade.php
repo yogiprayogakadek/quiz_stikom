@@ -126,11 +126,27 @@
                 @if (auth()->user()->isPlatformAdmin())
                     <a
                         href="{{ route('master.organizations.index') }}"
-                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
-                        @if (request()->routeIs('master.*')) aria-current="page" @endif
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.organizations.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.organizations.*')) aria-current="page" @endif
                     >
-                        <x-icon name="users" :size="20" class="{{ request()->routeIs('master.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <x-icon name="users" :size="20" class="{{ request()->routeIs('master.organizations.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span>Organisasi</span>
+                    </a>
+                    <a
+                        href="{{ route('master.mail.edit') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.mail.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.mail.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="mail" :size="20" class="{{ request()->routeIs('master.mail.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Email</span>
+                    </a>
+                    <a
+                        href="{{ route('master.system.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.system.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.system.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="server" :size="20" class="{{ request()->routeIs('master.system.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Sistem</span>
                     </a>
                 @endif
                 @if (auth()->user()->isCurrentOrganizationOwner())
@@ -261,13 +277,33 @@
                     @if (auth()->user()->isPlatformAdmin())
                         <a
                             href="{{ route('master.organizations.index') }}"
-                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.organizations.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
                             :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
                             :title="sidebarCollapsed ? 'Organisasi' : ''"
-                            @if (request()->routeIs('master.*')) aria-current="page" @endif
+                            @if (request()->routeIs('master.organizations.*')) aria-current="page" @endif
                         >
-                            <x-icon name="users" :size="20" class="{{ request()->routeIs('master.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <x-icon name="users" :size="20" class="{{ request()->routeIs('master.organizations.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                             <span x-show="!sidebarCollapsed" x-cloak>Organisasi</span>
+                        </a>
+                        <a
+                            href="{{ route('master.mail.edit') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.mail.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Email' : ''"
+                            @if (request()->routeIs('master.mail.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="mail" :size="20" class="{{ request()->routeIs('master.mail.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Email</span>
+                        </a>
+                        <a
+                            href="{{ route('master.system.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.system.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Sistem' : ''"
+                            @if (request()->routeIs('master.system.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="server" :size="20" class="{{ request()->routeIs('master.system.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Sistem</span>
                         </a>
                     @endif
                     @if (auth()->user()->isCurrentOrganizationOwner())

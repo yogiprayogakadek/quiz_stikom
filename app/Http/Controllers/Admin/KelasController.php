@@ -7,6 +7,7 @@ use App\Jobs\GenerateClassCoverJob;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\User;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class KelasController extends Controller
         return view('admin.classes.index', compact('kelas'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, OrganizationUsage $usage): RedirectResponse
     {
         $data = $request->validate([
             'nama' => ['required', 'string', 'max:120'],
@@ -40,6 +41,14 @@ class KelasController extends Controller
             'pin.alpha_num' => 'PIN hanya boleh huruf dan angka.',
             'pin.unique' => 'PIN ini sudah dipakai kelas lain.',
         ]);
+
+        $organizationId = app(OrganizationContext::class)->id();
+
+        if (! $usage->canAddClass($organizationId)) {
+            throw ValidationException::withMessages([
+                'nama' => 'Kuota kelas workspace penuh ('.$usage->classLimit($organizationId).'). Hubungi master platform untuk menaikkan batas.',
+            ]);
+        }
 
         $kelas = Kelas::create($data + ['created_by' => $request->user()->id]);
 

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\AppSetting;
 use App\Models\OrganizationSetting;
+use App\Services\PlatformMail;
 use App\Support\OrganizationContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -28,6 +29,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        if (! $this->app->runningInConsole()) {
+            PlatformMail::apply();
+        }
+
         View::composer('*', fn ($view) => $view->with([
             'appSettings' => app('app.settings'),
             'orgTimezone' => app(OrganizationContext::class)->timezone(),

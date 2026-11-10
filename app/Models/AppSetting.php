@@ -53,6 +53,13 @@ class AppSetting extends Model
         'maintenance_enabled',
         'maintenance_message',
         'maintenance_started_at',
+        'mail_host',
+        'mail_port',
+        'mail_encryption',
+        'mail_username',
+        'mail_password',
+        'mail_from_address',
+        'mail_from_name',
     ];
 
     protected function casts(): array
@@ -64,6 +71,8 @@ class AppSetting extends Model
             'allow_pin_enrollment' => 'boolean',
             'maintenance_enabled' => 'boolean',
             'maintenance_started_at' => 'datetime',
+            'mail_password' => 'encrypted',
+            'mail_port' => 'integer',
         ];
     }
 

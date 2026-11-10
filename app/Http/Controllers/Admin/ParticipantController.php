@@ -7,6 +7,7 @@ use App\Http\Requests\StoreParticipantRequest;
 use App\Http\Requests\UpdateParticipantRequest;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,9 +45,17 @@ class ParticipantController extends Controller
         return view('admin.participants.create');
     }
 
-    public function store(StoreParticipantRequest $request): RedirectResponse
+    public function store(StoreParticipantRequest $request, OrganizationUsage $usage): RedirectResponse
     {
         $data = $request->validated();
+        $organizationId = app(OrganizationContext::class)->id();
+
+        if (! $usage->canAddParticipant($organizationId)) {
+            throw ValidationException::withMessages([
+                'nama' => 'Kuota peserta workspace penuh ('.$usage->participantLimit($organizationId).'). Hubungi master platform untuk menaikkan batas.',
+            ]);
+        }
+
         $password = $data['password'] ?? null;
         $dibuat = null;
 
@@ -146,7 +155,7 @@ class ParticipantController extends Controller
         return view('admin.participants.import');
     }
 
-    public function import(Request $request): RedirectResponse
+    public function import(Request $request, OrganizationUsage $usage): RedirectResponse
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:2048'],
@@ -189,6 +198,8 @@ class ParticipantController extends Controller
         $hasil = [];
         $usernameTerpakai = [];
         $baris = 1;
+        $organizationId = app(OrganizationContext::class)->id();
+        $sisaKuota = $usage->participantRemaining($organizationId);
 
         while (($row = fgetcsv($handle)) !== false) {
             $baris++;
@@ -213,6 +224,8 @@ class ParticipantController extends Controller
                 $alasan = 'Username sudah dipakai.';
             } elseif ($password !== '' && mb_strlen($password) < 8) {
                 $alasan = 'Password minimal 8 karakter.';
+            } elseif ($sisaKuota <= 0) {
+                $alasan = 'Kuota peserta workspace penuh.';
             }
 
             if ($alasan !== null) {
@@ -247,13 +260,14 @@ class ParticipantController extends Controller
             ]);
 
             DB::table('organization_memberships')->insert([
-                'organization_id' => app(OrganizationContext::class)->id(),
+                'organization_id' => $organizationId,
                 'user_id' => $userId,
                 'role' => 'participant',
                 'status' => 'active',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+            $sisaKuota--;
             AuditLog::record('participant_added', 'user', $userId, [
                 'name' => $nama,
                 'username' => $username,

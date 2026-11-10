@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Kelas;
 use App\Services\OrganizationUsage;
+use App\Support\OrganizationContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -20,93 +21,104 @@ class GenerateClassCoverJob implements ShouldQueue
 
     public function __construct(public int $kelasId) {}
 
-    public function handle(OrganizationUsage $usage): void
+    public function handle(OrganizationUsage $usage, OrganizationContext $context): void
     {
-        $kelas = Kelas::find($this->kelasId);
-        $settings = app('app.settings');
+        $kelas = Kelas::withoutGlobalScopes()->find($this->kelasId);
 
-        if (! $kelas || $settings->class_cover_mode !== 'ai') {
+        if (! $kelas) {
             return;
         }
 
-        $baseUrl = rtrim((string) ($settings->image_base_url ?: $settings->ai_base_url), '/');
-        $apiKey = $settings->image_api_key ?: $settings->ai_api_key;
-        if ($baseUrl === '' || blank($apiKey) || blank($settings->image_model)) {
-            Log::warning('Cover AI dilewati karena konfigurasi image API belum lengkap.', ['kelas_id' => $this->kelasId]);
-
-            return;
-        }
+        $context->force($kelas->organization);
 
         try {
-            if ($kelas->organization_id !== null) {
-                $usage->assertAiQuota($kelas->organization_id);
-            }
-        } catch (\RuntimeException $e) {
-            Log::warning('Cover AI dilewati karena kuota AI habis.', [
-                'kelas_id' => $this->kelasId,
-                'error' => $e->getMessage(),
-            ]);
+            $settings = app('app.settings');
 
-            return;
-        }
-
-        try {
-            $response = Http::withToken($apiKey)
-                ->timeout(150)
-                ->post($baseUrl.'/images/generations', [
-                    'model' => $settings->image_model,
-                    'prompt' => "Wide editorial cover for an education class named '{$kelas->nama}'. Abstract academic objects and structured learning modules, confident composition, no people, no logos, no letters, no text, landscape format.",
-                    'size' => '1536x1024',
-                    'n' => 1,
-                ]);
-
-            if (! $response->successful()) {
-                throw new RuntimeException('Image API merespons status '.$response->status());
+            if ($settings->class_cover_mode !== 'ai') {
+                return;
             }
 
-            if ($kelas->organization_id !== null) {
-                $usage->recordAi($kelas->organization_id, 'cover');
-            }
-
-            $base64 = $response->json('data.0.b64_json');
-            $url = $response->json('data.0.url');
-            $bytes = is_string($base64) && $base64 !== ''
-                ? base64_decode($base64, true)
-                : (is_string($url) && $url !== '' ? Http::timeout(90)->get($url)->throw()->body() : false);
-
-            if (! is_string($bytes) || $bytes === '') {
-                throw new RuntimeException('Image API tidak mengembalikan gambar.');
-            }
-
-            $imageInfo = getimagesizefromstring($bytes);
-            if ($imageInfo === false || strlen($bytes) > 10 * 1024 * 1024) {
-                throw new RuntimeException('File dari Image API bukan gambar yang valid atau melebihi 10 MB.');
-            }
-
-            $extension = match ($imageInfo['mime'] ?? '') {
-                'image/jpeg' => 'jpg',
-                'image/webp' => 'webp',
-                default => 'png',
-            };
-
-            if ($kelas->organization_id !== null && ! $usage->canStore($kelas->organization_id, strlen($bytes), $kelas->cover_path)) {
-                Log::warning('Cover AI dibuang karena kuota penyimpanan workspace habis.', ['kelas_id' => $this->kelasId]);
+            $baseUrl = rtrim((string) ($settings->image_base_url ?: $settings->ai_base_url), '/');
+            $apiKey = $settings->image_api_key ?: $settings->ai_api_key;
+            if ($baseUrl === '' || blank($apiKey) || blank($settings->image_model)) {
+                Log::warning('Cover AI dilewati karena konfigurasi image API belum lengkap.', ['kelas_id' => $this->kelasId]);
 
                 return;
             }
 
-            $path = 'class-covers/'.$kelas->id.'-'.now()->timestamp.'.'.$extension;
-            Storage::disk('public')->put($path, $bytes);
+            try {
+                if ($kelas->organization_id !== null) {
+                    $usage->assertAiQuota($kelas->organization_id);
+                }
+            } catch (RuntimeException $e) {
+                Log::warning('Cover AI dilewati karena kuota AI habis.', [
+                    'kelas_id' => $this->kelasId,
+                    'error' => $e->getMessage(),
+                ]);
 
-            if ($kelas->cover_path) {
-                Storage::disk('public')->delete($kelas->cover_path);
+                return;
             }
-            $kelas->update(['cover_path' => $path]);
-        } catch (Throwable $e) {
-            Log::warning('Generate cover kelas gagal; cover lokal tetap digunakan.', [
-                'kelas_id' => $this->kelasId,
-                'error' => $e->getMessage(),
-            ]);
+
+            try {
+                $response = Http::withToken($apiKey)
+                    ->timeout(150)
+                    ->post($baseUrl.'/images/generations', [
+                        'model' => $settings->image_model,
+                        'prompt' => "Wide editorial cover for an education class named '{$kelas->nama}'. Abstract academic objects and structured learning modules, confident composition, no people, no logos, no letters, no text, landscape format.",
+                        'size' => '1536x1024',
+                        'n' => 1,
+                    ]);
+
+                if (! $response->successful()) {
+                    throw new RuntimeException('Image API merespons status '.$response->status());
+                }
+
+                if ($kelas->organization_id !== null) {
+                    $usage->recordAi($kelas->organization_id, 'cover');
+                }
+
+                $base64 = $response->json('data.0.b64_json');
+                $url = $response->json('data.0.url');
+                $bytes = is_string($base64) && $base64 !== ''
+                    ? base64_decode($base64, true)
+                    : (is_string($url) && $url !== '' ? Http::timeout(90)->get($url)->throw()->body() : false);
+
+                if (! is_string($bytes) || $bytes === '') {
+                    throw new RuntimeException('Image API tidak mengembalikan gambar.');
+                }
+
+                $imageInfo = getimagesizefromstring($bytes);
+                if ($imageInfo === false || strlen($bytes) > 10 * 1024 * 1024) {
+                    throw new RuntimeException('File dari Image API bukan gambar yang valid atau melebihi 10 MB.');
+                }
+
+                $extension = match ($imageInfo['mime'] ?? '') {
+                    'image/jpeg' => 'jpg',
+                    'image/webp' => 'webp',
+                    default => 'png',
+                };
+
+                if ($kelas->organization_id !== null && ! $usage->canStore($kelas->organization_id, strlen($bytes), $kelas->cover_path)) {
+                    Log::warning('Cover AI dibuang karena kuota penyimpanan workspace habis.', ['kelas_id' => $this->kelasId]);
+
+                    return;
+                }
+
+                $path = 'class-covers/'.$kelas->id.'-'.now()->timestamp.'.'.$extension;
+                Storage::disk('public')->put($path, $bytes);
+
+                if ($kelas->cover_path) {
+                    Storage::disk('public')->delete($kelas->cover_path);
+                }
+                $kelas->update(['cover_path' => $path]);
+            } catch (Throwable $e) {
+                Log::warning('Generate cover kelas gagal; cover lokal tetap digunakan.', [
+                    'kelas_id' => $this->kelasId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        } finally {
+            $context->force(null);
         }
     }
 }

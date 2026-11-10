@@ -10,6 +10,7 @@ use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\AiQuestionService;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
@@ -117,7 +118,8 @@ class AiQuestionGenerationTest extends TestCase
                 ],
             ]);
 
-        (new GenerateAiQuestionsJob($generation->id))->handle($mockService);
+        $this->app->instance(AiQuestionService::class, $mockService);
+        (new GenerateAiQuestionsJob($generation->id))->handle(app(OrganizationContext::class));
 
         $generation->refresh();
         $this->assertSame('selesai', $generation->status);

@@ -79,6 +79,11 @@
                                         <a href="{{ route('organizations.login', $organization) }}" class="text-xs font-semibold text-brand-deep hover:underline" target="_blank" rel="noopener">
                                             /o/{{ $organization->slug }}/login
                                         </a>
+                                        <div class="mt-1 flex flex-wrap gap-3">
+                                            <a href="{{ route('master.organizations.limits.edit', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Kuota</a>
+                                            <a href="{{ route('master.organizations.export', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Export</a>
+                                            <a href="{{ route('master.organizations.delete', $organization) }}" class="text-xs font-semibold text-coral-deep underline-offset-2 hover:underline">Hapus</a>
+                                        </div>
                                     </td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->admin_count }}</td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->participant_count }}</td>

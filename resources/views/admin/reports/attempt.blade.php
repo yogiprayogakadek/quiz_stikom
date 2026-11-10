@@ -157,7 +157,9 @@
         @endif
     </section>
 
-    @php($barisEssay = $rincian->where('tipe', 'essay'))
+    @php
+        $barisEssay = $rincian->where('tipe', 'essay');
+    @endphp
     @if ($attempt->status === 'selesai' && $attempt->quizSession->mode === 'acak' && $barisEssay->isNotEmpty())
         <section class="mt-6 card" aria-labelledby="nilai-essay">
             <h2 id="nilai-essay" class="text-2xl">Penilaian essay</h2>
@@ -165,7 +167,9 @@
                 Nilai essay dihitung 0 sampai bobot soal. Simpan untuk memperbarui poin dan nilai attempt.
             </p>
 
-            @php($adaJawabanEssay = $barisEssay->contains(fn ($baris) => (string) $baris['jawaban_saya'] !== ''))
+            @php
+                $adaJawabanEssay = $barisEssay->contains(fn ($baris) => (string) $baris['jawaban_saya'] !== '');
+            @endphp
 
             @if (! $adaJawabanEssay)
                 <p class="mt-4 text-base text-ink-muted">Peserta tidak menjawab soal essay mana pun.</p>
@@ -243,18 +247,40 @@
                                 </summary>
                                 <ol class="mt-3 divide-y divide-outline text-sm">
                                     @foreach ($baris['history'] as $log)
+                                        @php
+                                            $meta = $log->metadata;
+                                            $aiProvider = $meta['ai_provider'] ?? null;
+                                            $aiModel = $meta['ai_model'] ?? null;
+
+                                            if ($log->action === 'essay_score_changed' && (blank($aiProvider) || blank($aiModel))) {
+                                                $saran = $baris['history']->first(fn ($item) => $item->action === 'essay_ai_suggested' && $item->created_at->lte($log->created_at));
+                                                $aiProvider = $aiProvider ?: ($saran?->metadata['provider'] ?? null);
+                                                $aiModel = $aiModel ?: ($saran?->metadata['model'] ?? null);
+                                            }
+                                        @endphp
                                         <li class="grid gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
                                             <div>
                                                 @if ($log->action === 'essay_score_changed')
                                                     <p class="font-bold text-ink">
-                                                        Nilai final {{ $log->metadata['from'] === null ? 'ditetapkan' : 'diubah' }} menjadi {{ $log->metadata['to'] }}.
+                                                        Nilai final {{ ($meta['from'] ?? null) === null ? 'ditetapkan' : 'diubah' }} menjadi {{ $meta['to'] }}.
                                                     </p>
-                                                    @if ($log->metadata['from'] !== null)
-                                                        <p class="mt-1 text-ink-muted">Nilai sebelumnya {{ $log->metadata['from'] }}.</p>
+                                                    @if (($meta['from'] ?? null) !== null)
+                                                        <p class="mt-1 text-ink-muted">Nilai sebelumnya {{ $meta['from'] }}.</p>
+                                                    @endif
+                                                    @if ($meta['auto'] ?? false)
+                                                        <p class="mt-1 text-ink-muted">Ditetapkan otomatis oleh sistem setelah saran AI.</p>
+                                                    @endif
+                                                    @if (($meta['ai_suggested_score'] ?? null) !== null)
+                                                        <p class="mt-1 text-ink-muted">
+                                                            Saran AI {{ $meta['ai_suggested_score'] }} poin
+                                                            @if (filled($aiProvider) || filled($aiModel))
+                                                                · {{ $aiProvider ?: 'AI' }}@if (filled($aiModel)) · {{ $aiModel }}@endif
+                                                            @endif
+                                                        </p>
                                                     @endif
                                                 @else
-                                                    <p class="font-bold text-ink">AI menyarankan {{ $log->metadata['score'] }} poin dengan confidence {{ $log->metadata['confidence'] }}%.</p>
-                                                    <p class="mt-1 text-ink-muted">{{ $log->metadata['provider'] }} · {{ $log->metadata['model'] }}</p>
+                                                    <p class="font-bold text-ink">AI menyarankan {{ $meta['score'] }} poin dengan confidence {{ $meta['confidence'] }}%.</p>
+                                                    <p class="mt-1 text-ink-muted">{{ $meta['provider'] ?: 'AI' }} · {{ $meta['model'] ?: '-' }}</p>
                                                 @endif
                                             </div>
                                             <p class="text-xs text-ink-subtle sm:text-right">

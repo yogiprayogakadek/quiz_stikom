@@ -100,13 +100,22 @@ class EssayGrader
             return false;
         }
 
+        $aiSuggestion = AuditLog::query()
+            ->where('subject_type', 'answer')
+            ->where('subject_id', $answer->id)
+            ->where('action', 'essay_ai_suggested')
+            ->latest()
+            ->first();
+
         AuditLog::record('essay_score_changed', 'answer', $answer->id, [
             'attempt_id' => $answer->attempt_id,
             'question_id' => $answer->question_id,
             'from' => $previousScore,
             'to' => $score,
             'ai_suggested_score' => $answer->ai_suggested_score,
+            'ai_confidence' => $answer->ai_confidence,
             'ai_model' => $answer->ai_model,
+            'ai_provider' => $aiSuggestion?->metadata['provider'] ?? null,
             'auto' => $auto,
         ], $answer->attempt?->organization_id);
 

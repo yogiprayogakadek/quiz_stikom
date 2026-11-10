@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TeamController extends Controller
@@ -35,7 +37,7 @@ class TeamController extends Controller
         return view('admin.team.index', compact('organization', 'admins', 'auditLogs'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, OrganizationUsage $usage): RedirectResponse
     {
         $data = $request->validate([
             'nama' => ['required', 'string', 'max:120'],
@@ -49,6 +51,12 @@ class TeamController extends Controller
         ]);
         $temporaryPassword = $data['password'] ?? Str::password(12, symbols: false);
         $organization = app(OrganizationContext::class)->current();
+
+        if (! $usage->canAddAdmin($organization->id)) {
+            throw ValidationException::withMessages([
+                'nama' => 'Kuota admin workspace penuh ('.$usage->adminLimit($organization->id).'). Hubungi master platform untuk menaikkan batas.',
+            ]);
+        }
 
         $admin = DB::transaction(function () use ($data, $temporaryPassword, $organization) {
             $admin = User::create([
