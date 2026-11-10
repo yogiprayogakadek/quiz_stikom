@@ -56,7 +56,11 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 ## Fase 5: Pengaturan organisasi
 
 - [x] Pisahkan pengaturan platform dan organisasi.
-- [ ] Branding, slug, zona waktu, bahasa, dan kebijakan peserta per organisasi.
+- [x] Branding, slug, zona waktu, bahasa, dan kebijakan peserta per organisasi.
+  - Branding, logo, teks login, dan provider AI sudah per organisasi. Slug, zona waktu, locale, dan izin masuk kelas lewat PIN kini dapat diubah dari halaman **Pengaturan**.
+  - Timestamp tetap disimpan UTC; zona waktu organisasi dipakai saat menampilkan tanggal/jam di laporan, riwayat akses, proctoring, hasil peserta, backup, dan CSV.
+  - Bahasa `id`/`en` diterapkan sebagai locale Laravel dan Carbon. Teks antarmuka utama masih Bahasa Indonesia; terjemahan penuh belum dibuat.
+  - Kebijakan peserta saat ini adalah izin masuk kelas sendiri lewat PIN. Jika dimatikan, admin harus menambahkan peserta ke kelas.
 - [x] Provider AI platform atau API key organisasi yang terenkripsi.
 - [ ] Preview branding sebelum disimpan.
 - [ ] Kuota pemakaian AI dan penyimpanan.
@@ -100,3 +104,11 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 - Risiko tersisa: `MAIL_MAILER=log` masih default sehingga email verifikasi dan reset belum terkirim di produksi sampai SMTP dikonfigurasi. Akun hasil impor CSV dan akun lama tanpa email tetap kompatibel, tetapi belum bisa reset password mandiri; email dapat ditambahkan lewat edit peserta. Pendaftaran publik, kuota, dan rate limit pendaftaran belum ada.
 - Item berikutnya: **Branding, slug, zona waktu, bahasa, dan kebijakan peserta per organisasi** (item pertama yang belum dicentang).
 - Aturan essay: AI hanya menyimpan rekomendasi; nilai final tetap ditetapkan admin sampai mode otomatis beserta auditnya selesai.
+
+## Checkpoint 10 November 2026 — pengaturan organisasi
+
+- Status: branding per organisasi sudah ada; slug, zona waktu, locale, dan kebijakan masuk kelas lewat PIN sekarang dapat diubah dari **Pengaturan**. Timestamp tetap UTC dan tampilan tanggal mengikuti zona waktu organisasi.
+- Commit checkpoint: `1a5babe` (`feat: add workspace locale and participant policies`).
+- Verifikasi: `104 passed (537 assertions)`, build Vite berhasil, Blade cache berhasil, `git diff --check` bersih, dan migration `2026_11_10_000008_add_locale_and_participant_policy_to_settings` berhasil dijalankan lokal.
+- Risiko tersisa: locale baru mengganti pesan sistem dan nama bulan; teks antarmuka utama masih Indonesia sampai terjemahan penuh ditambahkan. Mengubah slug membuat tautan login lama tidak berlaku. Jika PIN dinonaktifkan, peserta harus ditambahkan admin; belum ada undangan atau pendaftaran mandiri.
+- Item berikutnya: **Preview branding sebelum disimpan**.
