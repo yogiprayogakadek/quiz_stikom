@@ -1,4 +1,4 @@
-<x-layouts.guest judul="Wajib Ganti Password">
+<x-layouts.guest :judul="auth()->user()->must_change_password ? 'Wajib Ganti Password' : 'Ganti Password'">
     <div class="flex min-h-screen items-center justify-center px-5 py-12 sm:px-8">
         <main class="w-full max-w-lg">
             <div class="mb-8 flex items-center justify-center gap-3">
@@ -8,10 +8,12 @@
 
             <div class="card shadow-modal border-2 border-brand/20 p-6 sm:p-8 space-y-6">
                 <div>
-                    <span class="pill pill-coral text-xs font-bold uppercase tracking-wider">Keamanan Akun</span>
-                    <h1 class="mt-3 text-3xl font-bold text-ink">Ganti Password Pertama Kali</h1>
+                    <p class="text-sm font-bold text-brand-deep">Keamanan akun</p>
+                    <h1 class="mt-2 text-3xl font-bold text-ink">{{ auth()->user()->must_change_password ? 'Buat password pribadi' : 'Ganti password' }}</h1>
                     <p class="mt-2 text-base leading-relaxed text-ink-muted">
-                        Demi keamanan akun Anda, silakan buat password baru pribadi sebelum melanjutkan ke sesi kuis.
+                        {{ auth()->user()->must_change_password
+                            ? 'Akun ini masih memakai password sementara. Buat password baru sebelum melanjutkan.'
+                            : 'Masukkan password saat ini, lalu buat password baru untuk mengakhiri sesi lain pada akun ini.' }}
                     </p>
                 </div>
 
@@ -34,6 +36,20 @@
                 <form method="POST" action="{{ route('password.change.update') }}" class="space-y-5">
                     @csrf
 
+                    @unless (auth()->user()->must_change_password)
+                        <div>
+                            <label for="current_password" class="label">Password saat ini</label>
+                            <input
+                                id="current_password"
+                                name="current_password"
+                                type="password"
+                                required
+                                autocomplete="current-password"
+                                class="input mt-1 w-full"
+                            >
+                        </div>
+                    @endunless
+
                     <div x-data="{ tampil: false }">
                         <label for="password" class="label">Password Baru</label>
                         <div class="relative mt-1">
@@ -42,10 +58,10 @@
                                 name="password"
                                 :type="tampil ? 'text' : 'password'"
                                 required
-                                minlength="6"
+                                minlength="8"
                                 autocomplete="new-password"
                                 class="input pr-12 w-full"
-                                placeholder="Minimal 6 karakter"
+                                placeholder="Minimal 8 karakter"
                             >
                             <button
                                 type="button"
@@ -73,7 +89,7 @@
                                 name="password_confirmation"
                                 :type="tampil ? 'text' : 'password'"
                                 required
-                                minlength="6"
+                                minlength="8"
                                 autocomplete="new-password"
                                 class="input pr-12 w-full"
                                 placeholder="Ulangi password baru"
@@ -97,7 +113,7 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-anak w-full py-3 text-base font-bold shadow-md">
-                        Simpan Password Baru &amp; Masuk
+                        Simpan password baru
                     </button>
                 </form>
 

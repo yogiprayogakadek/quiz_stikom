@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\OrganizationSetting;
+use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -50,7 +52,10 @@ class SettingController extends Controller
             'logo.max' => 'Ukuran logo maksimal 2 MB.',
         ]);
 
-        $settings = AppSetting::query()->firstOrNew(['id' => 1]);
+        $organizationId = app(OrganizationContext::class)->id();
+        $settings = $organizationId === null
+            ? AppSetting::query()->firstOrNew(['id' => 1])
+            : OrganizationSetting::query()->firstOrNew(['organization_id' => $organizationId]);
 
         if ($request->hasFile('logo')) {
             if ($settings->logo_path) {

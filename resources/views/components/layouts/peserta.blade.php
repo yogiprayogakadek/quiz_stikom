@@ -97,6 +97,7 @@
                     <span>Panduan</span>
                 </button>
             </nav>
+            <x-organization-switcher id="peserta-mobile" class="mt-4" />
         </div>
 
         <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -109,12 +110,17 @@
                     <p class="text-[11px] font-semibold text-slate-400">Peserta</p>
                 </div>
             </div>
+            <div class="flex items-center gap-1">
+                <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
+                    <x-icon name="lock" :size="18" />
+                </a>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
                     <x-icon name="logout" :size="18" />
                 </button>
             </form>
+            </div>
         </div>
     </div>
     @endunless
@@ -173,6 +179,7 @@
                         <span x-show="!sidebarCollapsed" x-cloak>Panduan</span>
                     </button>
                 </nav>
+                <x-organization-switcher id="peserta-desktop" class="mt-5" x-show="!sidebarCollapsed" x-cloak />
 
                 {{-- Info Box (Portal Peserta) --}}
                 <div x-show="!sidebarCollapsed" x-cloak class="mt-8 hidden lg:block rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-200/60 p-4 shadow-xs">
@@ -208,12 +215,17 @@
                         <p class="text-[11px] font-semibold text-slate-400">Peserta</p>
                     </div>
                 </div>
+                <div class="flex items-center gap-1" :class="sidebarCollapsed ? 'lg:flex-col' : ''">
+                    <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
+                        <x-icon name="lock" :size="18" />
+                    </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
                         <x-icon name="logout" :size="18" />
                     </button>
                 </form>
+                </div>
             </div>
         </aside>
         @endunless

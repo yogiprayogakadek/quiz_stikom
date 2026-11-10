@@ -3,13 +3,18 @@
 namespace App\Models;
 
 use App\Events\PesertaStatusLogin;
+use App\Models\Concerns\BelongsToOrganization;
+use App\Support\OrganizationContext;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ParticipantLoginActivity extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'user_id',
+        'organization_id',
         'nama',
         'username',
         'status',
@@ -20,6 +25,7 @@ class ParticipantLoginActivity extends Model
     {
         $activity = static::create([
             'user_id' => $user->id,
+            'organization_id' => app(OrganizationContext::class)->id(),
             'nama' => $user->nama,
             'username' => $user->username,
             'status' => $status,

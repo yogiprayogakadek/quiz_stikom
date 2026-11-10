@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,8 +11,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class QuizSession extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'quiz_id',
+        'organization_id',
         'kelas_id',
         'nama',
         'mode',

@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\AppSetting;
+use App\Models\OrganizationSetting;
+use App\Support\OrganizationContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -14,7 +16,14 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->scoped('app.settings', fn () => AppSetting::current());
+        $this->app->scoped(OrganizationContext::class);
+        $this->app->scoped('app.settings', function () {
+            $organizationId = app(OrganizationContext::class)->id();
+
+            return $organizationId === null
+                ? AppSetting::current()
+                : OrganizationSetting::effective($organizationId);
+        });
     }
 
     public function boot(): void

@@ -186,6 +186,26 @@
                         <p class="mt-1 text-base text-ink-muted whitespace-pre-line">{{ \Illuminate\Support\Str::limit($baris['teks'], 240) }}</p>
                         <p class="mt-3 whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
 
+                        @if ($baris['jawaban_saya'])
+                            <div class="mt-3 rounded-xl border border-outline bg-surface p-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-sm font-bold text-ink">Saran penilaian AI</p>
+                                    <button type="submit" form="essay-ai-{{ $baris['answer_id'] }}" class="btn btn-secondary min-h-11 text-xs">
+                                        {{ $baris['ai_reviewed_at'] ? 'Buat ulang saran' : 'Minta saran AI' }}
+                                    </button>
+                                </div>
+                                @if ($baris['ai_reviewed_at'])
+                                    <p class="mt-2 text-sm text-ink">
+                                        Saran nilai <strong>{{ $baris['ai_suggested_score'] }} / {{ $baris['bobot'] }}</strong>, confidence {{ $baris['ai_confidence'] }}%.
+                                    </p>
+                                    <p class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ $baris['ai_feedback'] }}</p>
+                                    <p class="mt-2 text-xs text-ink-subtle">Nilai final tetap ditentukan admin melalui isian di bawah.</p>
+                                @else
+                                    <p class="mt-2 text-sm text-ink-muted">AI membaca pertanyaan, rubrik, dan jawaban peserta. Admin tetap memeriksa hasilnya.</p>
+                                @endif
+                            </div>
+                        @endif
+
                         <div class="mt-3 max-w-xs">
                             <label for="nilai-{{ $baris['question_id'] }}" class="label">Nilai (0–{{ $baris['bobot'] }})</label>
                             <input
@@ -206,6 +226,13 @@
 
                 <button type="submit" class="btn btn-primary">Simpan penilaian</button>
             </form>
+            @foreach ($barisEssay->whereNotNull('answer_id') as $baris)
+                @if ($baris['jawaban_saya'])
+                    <form id="essay-ai-{{ $baris['answer_id'] }}" method="POST" action="{{ route('admin.answers.ai-suggestion', $baris['answer_id']) }}" data-progress-message="Meminta saran penilaian AI...">
+                        @csrf
+                    </form>
+                @endif
+            @endforeach
             @endif
         </section>
     @endif

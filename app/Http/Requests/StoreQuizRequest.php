@@ -2,14 +2,17 @@
 
 namespace App\Http\Requests;
 
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreQuizRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'kelas_id' => ['required', 'integer', 'exists:kelas,id'],
+            'kelas_id' => ['required', 'integer', Rule::exists('kelas', 'id')
+                ->where('organization_id', app(OrganizationContext::class)->id())],
             'judul' => ['required', 'string', 'max:160'],
             'jumlah_soal' => ['nullable', 'integer', 'min:1'],
             'acak_opsi' => ['nullable', 'boolean'],
@@ -23,7 +26,7 @@ class StoreQuizRequest extends FormRequest
             if ($this->filled('jumlah_soal') && $quiz) {
                 $totalSoal = $quiz->questions()->count();
                 if ($totalSoal > 0 && (int) $this->input('jumlah_soal') > $totalSoal) {
-                    $validator->errors()->add('jumlah_soal', 'Jumlah soal tidak boleh melebihi total soal kuis (' . $totalSoal . ').');
+                    $validator->errors()->add('jumlah_soal', 'Jumlah soal tidak boleh melebihi total soal kuis ('.$totalSoal.').');
                 }
             }
         });

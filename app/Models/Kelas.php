@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -9,12 +10,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Kelas extends Model
 {
+    use BelongsToOrganization;
+
     protected $table = 'kelas';
 
     protected $fillable = [
         'nama',
         'pin',
         'cover_path',
+        'organization_id',
         'created_by',
     ];
 

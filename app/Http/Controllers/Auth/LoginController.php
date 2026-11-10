@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
+use App\Models\Organization;
 use App\Models\ParticipantLoginActivity;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,6 +22,20 @@ class LoginController extends Controller
         if (Auth::check()) {
             return redirect()->route(Auth::user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard');
         }
+
+        session()->forget('organization_id');
+
+        return view('auth.login');
+    }
+
+    public function showOrganization(Organization $organization, OrganizationContext $context): View|RedirectResponse
+    {
+        abort_unless($organization->is_active, 404);
+        if (Auth::check()) {
+            return redirect()->route(Auth::user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard');
+        }
+
+        $context->set($organization);
 
         return view('auth.login');
     }
@@ -50,6 +66,19 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
+        $requestedOrganizationId = $request->session()->get('organization_id');
+        if ($requestedOrganizationId && ! $user->organizations()
+            ->whereKey($requestedOrganizationId)
+            ->wherePivot('status', 'active')
+            ->exists()) {
+            Auth::logout();
+            $request->session()->regenerateToken();
+
+            return back()
+                ->withInput($request->only('username'))
+                ->withErrors(['username' => 'Akun ini tidak terdaftar pada organisasi tersebut.']);
+        }
+
         $token = Str::random(64);
         $user->forceFill(['current_session_token' => $token])->save();
 
@@ -64,9 +93,11 @@ class LoginController extends Controller
                 ->with('peringatan', 'Ini adalah login pertama Anda. Silakan ganti password Anda terlebih dahulu.');
         }
 
-        return redirect()->intended(
-            $user->isAdmin() ? route('admin.dashboard') : route('peserta.dashboard')
-        )->with('sukses', 'Selamat datang, '.$user->nama.'.');
+        $destination = $user->isPlatformAdmin()
+            ? route('master.organizations.index')
+            : ($user->isAdmin() ? route('admin.dashboard') : route('peserta.dashboard'));
+
+        return redirect()->intended($destination)->with('sukses', 'Selamat datang, '.$user->nama.'.');
     }
 
     public function logout(Request $request): RedirectResponse

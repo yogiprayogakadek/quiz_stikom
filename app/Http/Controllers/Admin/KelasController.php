@@ -7,6 +7,7 @@ use App\Jobs\GenerateClassCoverJob;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +58,11 @@ class KelasController extends Controller
             'sessions.quiz',
         ]);
 
-        $peserta = User::where('role', 'peserta')->orderBy('nama')->get();
+        $organizationId = app(OrganizationContext::class)->id();
+        $peserta = User::where('role', 'peserta')
+            ->inCurrentOrganization()
+            ->orderBy('nama')
+            ->get();
         $quizzes = Quiz::orderBy('judul')->get();
 
         return view('admin.classes.edit', compact('kelas', 'peserta', 'quizzes'));
@@ -65,13 +70,25 @@ class KelasController extends Controller
 
     public function update(Request $request, Kelas $kelas): RedirectResponse
     {
+        $organizationId = app(OrganizationContext::class)->id();
+        $participantRule = $organizationId === null
+            ? Rule::exists('users', 'id')->where('role', 'peserta')
+            : Rule::exists('organization_memberships', 'user_id')
+                ->where('organization_id', $organizationId)
+                ->where('role', 'participant')
+                ->where('status', 'active');
+        $quizRule = Rule::exists('quizzes', 'id');
+        if ($organizationId !== null) {
+            $quizRule->where('organization_id', $organizationId);
+        }
+
         $data = $request->validate([
             'nama' => ['required', 'string', 'max:120'],
             'pin' => ['required', 'string', 'min:4', 'max:12', 'alpha_num', Rule::unique('kelas', 'pin')->ignore($kelas->id)],
             'peserta_ids' => ['nullable', 'array'],
-            'peserta_ids.*' => ['integer', 'exists:users,id'],
+            'peserta_ids.*' => ['integer', $participantRule],
             'quiz_ids' => ['nullable', 'array'],
-            'quiz_ids.*' => ['integer', 'exists:quizzes,id'],
+            'quiz_ids.*' => ['integer', $quizRule],
         ], [
             'nama.required' => 'Nama kelas wajib diisi.',
             'pin.required' => 'PIN kelas wajib diisi.',

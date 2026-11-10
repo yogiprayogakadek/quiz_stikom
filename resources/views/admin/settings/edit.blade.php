@@ -1,4 +1,6 @@
-<x-layouts.admin judul="Pengaturan" keterangan="Sesuaikan identitas publik, layanan AI, dan cover kelas tanpa mengubah kode.">
+@php($activeOrganization = app(\App\Support\OrganizationContext::class)->current())
+
+<x-layouts.admin judul="Pengaturan" :keterangan="$activeOrganization ? 'Pengaturan ini berlaku untuk workspace '.$activeOrganization->name.'.' : 'Sesuaikan identitas platform, layanan AI, dan cover kelas.'">
     <form method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="max-w-5xl space-y-8" data-progress-message="Menyimpan pengaturan publik...">
         @csrf
         @method('PUT')

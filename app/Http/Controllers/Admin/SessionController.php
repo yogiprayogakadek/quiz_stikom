@@ -2,16 +2,22 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\PesertaDikeluarkan;
+use App\Events\PesertaDipaksaKumpul;
 use App\Events\SesiStatusUpdated;
+use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSessionRequest;
 use App\Http\Requests\UpdateSessionRequest;
+use App\Models\Answer;
 use App\Models\Attempt;
+use App\Models\AttemptEvent;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\QuizEngine;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -83,7 +89,7 @@ class SessionController extends Controller
 
         $allParticipants = $session->kelas_id !== null
             ? $session->kelas->peserta()->orderBy('nama')->get()
-            : User::where('role', 'peserta')->orderBy('nama')->get();
+            : User::where('role', 'peserta')->inCurrentOrganization()->orderBy('nama')->get();
 
         $allowedParticipantIds = $session->allowedParticipants()->pluck('users.id')->all();
 
@@ -120,7 +126,7 @@ class SessionController extends Controller
     }
 
     /**
-     * @return array{attempts: \Illuminate\Database\Eloquent\Collection<int, Attempt>, soalAktif: mixed, sudahMenjawab: int, totalPeserta: int}
+     * @return array{attempts: Collection<int, Attempt>, soalAktif: mixed, sudahMenjawab: int, totalPeserta: int}
      */
     private function dataMonitor(QuizSession $session): array
     {
@@ -138,13 +144,13 @@ class SessionController extends Controller
         }
 
         $sudahMenjawab = $session->soal_aktif_urutan !== null && $soalAktif !== null
-            ? \App\Models\Answer::query()
+            ? Answer::query()
                 ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
                 ->where('question_id', $soalAktif->question_id)
                 ->count()
             : 0;
 
-        $kejadianTerbaru = \App\Models\AttemptEvent::query()
+        $kejadianTerbaru = AttemptEvent::query()
             ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
             ->with('attempt.user')
             ->latest('id')
@@ -259,7 +265,7 @@ class SessionController extends Controller
         try {
             $engine->siarkanDisplay($fresh);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Broadcast display error: ' . $e->getMessage());
+            Log::warning('Broadcast display error: '.$e->getMessage());
         }
         SesiStatusUpdated::safeDispatch($fresh);
 
@@ -341,11 +347,11 @@ class SessionController extends Controller
         try {
             $engine->siarkanDisplay($fresh);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Broadcast display error: ' . $e->getMessage());
+            Log::warning('Broadcast display error: '.$e->getMessage());
         }
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_updated']);
 
-        return back()->with('sukses', 'Daftar peserta hadir berhasil disimpan (' . count($selectedIds) . ' peserta dipilih).');
+        return back()->with('sukses', 'Daftar peserta hadir berhasil disimpan ('.count($selectedIds).' peserta dipilih).');
     }
 
     /**
@@ -379,10 +385,10 @@ class SessionController extends Controller
         $fresh = $session->fresh();
         $engine->siarkanDisplay($fresh);
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'attempt_dikumpulkan']);
-        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'force_finish']);
-        \App\Events\PesertaDipaksaKumpul::safeDispatch($session->id, $attempt->user_id, $attempt->id);
+        SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'force_finish']);
+        PesertaDipaksaKumpul::safeDispatch($session->id, $attempt->user_id, $attempt->id);
 
-        return back()->with('sukses', 'Pekerjaan ' . $nama . ' dikumpulkan. Nilai dihitung dari jawaban yang tersimpan.');
+        return back()->with('sukses', 'Pekerjaan '.$nama.' dikumpulkan. Nilai dihitung dari jawaban yang tersimpan.');
     }
 
     /**
@@ -409,7 +415,7 @@ class SessionController extends Controller
             $diizinkan = $session->allowedParticipants()->pluck('users.id')->all();
 
             if ($diizinkan === []) {
-                $diizinkan = User::where('role', 'peserta')->pluck('id')->all();
+                $diizinkan = User::where('role', 'peserta')->inCurrentOrganization()->pluck('id')->all();
             }
 
             $session->allowedParticipants()->sync(array_values(array_diff($diizinkan, [$userId])));
@@ -427,10 +433,10 @@ class SessionController extends Controller
         $fresh = $session->fresh();
         $engine->siarkanDisplay($fresh);
         SesiStatusUpdated::safeDispatch($fresh, ['action' => 'peserta_dikeluarkan']);
-        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'kick', 'user_id' => $userId]);
-        \App\Events\PesertaDikeluarkan::safeDispatch($session->id, $userId);
+        SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'kick', 'user_id' => $userId]);
+        PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
-        return back()->with('sukses', $nama . ' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
+        return back()->with('sukses', $nama.' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
     }
 
     /**
@@ -470,7 +476,7 @@ class SessionController extends Controller
             'batas_baru' => $attempt->batas_akhir_at,
         ]);
 
-        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+        SessionMonitorUpdated::safeDispatch($session->id, [
             'action' => 'add_time',
             'user_id' => $attempt->user_id,
             'attempt_id' => $attempt->id,
@@ -503,11 +509,11 @@ class SessionController extends Controller
             'quiz_session_id' => $session->id,
         ]);
 
-        \App\Events\SessionMonitorUpdated::safeDispatch($session->id, [
+        SessionMonitorUpdated::safeDispatch($session->id, [
             'action' => 'reset_attempt',
             'user_id' => $userId,
         ]);
-        \App\Events\PesertaDikeluarkan::safeDispatch($session->id, $userId);
+        PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
         return back()->with('sukses', "Attempt untuk {$nama} berhasil direset. Peserta dapat masuk kembali.");
     }

@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Middleware\EnsureOrganizationMember;
+use App\Http\Middleware\EnsureOrganizationOwner;
 use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureSingleSession;
 use Illuminate\Foundation\Application;
@@ -27,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'role' => EnsureRole::class,
+            'platform_admin' => EnsurePlatformAdmin::class,
+            'organization_owner' => EnsureOrganizationOwner::class,
+            'organization_member' => EnsureOrganizationMember::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

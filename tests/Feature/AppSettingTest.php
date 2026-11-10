@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\AppSetting;
+use App\Models\OrganizationSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -44,9 +44,10 @@ class AppSettingTest extends TestCase
             ]);
 
         $response->assertRedirect();
-        $this->assertSame('Kuis Publik', AppSetting::query()->firstOrFail()->site_name);
-        $this->assertSame('centered', AppSetting::query()->firstOrFail()->login_layout);
-        $this->assertSame('secret-ai-key', AppSetting::query()->firstOrFail()->ai_api_key);
-        $this->assertNotSame('secret-ai-key', DB::table('app_settings')->value('ai_api_key'));
+        $settings = OrganizationSetting::query()->firstOrFail();
+        $this->assertSame('Kuis Publik', $settings->site_name);
+        $this->assertSame('centered', $settings->login_layout);
+        $this->assertSame('secret-ai-key', $settings->ai_api_key);
+        $this->assertNotSame('secret-ai-key', DB::table('organization_settings')->value('ai_api_key'));
     }
 }

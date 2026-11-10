@@ -18,7 +18,7 @@ class UpdateParticipantRequest extends FormRequest
                 'alpha_dash',
                 Rule::unique('users', 'username')->ignore($this->route('participant')),
             ],
-            'password' => ['nullable', 'string', 'min:6', 'max:100'],
+            'password' => ['nullable', 'string', 'min:8', 'max:100'],
         ];
     }
 
@@ -28,7 +28,7 @@ class UpdateParticipantRequest extends FormRequest
             'nama.required' => 'Nama peserta wajib diisi.',
             'username.unique' => 'Username sudah dipakai.',
             'username.alpha_dash' => 'Username hanya boleh huruf, angka, garis bawah, dan tanda hubung.',
-            'password.min' => 'Password minimal 6 karakter.',
+            'password.min' => 'Password minimal 8 karakter.',
         ];
     }
 }

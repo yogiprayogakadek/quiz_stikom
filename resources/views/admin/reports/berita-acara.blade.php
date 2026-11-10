@@ -316,7 +316,7 @@
         <div class="kop-header">
             <img src="{{ asset('logo.png') }}" alt="Logo" class="kop-logo">
             <div class="kop-text">
-                <h2>STIKOM QUIZ SYSTEM</h2>
+                <h2>{{ mb_strtoupper($appSettings->site_name) }}</h2>
                 <h1>BERITA ACARA & REKAP NILAI UJIAN</h1>
                 <p>Sistem Asesmen Terkomputerisasi Jaringan Lokal Kampus</p>
             </div>

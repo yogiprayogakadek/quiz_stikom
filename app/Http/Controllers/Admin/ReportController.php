@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\EssayDinilai;
+use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
 use App\Models\Question;
 use App\Models\QuizSession;
+use App\Services\AiQuestionService;
 use App\Services\QuizEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -110,6 +113,7 @@ class ReportController extends Controller
 
             return [
                 'question_id' => $question->id,
+                'answer_id' => $answer?->id,
                 'urutan' => $aq->urutan,
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
@@ -120,6 +124,10 @@ class ReportController extends Controller
                 'benar' => $essay ? null : ($answer?->option?->is_correct === true),
                 'dinilai_at' => $answer?->dinilai_at,
                 'skor' => $answer?->skor ?? 0,
+                'ai_suggested_score' => $answer?->ai_suggested_score,
+                'ai_confidence' => $answer?->ai_confidence,
+                'ai_feedback' => $answer?->ai_feedback,
+                'ai_reviewed_at' => $answer?->ai_reviewed_at,
             ];
         });
 
@@ -195,7 +203,7 @@ class ReportController extends Controller
         // Siarkan pembaruan nilai essay secara real-time ke peserta dan monitor admin
         foreach ($data['nilai'] as $qid => $val) {
             if ($val !== null && $val !== '') {
-                \App\Events\EssayDinilai::safeDispatch(
+                EssayDinilai::safeDispatch(
                     $attempt->quiz_session_id,
                     $attempt->user_id,
                     $attempt->id,
@@ -204,7 +212,7 @@ class ReportController extends Controller
                 );
             }
         }
-        \App\Events\SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+        SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
             'action' => 'essay_graded',
             'attempt_id' => $attempt->id,
         ]);
@@ -217,6 +225,35 @@ class ReportController extends Controller
         ]);
 
         return back()->with('sukses', 'Nilai essay disimpan dan skor attempt diperbarui.');
+    }
+
+    public function saranNilaiEssay(Answer $answer, AiQuestionService $ai): RedirectResponse
+    {
+        $answer->loadMissing(['question', 'attempt.quizSession']);
+        abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
+        abort_unless($answer->attempt->status === 'selesai', 422);
+        abort_unless(filled($answer->jawaban_teks), 422);
+
+        try {
+            $suggestion = $ai->evaluateEssay(
+                $answer->question->teks,
+                $answer->question->kunci_essay,
+                $answer->jawaban_teks,
+                (int) $answer->question->bobot,
+            );
+        } catch (\Throwable $e) {
+            return back()->withErrors(['ai_essay' => $e->getMessage()]);
+        }
+
+        $answer->update([
+            'ai_suggested_score' => $suggestion['score'],
+            'ai_confidence' => $suggestion['confidence'],
+            'ai_feedback' => $suggestion['feedback'],
+            'ai_model' => $suggestion['model'],
+            'ai_reviewed_at' => now(),
+        ]);
+
+        return back()->with('sukses', 'Saran AI dibuat. Periksa hasilnya sebelum menyimpan nilai final.');
     }
 
     public function export(QuizSession $session): StreamedResponse

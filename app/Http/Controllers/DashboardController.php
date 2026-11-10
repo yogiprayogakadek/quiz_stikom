@@ -9,6 +9,7 @@ use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +20,8 @@ class DashboardController extends Controller
     public function admin(): View
     {
         $ringkasan = [
-            'peserta' => User::where('role', 'peserta')->count(),
-            'soal' => Question::count(),
+            'peserta' => User::where('role', 'peserta')->inCurrentOrganization()->count(),
+            'soal' => Question::whereHas('quiz')->count(),
             'kuis' => Quiz::count(),
             'sesi_aktif' => QuizSession::whereIn('status', ['lobby', 'berjalan'])->count(),
         ];
@@ -40,12 +41,15 @@ class DashboardController extends Controller
             ->get();
 
         $leaderboardTerbaru = Attempt::with(['user', 'quizSession.quiz'])
+            ->whereHas('quizSession')
             ->where('status', 'selesai')
             ->orderByDesc('updated_at')
             ->limit(5)
             ->get();
 
-        $loginHariIni = Attempt::where('created_at', '>=', now()->startOfDay())->count();
+        $loginHariIni = Attempt::whereHas('quizSession')
+            ->where('created_at', '>=', now()->startOfDay())
+            ->count();
         $pesertaOnline = $this->getPesertaOnline();
         $aktivitasLogin = $this->getAktivitasLogin();
 
@@ -69,11 +73,20 @@ class DashboardController extends Controller
         $threshold = now()->subMinutes(15)->timestamp;
 
         try {
-            return DB::table('sessions')
+            $organizationId = app(OrganizationContext::class)->id();
+            $query = DB::table('sessions')
                 ->join('users', 'sessions.user_id', '=', 'users.id')
                 ->where('users.role', 'peserta')
                 ->whereNotNull('users.current_session_token')
-                ->where('sessions.last_activity', '>=', $threshold)
+                ->where('sessions.last_activity', '>=', $threshold);
+
+            if ($organizationId !== null) {
+                $query->join('organization_memberships', 'users.id', '=', 'organization_memberships.user_id')
+                    ->where('organization_memberships.organization_id', $organizationId)
+                    ->where('organization_memberships.status', 'active');
+            }
+
+            return $query
                 ->select(
                     'users.id',
                     'users.nama',
@@ -162,7 +175,7 @@ class DashboardController extends Controller
         $peserta = User::where(function ($query) use ($q) {
             $query->where('nama', 'like', "%{$q}%")
                 ->orWhere('username', 'like', "%{$q}%");
-        })
+        })->inCurrentOrganization()
             ->orderByRaw("CASE WHEN role = 'peserta' THEN 0 ELSE 1 END")
             ->orderBy('nama')
             ->limit(6)
@@ -223,6 +236,7 @@ class DashboardController extends Controller
         $sesiList = $this->formatSesi($sesiTersedia, $attempts);
 
         $leaderboard = User::where('role', 'peserta')
+            ->inCurrentOrganization()
             ->whereHas('attempts', fn ($q) => $q->where('status', 'selesai'))
             ->withSum(['attempts' => fn ($q) => $q->where('status', 'selesai')], 'skor_total')
             ->orderByDesc('attempts_sum_skor_total')

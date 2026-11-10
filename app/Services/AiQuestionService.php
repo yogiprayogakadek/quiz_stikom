@@ -210,6 +210,56 @@ PROMPT;
     }
 
     /**
+     * @return array{score: int, confidence: int, feedback: string, model: string}
+     */
+    public function evaluateEssay(string $question, ?string $rubric, string $answer, int $maxScore): array
+    {
+        if (blank($this->apiKey)) {
+            throw new RuntimeException('API key AI belum dikonfigurasi.');
+        }
+
+        $systemPrompt = <<<'PROMPT'
+Nilai jawaban essay berdasarkan pertanyaan, rubrik, dan nilai maksimum yang diberikan.
+Kembalikan JSON valid saja dengan bentuk:
+{"score":0,"confidence":0,"feedback":"Alasan singkat dalam bahasa Indonesia."}
+score harus bilangan bulat dari 0 sampai nilai maksimum. confidence harus bilangan bulat dari 0 sampai 100. Jangan menebak fakta di luar rubrik.
+PROMPT;
+        $userPrompt = "Pertanyaan:\n{$question}\n\nRubrik:\n".($rubric ?: 'Tidak ada rubrik khusus.')."\n\nJawaban peserta:\n{$answer}\n\nNilai maksimum: {$maxScore}";
+
+        try {
+            $response = Http::withToken($this->apiKey)
+                ->timeout($this->timeout)
+                ->post("{$this->baseUrl}/chat/completions", [
+                    'model' => $this->defaultModel,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt],
+                    ],
+                    'temperature' => 0.1,
+                    'stream' => false,
+                ]);
+        } catch (Throwable $e) {
+            throw new RuntimeException("Gagal menghubungi layanan AI: {$e->getMessage()}");
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Layanan AI merespons status '.$response->status().'.');
+        }
+
+        $data = json_decode($this->extractJson($this->extractRawContent($response)), true);
+        if (! is_array($data) || ! isset($data['score'], $data['confidence'], $data['feedback'])) {
+            throw new RuntimeException('Layanan AI tidak mengembalikan format penilaian yang valid.');
+        }
+
+        return [
+            'score' => max(0, min($maxScore, (int) $data['score'])),
+            'confidence' => max(0, min(100, (int) $data['confidence'])),
+            'feedback' => Str::limit(trim((string) $data['feedback']), 1500, ''),
+            'model' => $this->defaultModel,
+        ];
+    }
+
+    /**
      * Membagi total nilai maksimal kuis ke tiap butir soal PG dan Essay.
      *
      * @return array{pg: array<int>, essay: array<int>, total: int}

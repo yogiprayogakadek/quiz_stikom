@@ -9,6 +9,12 @@
         ['rute' => 'admin.sessions.index', 'aktif' => 'admin.sessions.*', 'label' => 'Sesi', 'ikon' => 'play'],
         ['rute' => 'admin.settings.edit', 'aktif' => 'admin.settings.*', 'label' => 'Pengaturan', 'ikon' => 'settings'],
     ];
+    if (auth()->user()->isPlatformAdmin()) {
+        $navigasi[] = ['rute' => 'master.organizations.index', 'aktif' => 'master.*', 'label' => 'Organisasi', 'ikon' => 'users'];
+    }
+    if (auth()->user()->isCurrentOrganizationOwner()) {
+        $navigasi[] = ['rute' => 'admin.team.index', 'aktif' => 'admin.team.*', 'label' => 'Tim Admin', 'ikon' => 'shield-check'];
+    }
 @endphp
 
 <nav class="mt-2 space-y-1" aria-label="Navigasi admin">

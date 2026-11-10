@@ -7,6 +7,28 @@ use Illuminate\Support\Facades\Schema;
 
 class AppSetting extends Model
 {
+    public static function fields(): array
+    {
+        return [
+            'site_name',
+            'site_tagline',
+            'organization_name',
+            'primary_color',
+            'logo_path',
+            'login_title',
+            'login_description',
+            'login_layout',
+            'ai_base_url',
+            'ai_api_key',
+            'ai_default_model',
+            'ai_timeout',
+            'class_cover_mode',
+            'image_base_url',
+            'image_api_key',
+            'image_model',
+        ];
+    }
+
     protected $fillable = [
         'site_name',
         'site_tagline',

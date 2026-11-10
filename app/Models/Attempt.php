@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,8 +10,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Attempt extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'user_id',
+        'organization_id',
         'quiz_session_id',
         'status',
         'mulai_at',

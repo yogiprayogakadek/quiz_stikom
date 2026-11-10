@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreParticipantRequest;
 use App\Http\Requests\UpdateParticipantRequest;
 use App\Models\User;
+use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class ParticipantController extends Controller
 
         // shortcut: client-side pagination up to 2000 rows for real-time responsiveness, upgrade to AJAX datatable if huge
         $participants = User::where('role', 'peserta')
+            ->inCurrentOrganization()
             ->when($cari !== '', function ($query) use ($cari) {
                 $query->where(fn ($q) => $q
                     ->where('nama', 'like', "%{$cari}%")
@@ -52,12 +54,18 @@ class ParticipantController extends Controller
             $dibuat = $password;
         }
 
-        User::create([
+        $participant = User::create([
             'nama' => $data['nama'],
             'username' => $data['username'],
             'password' => $password,
             'role' => 'peserta',
             'must_change_password' => true,
+        ]);
+        $participant->organizations()->syncWithoutDetaching([
+            app(OrganizationContext::class)->id() => [
+                'role' => 'participant',
+                'status' => 'active',
+            ],
         ]);
 
         return redirect()
@@ -68,14 +76,14 @@ class ParticipantController extends Controller
 
     public function edit(User $participant): View
     {
-        abort_unless($participant->role === 'peserta', 404);
+        $this->authorizeParticipant($participant);
 
         return view('admin.participants.edit', compact('participant'));
     }
 
     public function update(UpdateParticipantRequest $request, User $participant): RedirectResponse
     {
-        abort_unless($participant->role === 'peserta', 404);
+        $this->authorizeParticipant($participant);
 
         $data = $request->validated();
 
@@ -95,7 +103,7 @@ class ParticipantController extends Controller
 
     public function resetPassword(User $participant): RedirectResponse
     {
-        abort_unless($participant->role === 'peserta', 404);
+        $this->authorizeParticipant($participant);
 
         $password = $this->buatPassword();
         $participant->password = $password;
@@ -109,17 +117,12 @@ class ParticipantController extends Controller
 
     public function destroy(User $participant): RedirectResponse
     {
-        abort_unless($participant->role === 'peserta', 404);
-
-        $punyaAttempt = $participant->attempts()->exists();
-
-        if ($punyaAttempt) {
-            $participant->delete();
-            $pesan = 'Peserta dihapus (data attempt tetap disimpan).';
-        } else {
-            $participant->forceDelete();
-            $pesan = 'Peserta dihapus permanen.';
-        }
+        $this->authorizeParticipant($participant);
+        $organizationId = app(OrganizationContext::class)->id();
+        $classIds = $participant->kelas()->where('kelas.organization_id', $organizationId)->pluck('kelas.id');
+        $participant->kelas()->detach($classIds);
+        $participant->organizations()->detach($organizationId);
+        $pesan = 'Peserta dikeluarkan dari organisasi. Riwayat kuis tetap tersimpan.';
 
         return redirect()->route('admin.participants.index')->with('sukses', $pesan);
     }
@@ -194,8 +197,8 @@ class ParticipantController extends Controller
                 $alasan = 'Username duplikat di dalam file.';
             } elseif (User::withTrashed()->where('username', $username)->exists()) {
                 $alasan = 'Username sudah dipakai.';
-            } elseif ($password !== '' && mb_strlen($password) < 6) {
-                $alasan = 'Password minimal 6 karakter.';
+            } elseif ($password !== '' && mb_strlen($password) < 8) {
+                $alasan = 'Password minimal 8 karakter.';
             }
 
             if ($alasan !== null) {
@@ -219,12 +222,21 @@ class ParticipantController extends Controller
                 $dibuat = $password;
             }
 
-            DB::table('users')->insert([
+            $userId = DB::table('users')->insertGetId([
                 'nama' => $nama,
                 'username' => $username,
                 'password' => bcrypt($password),
                 'role' => 'peserta',
                 'must_change_password' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('organization_memberships')->insert([
+                'organization_id' => app(OrganizationContext::class)->id(),
+                'user_id' => $userId,
+                'role' => 'participant',
+                'status' => 'active',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -300,5 +312,16 @@ class ParticipantController extends Controller
         }
 
         return $password;
+    }
+
+    private function authorizeParticipant(User $participant): void
+    {
+        $organizationId = app(OrganizationContext::class)->id();
+        abort_unless(
+            $participant->role === 'peserta'
+            && $organizationId !== null
+            && $participant->organizations()->whereKey($organizationId)->wherePivot('status', 'active')->exists(),
+            404,
+        );
     }
 }

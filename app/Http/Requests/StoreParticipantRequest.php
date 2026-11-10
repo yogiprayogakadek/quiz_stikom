@@ -12,7 +12,7 @@ class StoreParticipantRequest extends FormRequest
         return [
             'nama' => ['required', 'string', 'max:120'],
             'username' => ['required', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')],
-            'password' => ['nullable', 'string', 'min:6', 'max:100'],
+            'password' => ['nullable', 'string', 'min:8', 'max:100'],
         ];
     }
 
@@ -23,7 +23,7 @@ class StoreParticipantRequest extends FormRequest
             'username.required' => 'Username wajib diisi.',
             'username.unique' => 'Username sudah dipakai.',
             'username.alpha_dash' => 'Username hanya boleh huruf, angka, garis bawah, dan tanda hubung.',
-            'password.min' => 'Password minimal 6 karakter.',
+            'password.min' => 'Password minimal 8 karakter.',
         ];
     }
 }

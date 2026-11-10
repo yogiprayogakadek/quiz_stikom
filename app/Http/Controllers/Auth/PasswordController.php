@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 
 class PasswordController extends Controller
@@ -17,21 +19,31 @@ class PasswordController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $request->validate([
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ], [
+        $user = $request->user();
+        $rules = [
+            'password' => ['required', 'string', Password::min(8), 'confirmed'],
+        ];
+        if (! $user->must_change_password) {
+            $rules['current_password'] = ['required', 'current_password'];
+        }
+
+        $request->validate($rules, [
+            'current_password.required' => 'Password saat ini wajib diisi.',
+            'current_password.current_password' => 'Password saat ini tidak cocok.',
             'password.required' => 'Password baru wajib diisi.',
-            'password.min' => 'Password baru minimal 6 karakter.',
+            'password.min' => 'Password baru minimal 8 karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
         ]);
 
-        $user = $request->user();
+        $token = Str::random(64);
         $user->forceFill([
             'password' => Hash::make($request->input('password')),
             'must_change_password' => false,
+            'current_session_token' => $token,
         ])->save();
+        $request->session()->put('auth_token', $token);
 
-        return redirect()->route('peserta.dashboard')
-            ->with('sukses', 'Password Anda berhasil diperbarui. Selamat datang di kuis!');
+        return redirect()->route($user->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard')
+            ->with('sukses', 'Password berhasil diperbarui. Sesi lain pada akun ini telah diakhiri.');
     }
 }

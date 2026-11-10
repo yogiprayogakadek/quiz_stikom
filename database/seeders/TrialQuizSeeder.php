@@ -19,10 +19,13 @@ class TrialQuizSeeder extends Seeder
             return;
         }
 
+        $organizationId = $admin->organizations()->value('organizations.id');
+
         $quiz = Quiz::updateOrCreate(
             ['judul' => 'Kuis Uji Coba'],
             [
                 'kelas_id' => null,
+                'organization_id' => $organizationId,
                 'jumlah_soal' => 3,
                 'acak_opsi' => true,
                 'created_by' => $admin->id,
@@ -88,6 +91,7 @@ class TrialQuizSeeder extends Seeder
             ['quiz_id' => $quiz->id, 'nama' => 'Uji Coba Sistem'],
             [
                 'mode' => 'acak',
+                'organization_id' => $organizationId,
                 'acak_opsi' => true,
                 'tampilkan_pembahasan' => true,
                 'pembahasan_mode' => 'terbuka',

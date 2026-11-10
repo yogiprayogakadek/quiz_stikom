@@ -2,15 +2,19 @@
 
 namespace App\Http\Requests;
 
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreSessionRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'quiz_id' => ['required', 'integer', 'exists:quizzes,id'],
-            'kelas_id' => ['nullable', 'integer', 'exists:kelas,id'],
+            'quiz_id' => ['required', 'integer', Rule::exists('quizzes', 'id')
+                ->where('organization_id', app(OrganizationContext::class)->id())],
+            'kelas_id' => ['nullable', 'integer', Rule::exists('kelas', 'id')
+                ->where('organization_id', app(OrganizationContext::class)->id())],
             'nama' => ['required', 'string', 'max:160'],
             'mode' => ['required', 'in:acak,serempak'],
             'acak_opsi' => ['boolean'],

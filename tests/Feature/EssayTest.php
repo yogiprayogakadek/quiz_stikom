@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\QuizEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -127,6 +128,43 @@ class EssayTest extends TestCase
         }
 
         $this->assertSame('lobby', $session->fresh()->status);
+    }
+
+    public function test_admin_dapat_meminta_saran_ai_tanpa_menetapkan_nilai_final(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 91,
+                            'feedback' => 'Jawaban menyebut TLS dan perbedaan enkripsi.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.answers.ai-suggestion', $answer))
+            ->assertRedirect();
+
+        $answer->refresh();
+        $this->assertSame(8, $answer->ai_suggested_score);
+        $this->assertSame(91, $answer->ai_confidence);
+        $this->assertSame(0, $answer->skor);
+        $this->assertNull($answer->dinilai_at);
     }
 
     /**

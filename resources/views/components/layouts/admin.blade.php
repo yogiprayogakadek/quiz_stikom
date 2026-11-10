@@ -123,7 +123,28 @@
                     <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                     <span>Pengaturan</span>
                 </a>
+                @if (auth()->user()->isPlatformAdmin())
+                    <a
+                        href="{{ route('master.organizations.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="users" :size="20" class="{{ request()->routeIs('master.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Organisasi</span>
+                    </a>
+                @endif
+                @if (auth()->user()->isCurrentOrganizationOwner())
+                    <a
+                        href="{{ route('admin.team.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.team.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('admin.team.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="shield-check" :size="20" class="{{ request()->routeIs('admin.team.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Tim Admin</span>
+                    </a>
+                @endif
             </nav>
+            <x-organization-switcher id="admin-mobile" class="mt-4" />
         </div>
 
         <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -136,12 +157,17 @@
                     <p class="text-[11px] font-semibold text-slate-400">Administrator</p>
                 </div>
             </div>
+            <div class="flex items-center gap-1">
+                <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
+                    <x-icon name="lock" :size="18" />
+                </a>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
                     <x-icon name="logout" :size="18" />
                 </button>
             </form>
+            </div>
         </div>
     </div>
 
@@ -232,7 +258,32 @@
                         <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Pengaturan</span>
                     </a>
+                    @if (auth()->user()->isPlatformAdmin())
+                        <a
+                            href="{{ route('master.organizations.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Organisasi' : ''"
+                            @if (request()->routeIs('master.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="users" :size="20" class="{{ request()->routeIs('master.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Organisasi</span>
+                        </a>
+                    @endif
+                    @if (auth()->user()->isCurrentOrganizationOwner())
+                        <a
+                            href="{{ route('admin.team.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.team.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Tim Admin' : ''"
+                            @if (request()->routeIs('admin.team.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="shield-check" :size="20" class="{{ request()->routeIs('admin.team.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Tim Admin</span>
+                        </a>
+                    @endif
                 </nav>
+                <x-organization-switcher id="admin-desktop" class="mt-5" x-show="!sidebarCollapsed" x-cloak />
 
                 {{-- Server Status Card --}}
                 <div x-show="!sidebarCollapsed" x-cloak class="mt-8 hidden lg:block rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/60 border border-slate-200/80 p-4 shadow-xs">
@@ -268,12 +319,17 @@
                         <p class="text-[11px] font-semibold text-slate-400">Administrator</p>
                     </div>
                 </div>
+                <div class="flex items-center gap-1" :class="sidebarCollapsed ? 'lg:flex-col' : ''">
+                    <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
+                        <x-icon name="lock" :size="18" />
+                    </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
                         <x-icon name="logout" :size="18" />
                     </button>
                 </form>
+                </div>
             </div>
         </aside>
 

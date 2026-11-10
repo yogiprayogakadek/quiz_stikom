@@ -8,10 +8,13 @@ use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
 use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DisplayController;
+use App\Http\Controllers\Master\OrganizationController;
+use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
@@ -19,7 +22,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     if (auth()->check()) {
-        return redirect()->route(auth()->user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard');
+        return redirect()->route(
+            auth()->user()->isPlatformAdmin()
+                ? 'master.organizations.index'
+                : (auth()->user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard')
+        );
     }
 
     return redirect()->route('login');
@@ -27,6 +34,7 @@ Route::get('/', function () {
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
+    Route::get('/o/{organization:slug}/login', [LoginController::class, 'showOrganization'])->name('organizations.login');
     Route::post('/login', [LoginController::class, 'login'])->name('login.store');
 });
 
@@ -34,6 +42,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/ganti-password', [PasswordController::class, 'edit'])->name('password.change');
     Route::post('/ganti-password', [PasswordController::class, 'update'])->name('password.change.update');
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+    Route::post('/organisasi/aktif', OrganizationSwitchController::class)->name('organizations.switch');
 });
 
 Route::get('/display/{token}', [DisplayController::class, 'show'])
@@ -44,7 +53,12 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
     ->where('token', '[A-Za-z0-9]+')
     ->name('display.state');
 
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
+Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
+    Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
+    Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
+});
+
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organization_member'])->group(function () {
     Route::get('/', [DashboardController::class, 'admin'])->name('dashboard');
     Route::get('/dashboard/search', [DashboardController::class, 'adminSearch'])->name('dashboard.search');
     Route::get('/dashboard/peserta-online', [DashboardController::class, 'pesertaOnline'])->name('dashboard.peserta-online');
@@ -56,6 +70,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
         ->name('backups.download');
     Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::middleware('organization_owner')->group(function () {
+        Route::get('team', [TeamController::class, 'index'])->name('team.index');
+        Route::post('team', [TeamController::class, 'store'])->name('team.store');
+        Route::delete('team/{admin}', [TeamController::class, 'destroy'])->name('team.destroy');
+    });
     Route::delete('backups/{nama}', [BackupController::class, 'destroy'])
         ->where('nama', '[A-Za-z0-9._-]+')
         ->name('backups.destroy');
@@ -92,6 +111,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('sessions/{session}/laporan/berita-acara', [ReportController::class, 'beritaAcara'])->name('reports.berita-acara');
     Route::get('attempts/{attempt}', [ReportController::class, 'attempt'])->name('reports.attempt');
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
+    Route::post('answers/{answer}/saran-ai', [ReportController::class, 'saranNilaiEssay'])->name('answers.ai-suggestion');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
 
     Route::resource('sessions', AdminSessionController::class);
@@ -112,7 +132,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
         ->name('sessions.attempts.kick');
 });
 
-Route::middleware(['auth', 'role:peserta'])->group(function () {
+Route::middleware(['auth', 'role:peserta', 'organization_member'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'peserta'])->name('peserta.dashboard');
     Route::get('/dashboard/state', [DashboardController::class, 'pesertaState'])->name('peserta.dashboard.state');
     Route::post('/dashboard/panduan-selesai', [DashboardController::class, 'selesaikanTour'])->name('peserta.tour.selesai');
