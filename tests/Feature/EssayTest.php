@@ -6,6 +6,7 @@ use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
 use App\Models\AuditLog;
+use App\Models\Kelas;
 use App\Models\Option;
 use App\Models\Question;
 use App\Models\Quiz;
@@ -133,6 +134,50 @@ class EssayTest extends TestCase
         }
 
         $this->assertSame('lobby', $session->fresh()->status);
+    }
+
+    public function test_kuis_menyimpan_flag_auto_grade_essay(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin',
+            'username' => 'admin-auto-flag',
+            'password' => Hash::make('rahasia'),
+            'role' => 'admin',
+            'current_session_token' => 'token-auto-flag',
+        ]);
+
+        $kelas = Kelas::create([
+            'nama' => 'Kelas Auto',
+            'pin' => 'AUTO01',
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-auto-flag'])
+            ->post(route('admin.quizzes.store'), [
+                'kelas_id' => $kelas->id,
+                'judul' => 'Kuis Auto',
+            ])
+            ->assertRedirect();
+
+        $quiz = Quiz::where('judul', 'Kuis Auto')->firstOrFail();
+        $this->assertFalse($quiz->auto_grade_essay);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-auto-flag'])
+            ->put(route('admin.quizzes.update', $quiz), [
+                'kelas_id' => $kelas->id,
+                'judul' => 'Kuis Auto',
+                'auto_grade_essay' => '1',
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue($quiz->fresh()->auto_grade_essay);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-auto-flag'])
+            ->get(route('admin.quizzes.edit', $quiz))
+            ->assertSee('Nilai essay otomatis dengan AI');
     }
 
     public function test_admin_dapat_meminta_saran_ai_tanpa_menetapkan_nilai_final(): void

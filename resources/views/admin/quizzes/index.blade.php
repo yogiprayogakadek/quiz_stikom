@@ -28,6 +28,9 @@
                         @if ($kuis->acak_opsi)
                             <span class="pill pill-leaf text-xs">Acak Opsi</span>
                         @endif
+                        @if ($kuis->auto_grade_essay)
+                            <span class="pill pill-sun text-xs">Nilai AI otomatis</span>
+                        @endif
                     </div>
 
                     <h2 class="mt-3 text-2xl">{{ $kuis->judul }}</h2>

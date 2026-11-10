@@ -16,6 +16,7 @@ class StoreQuizRequest extends FormRequest
             'judul' => ['required', 'string', 'max:160'],
             'jumlah_soal' => ['nullable', 'integer', 'min:1'],
             'acak_opsi' => ['nullable', 'boolean'],
+            'auto_grade_essay' => ['nullable', 'boolean'],
         ];
     }
 

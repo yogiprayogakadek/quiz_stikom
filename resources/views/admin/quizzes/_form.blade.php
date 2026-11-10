@@ -41,6 +41,21 @@
         </label>
     </div>
 
+    <div>
+        @php
+            $autoGradeEssay = (bool) old('auto_grade_essay', $quiz?->auto_grade_essay ?? false);
+        @endphp
+        <label class="flex items-start gap-3.5 cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:bg-slate-50 transition">
+            <input type="checkbox" name="auto_grade_essay" value="1" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500" @checked($autoGradeEssay)>
+            <div class="min-w-0">
+                <span class="text-sm font-bold text-slate-900 block">Nilai essay otomatis dengan AI</span>
+                <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    Hanya untuk kuis berisiko rendah di Mode Acak. Nilai AI langsung dipakai dan tetap bisa diubah admin.
+                </p>
+            </div>
+        </label>
+    </div>
+
     @if (isset($quiz))
         <div class="rounded-2xl border border-outline bg-surface p-4">
             <p class="text-sm font-bold text-ink">Kelola soal kuis</p>

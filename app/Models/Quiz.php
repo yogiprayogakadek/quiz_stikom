@@ -17,6 +17,7 @@ class Quiz extends Model
         'judul',
         'jumlah_soal',
         'acak_opsi',
+        'auto_grade_essay',
         'created_by',
     ];
 
@@ -26,6 +27,7 @@ class Quiz extends Model
             'kelas_id' => 'integer',
             'jumlah_soal' => 'integer',
             'acak_opsi' => 'boolean',
+            'auto_grade_essay' => 'boolean',
         ];
     }
 

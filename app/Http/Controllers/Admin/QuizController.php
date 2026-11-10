@@ -47,6 +47,7 @@ class QuizController extends Controller
                 'judul' => $data['judul'],
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
                 'acak_opsi' => $request->boolean('acak_opsi', true),
+                'auto_grade_essay' => $request->boolean('auto_grade_essay'),
                 'created_by' => request()->user()->id,
             ]);
         });
@@ -75,6 +76,7 @@ class QuizController extends Controller
             'judul' => $data['judul'],
             'jumlah_soal' => $data['jumlah_soal'] ?? null,
             'acak_opsi' => $request->boolean('acak_opsi'),
+            'auto_grade_essay' => $request->boolean('auto_grade_essay'),
         ]);
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis diperbarui.');
