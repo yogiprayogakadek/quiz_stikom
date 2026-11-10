@@ -7,6 +7,7 @@ use App\Events\SesiSelesai;
 use App\Events\SesiStatusUpdated;
 use App\Events\SoalDibuka;
 use App\Events\SoalDitutup;
+use App\Jobs\AutoGradeEssayJob;
 use App\Jobs\CloseQuestionJob;
 use App\Jobs\NextQuestionJob;
 use App\Models\Answer;
@@ -167,6 +168,7 @@ class QuizEngine
 
         $hasil->loadMissing('quizSession');
         $this->bukaPembahasanOtomatis($hasil->quizSession);
+        $this->antrekanAutoGrade($hasil);
 
         return $hasil;
     }
@@ -586,6 +588,20 @@ class QuizEngine
             'status' => 'selesai',
             'selesai_at' => now()->getTimestampMs(),
         ]);
+
+        $this->antrekanAutoGrade($attempt);
+    }
+
+    private function antrekanAutoGrade(Attempt $attempt): void
+    {
+        $attempt->loadMissing('quizSession.quiz');
+
+        if ($attempt->quizSession?->mode !== 'acak'
+            || ! $attempt->quizSession?->quiz?->auto_grade_essay) {
+            return;
+        }
+
+        AutoGradeEssayJob::dispatch($attempt->id)->afterCommit();
     }
 
     private function bukaSoal(QuizSession $session, SessionQuestion $sessionQuestion): array

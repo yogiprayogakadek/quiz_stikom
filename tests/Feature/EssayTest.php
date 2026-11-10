@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\AutoGradeEssayJob;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
@@ -20,6 +21,7 @@ use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -266,6 +268,216 @@ class EssayTest extends TestCase
         $this->assertSame($admin->id, $answer->dinilai_oleh);
     }
 
+    public function test_kuis_auto_grade_mengantre_job_saat_attempt_selesai(): void
+    {
+        Queue::fake();
+        [, , , $attempt] = $this->buatAcakBerjalan(true, true);
+
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        Queue::assertPushed(AutoGradeEssayJob::class, fn ($job) => $job->attemptId === $attempt->id);
+    }
+
+    public function test_kuis_manual_tidak_mengantre_job_auto_grade(): void
+    {
+        Queue::fake();
+        [, , , $attempt] = $this->buatAcakBerjalan(true, false);
+
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        Queue::assertNotPushed(AutoGradeEssayJob::class);
+    }
+
+    public function test_kuis_auto_grade_mengantre_job_saat_sesi_ditutup(): void
+    {
+        Queue::fake();
+        [, , $session, $attempt] = $this->buatAcakBerjalan(true, true);
+
+        app(QuizEngine::class)->tutupSesi($session);
+
+        Queue::assertPushed(AutoGradeEssayJob::class, fn ($job) => $job->attemptId === $attempt->id);
+    }
+
+    public function test_job_auto_grade_menyimpan_nilai_final_dan_audit(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 90,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $answer->refresh();
+
+        $this->assertSame(8, $answer->skor);
+        $this->assertNotNull($answer->dinilai_at);
+        $this->assertNull($answer->dinilai_oleh);
+        $this->assertSame(8, $answer->ai_suggested_score);
+
+        $final = AuditLog::where('action', 'essay_score_changed')
+            ->where('subject_id', $answer->id)
+            ->firstOrFail();
+        $this->assertNull($final->actor_id);
+        $this->assertTrue($final->metadata['auto']);
+        $this->assertSame(8, $final->metadata['to']);
+
+        $this->assertDatabaseHas('ai_usage_events', [
+            'organization_id' => $attempt->organization_id,
+            'kind' => 'essay',
+            'requests' => 1,
+        ]);
+    }
+
+    public function test_job_auto_grade_tidak_menimpa_nilai_admin(): void
+    {
+        Queue::fake();
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay->id => 9],
+            ])
+            ->assertRedirect();
+
+        (new AutoGradeEssayJob($attempt->id))->handle(app(QuizEngine::class));
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertSame(9, $answer->skor);
+        $this->assertSame(1, AuditLog::where('action', 'essay_score_changed')->where('subject_id', $answer->id)->count());
+    }
+
+    public function test_job_auto_grade_melewati_jawaban_saat_kuota_habis(): void
+    {
+        config(['platform.ai_monthly_requests' => 0]);
+        Http::fake();
+
+        [, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertNull($answer->dinilai_at);
+        Http::assertNothingSent();
+    }
+
+    public function test_job_auto_grade_tetap_selesai_saat_ai_error(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response('', 500),
+        ]);
+
+        [, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertSame('selesai', $attempt->fresh()->status);
+        $this->assertNull($answer->dinilai_at);
+    }
+
+    public function test_job_auto_grade_tanpa_jawaban_essay_tidak_memanggil_ai(): void
+    {
+        Http::fake();
+
+        [, , , $attempt] = $this->buatAcakBerjalan(false, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_job_auto_grade_tidak_menimpa_saat_dijalankan_dua_kali(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 90,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        (new AutoGradeEssayJob($attempt->id))->handle(app(QuizEngine::class));
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertSame(8, $answer->skor);
+        $this->assertSame(1, AuditLog::where('action', 'essay_score_changed')->where('subject_id', $answer->id)->count());
+    }
+
+    public function test_job_auto_grade_memakai_provider_organisasi(): void
+    {
+        $organization = Organization::query()->firstOrFail();
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'ai_base_url' => 'https://org.example.test/v1',
+            'ai_api_key' => 'org-key',
+            'ai_default_model' => 'org-model',
+        ]);
+
+        config([
+            'services.ai.base_url' => 'https://platform.example.test/v1',
+            'services.ai.api_key' => 'platform-key',
+            'services.ai.default_model' => 'platform-model',
+        ]);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://org.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 90,
+                            'feedback' => 'Jawaban tepat.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [, , , $attempt] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://org.example.test/v1/chat/completions');
+        $this->assertDatabaseHas('ai_usage_events', [
+            'organization_id' => $attempt->organization_id,
+            'kind' => 'essay',
+            'requests' => 1,
+        ]);
+    }
+
     public function test_admin_dapat_meminta_saran_ai_tanpa_menetapkan_nilai_final(): void
     {
         config([
@@ -334,7 +546,7 @@ class EssayTest extends TestCase
             ->assertDontSee('Portal Peserta');
     }
 
-    private function buatAcakBerjalan(bool $denganJawaban = true): array
+    private function buatAcakBerjalan(bool $denganJawaban = true, bool $autoGrade = false): array
     {
         $admin = User::create([
             'nama' => 'Admin',
@@ -354,6 +566,7 @@ class EssayTest extends TestCase
 
         $quiz = Quiz::create([
             'judul' => 'Kuis Essay',
+            'auto_grade_essay' => $autoGrade,
             'created_by' => $admin->id,
         ]);
 
