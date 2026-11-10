@@ -95,6 +95,7 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 ## Checkpoint 10 November 2026
 
 - Status: fondasi tenant, login master terpisah, maintenance global, suspend organisasi, pengaturan per organisasi, keamanan password, audit role/membership, rubrik essay terstruktur, serta email/verifikasi/reset password sudah berfungsi.
+- Commit checkpoint: `4b74c3c` (`feat: add audit logs, essay rubric, and email recovery`).
 - Verifikasi: `100 passed (522 assertions)`, build Vite berhasil, Blade cache berhasil, dan `git diff --check` bersih.
 - Risiko tersisa: `MAIL_MAILER=log` masih default sehingga email verifikasi dan reset belum terkirim di produksi sampai SMTP dikonfigurasi. Akun hasil impor CSV dan akun lama tanpa email tetap kompatibel, tetapi belum bisa reset password mandiri; email dapat ditambahkan lewat edit peserta. Pendaftaran publik, kuota, dan rate limit pendaftaran belum ada.
 - Item berikutnya: **Branding, slug, zona waktu, bahasa, dan kebijakan peserta per organisasi** (item pertama yang belum dicentang).
