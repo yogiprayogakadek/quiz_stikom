@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureSingleSession;
+use App\Http\Middleware\PreventAccessDuringMaintenance;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             EnsureSingleSession::class,
+            PreventAccessDuringMaintenance::class,
             EnsurePasswordChanged::class,
         ]);
 

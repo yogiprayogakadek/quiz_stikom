@@ -46,6 +46,9 @@ class AppSetting extends Model
         'image_base_url',
         'image_api_key',
         'image_model',
+        'maintenance_enabled',
+        'maintenance_message',
+        'maintenance_started_at',
     ];
 
     protected function casts(): array
@@ -54,6 +57,8 @@ class AppSetting extends Model
             'ai_api_key' => 'encrypted',
             'image_api_key' => 'encrypted',
             'ai_timeout' => 'integer',
+            'maintenance_enabled' => 'boolean',
+            'maintenance_started_at' => 'datetime',
         ];
     }
 
@@ -72,6 +77,8 @@ class AppSetting extends Model
             'ai_default_model' => config('services.ai.default_model'),
             'ai_timeout' => config('services.ai.timeout', 60),
             'class_cover_mode' => 'local',
+            'maintenance_enabled' => false,
+            'maintenance_message' => 'Sistem sedang menjalani pemeliharaan. Silakan coba kembali beberapa saat lagi.',
         ]);
     }
 

@@ -1,4 +1,6 @@
-@props(['judul' => 'Masuk'])
+@props(['judul' => null, 'masterLogin' => false])
+
+@php($judul ??= $masterLogin ? 'Login Master' : 'Masuk')
 
 <x-layouts.guest :judul="$judul">
     <div class="min-h-screen w-full grid grid-cols-1 lg:grid-cols-12 bg-surface font-sans">
@@ -21,8 +23,8 @@
                 </div>
 
                 <div class="inline-flex items-center gap-2 rounded-full bg-page/90 px-3.5 py-1.5 border border-outline shadow-xs backdrop-blur-sm">
-                    <span class="h-2 w-2 rounded-full bg-leaf animate-pulse"></span>
-                    <span class="text-xs font-bold text-ink-muted">Layanan siap</span>
+                    <span @class(['h-2 w-2 rounded-full', 'bg-sun-deep' => $appSettings->maintenance_enabled, 'bg-leaf animate-pulse' => ! $appSettings->maintenance_enabled])></span>
+                    <span class="text-xs font-bold text-ink-muted">{{ $appSettings->maintenance_enabled ? 'Maintenance aktif' : 'Layanan siap' }}</span>
                 </div>
             </div>
 
@@ -89,10 +91,10 @@
                     {{-- Title --}}
                     <div>
                         <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink">
-                            {{ $appSettings->login_title }}
+                            {{ $masterLogin ? 'Akses master platform' : $appSettings->login_title }}
                         </h1>
                         <p class="mt-2 text-sm text-ink-muted">
-                            {{ $appSettings->login_description }}
+                            {{ $masterLogin ? 'Kelola organisasi dan status layanan dengan akun master.' : $appSettings->login_description }}
                         </p>
                     </div>
 
@@ -128,7 +130,7 @@
                     {{-- Login Form --}}
                     <form
                         method="POST"
-                        action="{{ route('login.store') }}"
+                        action="{{ route($masterLogin ? 'master.login.store' : 'login.store') }}"
                         class="mt-6 space-y-4"
                         @submit="submitting = true"
                     >
@@ -152,7 +154,7 @@
                                     required
                                     autofocus
                                     value="{{ old('username') }}"
-                                    placeholder="NIM / Username"
+                                    placeholder="{{ $masterLogin ? 'Username master' : 'NIM / Username' }}"
                                     class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-4 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('username') border-coral-deep @enderror"
                                 >
                             </div>
@@ -217,7 +219,7 @@
                             :disabled="submitting"
                             class="btn btn-primary w-full mt-3 font-extrabold"
                         >
-                            <span x-show="!submitting">Masuk akun</span>
+                            <span x-show="!submitting">{{ $masterLogin ? 'Masuk sebagai master' : 'Masuk akun' }}</span>
                             <span x-show="submitting" x-cloak class="flex items-center gap-2">
                                 <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -231,7 +233,11 @@
                     {{-- Help Note --}}
                     <div class="mt-6 border-t border-outline/70 pt-4 text-center">
                         <p class="text-xs text-ink-subtle">
-                            Kendala akun atau lupa sandi? Hubungi proktor / admin kelas.
+                            @if ($masterLogin)
+                                Bukan master? <a href="{{ route('login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke login pengguna</a>.
+                            @else
+                                Kendala akun? Hubungi admin kelas. Master platform <a href="{{ route('master.login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">masuk di sini</a>.
+                            @endif
                         </p>
                     </div>
                 </div>

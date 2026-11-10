@@ -26,13 +26,13 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 - [x] Dashboard master untuk daftar organisasi.
 - [x] Master dapat membuat organisasi dan owner pertama.
 - [x] Owner dapat menambahkan admin organisasi dengan password sementara.
-- [ ] Suspend organisasi dan pencabutan akses.
+- [x] Suspend organisasi dan pencabutan akses.
 - [ ] Audit perubahan role dan membership.
 
 ## Fase 3: Konteks peserta
 
 - [x] Peserta hanya melihat kelas organisasi aktif.
-- [ ] Kelas privat hanya dapat dimasuki melalui membership atau PIN.
+- [x] Kelas privat hanya dapat dimasuki melalui membership atau PIN.
 - [x] Pemilih organisasi untuk akun dengan beberapa membership.
 - [x] Branding mengikuti organisasi aktif.
 - [x] Login organisasi melalui slug tanpa membuka data organisasi lain.
@@ -65,6 +65,8 @@ Dokumen ini adalah titik handoff. Provider berikutnya harus mulai dari item pert
 
 ## Fase 7: Kesiapan publik
 
+- [x] Pisahkan login master dari login pengguna organisasi.
+- [x] Master dapat mengaktifkan maintenance dan pengguna menerima halaman status 503.
 - [ ] Pendaftaran organisasi mandiri dan verifikasi email.
 - [ ] Rate limit serta proteksi bot pada pendaftaran.
 - [ ] Kuota organisasi, admin, peserta, kelas, dan AI.
@@ -85,8 +87,8 @@ Catat commit terakhir, test yang lulus, risiko tersisa, dan item checklist berik
 
 ## Checkpoint 10 November 2026
 
-- Status: fondasi tenant selesai; alur master/owner inti, pengaturan per organisasi, keamanan password, dan rekomendasi nilai essay AI sudah berfungsi.
-- Verifikasi: `81 passed (407 assertions)`, build Vite berhasil, Blade cache berhasil, dan `git diff --check` bersih.
-- Risiko tersisa: belum ada email pemulihan, pendaftaran publik, kuota, audit perubahan role/nilai, dan suspend organisasi.
-- Item berikutnya: mulai dari **Kelas privat hanya dapat dimasuki melalui membership atau PIN**, lalu lanjutkan suspend organisasi dan audit membership.
+- Status: fondasi tenant selesai; login master terpisah, maintenance global, suspend organisasi, pengaturan per organisasi, keamanan password, dan rekomendasi nilai essay AI sudah berfungsi.
+- Verifikasi: `86 passed (453 assertions)`, build Vite berhasil, Blade cache berhasil, dan `git diff --check` bersih.
+- Risiko tersisa: belum ada email pemulihan, pendaftaran publik, kuota, dan audit perubahan role/nilai.
+- Item berikutnya: mulai dari **Audit perubahan role dan membership**, lalu lanjutkan email pemulihan dan rubrik essay terstruktur.
 - Aturan essay: AI hanya menyimpan rekomendasi; nilai final tetap ditetapkan admin sampai mode otomatis beserta auditnya selesai.

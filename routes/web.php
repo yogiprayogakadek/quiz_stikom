@@ -14,6 +14,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\Master\OrganizationController;
+use App\Http\Controllers\Master\SystemController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
@@ -38,6 +39,11 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'login'])->name('login.store');
 });
 
+Route::prefix('master')->name('master.')->middleware('guest')->group(function () {
+    Route::get('login', [LoginController::class, 'showMaster'])->name('login');
+    Route::post('login', [LoginController::class, 'login'])->name('login.store');
+});
+
 Route::middleware('auth')->group(function () {
     Route::get('/ganti-password', [PasswordController::class, 'edit'])->name('password.change');
     Route::post('/ganti-password', [PasswordController::class, 'update'])->name('password.change.update');
@@ -56,6 +62,8 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
+    Route::put('organizations/{organization}/status', [OrganizationController::class, 'updateStatus'])->name('organizations.status.update');
+    Route::put('system/maintenance', [SystemController::class, 'updateMaintenance'])->name('maintenance.update');
 });
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organization_member'])->group(function () {

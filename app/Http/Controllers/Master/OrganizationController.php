@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Master;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -23,7 +24,9 @@ class OrganizationController extends Controller
             'kelas',
         ])->latest()->get();
 
-        return view('master.organizations.index', compact('organizations'));
+        $platformSettings = AppSetting::current();
+
+        return view('master.organizations.index', compact('organizations', 'platformSettings'));
     }
 
     public function store(Request $request): RedirectResponse
@@ -65,5 +68,18 @@ class OrganizationController extends Controller
         return back()
             ->with('sukses', 'Organisasi '.$organization->name.' dan akun owner berhasil dibuat.')
             ->with('password_baru', ['username' => $owner->username, 'password' => $temporaryPassword]);
+    }
+
+    public function updateStatus(Request $request, Organization $organization): RedirectResponse
+    {
+        $data = $request->validate(['is_active' => ['required', 'boolean']]);
+        $organization->update(['is_active' => $request->boolean('is_active')]);
+
+        return back()->with(
+            'sukses',
+            $data['is_active']
+                ? 'Organisasi '.$organization->name.' diaktifkan kembali.'
+                : 'Organisasi '.$organization->name.' ditangguhkan.',
+        );
     }
 }

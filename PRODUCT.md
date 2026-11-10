@@ -28,7 +28,8 @@ Master mendaftarkan organisasi pertama dan owner. Owner mengundang admin, mendaf
 
 - Laravel 12, Blade, Alpine, Tailwind, Reverb, dan queue Laravel adalah stack yang sudah ada.
 - Organisasi menjadi batas kepemilikan data. `created_by` hanya mencatat pembuat.
-- Login publik utama memakai identitas platform. Identitas organisasi dipakai setelah konteks organisasi diketahui.
+- Login master platform dipisahkan dari login admin organisasi dan peserta.
+- Identitas organisasi dipakai setelah konteks organisasi diketahui.
 - Provider AI harus kompatibel dengan endpoint OpenAI yang telah dipakai aplikasi.
 - Penilaian essay mendukung manual, rekomendasi AI yang dikonfirmasi manusia, dan otomatis untuk kuis berisiko rendah.
 - Pendaftaran publik tetap ditutup sampai isolasi organisasi, verifikasi email, pemulihan password, kuota, dan perlindungan penyalahgunaan selesai.

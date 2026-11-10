@@ -40,6 +40,17 @@ class LoginController extends Controller
         return view('auth.login');
     }
 
+    public function showMaster(): View|RedirectResponse
+    {
+        if (Auth::check()) {
+            return redirect()->route(Auth::user()->isPlatformAdmin() ? 'master.organizations.index' : 'login');
+        }
+
+        session()->forget('organization_id');
+
+        return view('auth.login', ['masterLogin' => true]);
+    }
+
     public function login(LoginRequest $request): RedirectResponse
     {
         $key = Str::lower($request->input('username')).'|'.$request->ip();
@@ -66,9 +77,18 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
+        $masterLogin = $request->routeIs('master.login.store');
+        if ($masterLogin && ! $user->isPlatformAdmin()) {
+            return $this->rejectLogin($request, 'Akun ini tidak memiliki akses master.', 'master.login');
+        }
+        if (! $masterLogin && $user->isPlatformAdmin()) {
+            return $this->rejectLogin($request, 'Gunakan halaman login khusus master.', 'master.login');
+        }
+
         $requestedOrganizationId = $request->session()->get('organization_id');
         if ($requestedOrganizationId && ! $user->organizations()
             ->whereKey($requestedOrganizationId)
+            ->where('organizations.is_active', true)
             ->wherePivot('status', 'active')
             ->exists()) {
             Auth::logout();
@@ -76,7 +96,12 @@ class LoginController extends Controller
 
             return back()
                 ->withInput($request->only('username'))
-                ->withErrors(['username' => 'Akun ini tidak terdaftar pada organisasi tersebut.']);
+                ->withErrors(['username' => 'Akun ini tidak dapat mengakses organisasi tersebut.']);
+        }
+        if (! $requestedOrganizationId
+            && ! $user->isPlatformAdmin()
+            && ! $user->organizations()->where('organizations.is_active', true)->wherePivot('status', 'active')->exists()) {
+            return $this->rejectLogin($request, 'Organisasi akun ini sedang tidak aktif. Hubungi pengelola platform.', 'login');
         }
 
         $token = Str::random(64);
@@ -93,9 +118,11 @@ class LoginController extends Controller
                 ->with('peringatan', 'Ini adalah login pertama Anda. Silakan ganti password Anda terlebih dahulu.');
         }
 
-        $destination = $user->isPlatformAdmin()
-            ? route('master.organizations.index')
-            : ($user->isAdmin() ? route('admin.dashboard') : route('peserta.dashboard'));
+        if ($user->isPlatformAdmin()) {
+            return redirect()->route('master.organizations.index')->with('sukses', 'Selamat datang, '.$user->nama.'.');
+        }
+
+        $destination = $user->isAdmin() ? route('admin.dashboard') : route('peserta.dashboard');
 
         return redirect()->intended($destination)->with('sukses', 'Selamat datang, '.$user->nama.'.');
     }
@@ -103,6 +130,7 @@ class LoginController extends Controller
     public function logout(Request $request): RedirectResponse
     {
         $user = $request->user();
+        $loginRoute = $user?->isPlatformAdmin() ? 'master.login' : 'login';
 
         if ($user !== null) {
             User::whereKey($user->id)->update(['current_session_token' => null]);
@@ -116,6 +144,17 @@ class LoginController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login')->with('sukses', 'Anda sudah keluar.');
+        return redirect()->route($loginRoute)->with('sukses', 'Anda sudah keluar.');
+    }
+
+    private function rejectLogin(Request $request, string $message, string $route): RedirectResponse
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route($route)
+            ->withInput($request->only('username'))
+            ->withErrors(['username' => $message]);
     }
 }
