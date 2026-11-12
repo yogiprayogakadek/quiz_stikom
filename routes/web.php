@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
+use App\Http\Controllers\Admin\WorkspaceController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
@@ -115,6 +116,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::get('/', [DashboardController::class, 'admin'])->name('dashboard');
     Route::get('/dashboard/search', [DashboardController::class, 'adminSearch'])->name('dashboard.search');
     Route::get('/dashboard/peserta-online', [DashboardController::class, 'pesertaOnline'])->name('dashboard.peserta-online');
+    Route::get('workspace', [WorkspaceController::class, 'index'])->name('workspace.index');
+    Route::post('workspace/requests', [WorkspaceController::class, 'storeRequest'])
+        ->middleware('throttle:5,1')
+        ->name('workspace.requests.store');
 
     Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
     Route::post('backups', [BackupController::class, 'store'])->name('backups.store');

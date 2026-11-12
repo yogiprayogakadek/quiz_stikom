@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Models\WorkspaceRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -175,6 +176,90 @@ class WorkspaceOwnershipTest extends TestCase
                 'previous_owner_action' => 'keep_admin',
             ])
             ->assertForbidden();
+    }
+
+    public function test_owner_dapat_mengajukan_workspace(): void
+    {
+        $owner = $this->admin('owner_alpha');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession([
+                'auth_token' => $owner->current_session_token,
+                'organization_id' => $organization->id,
+            ])
+            ->post(route('admin.workspace.requests.store'), [
+                'name' => 'Workspace Baru',
+                'type' => 'education',
+                'timezone' => 'Asia/Jakarta',
+                'note' => 'Untuk kelas malam.',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('workspace_requests', [
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Baru',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'organization_id' => null,
+            'actor_id' => $owner->id,
+            'action' => 'workspace_requested',
+        ]);
+    }
+
+    public function test_admin_bukan_owner_tidak_dapat_mengajukan_workspace(): void
+    {
+        $admin = $this->admin('admin_biasa');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($admin->id, [
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession([
+                'auth_token' => $admin->current_session_token,
+                'organization_id' => $organization->id,
+            ])
+            ->post(route('admin.workspace.requests.store'), [
+                'name' => 'Workspace Baru',
+                'type' => 'education',
+                'timezone' => 'Asia/Jakarta',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_owner_melihat_riwayat_permintaan_workspace(): void
+    {
+        $owner = $this->admin('owner_alpha');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+        WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Malam',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession([
+                'auth_token' => $owner->current_session_token,
+                'organization_id' => $organization->id,
+            ])
+            ->get(route('admin.workspace.index'))
+            ->assertOk()
+            ->assertSee('Workspace Malam')
+            ->assertSee('Menunggu');
     }
 
     private function master(): User
