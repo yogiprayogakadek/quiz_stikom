@@ -42,6 +42,7 @@ class DashboardController extends Controller
 
         $leaderboardTerbaru = Attempt::with(['user', 'quizSession.quiz'])
             ->whereHas('quizSession')
+            ->whereHas('quizSession.quiz', fn ($q) => $q->where('is_percobaan', false))
             ->where('status', 'selesai')
             ->orderByDesc('updated_at')
             ->limit(5)
@@ -235,17 +236,38 @@ class DashboardController extends Controller
 
         $sesiList = $this->formatSesi($sesiTersedia, $attempts);
 
+        $organizationId = app(OrganizationContext::class)->id();
+
+        $nilaiTerbaik = DB::table('attempts')
+            ->join('quiz_sessions', 'quiz_sessions.id', '=', 'attempts.quiz_session_id')
+            ->join('quizzes', 'quizzes.id', '=', 'quiz_sessions.quiz_id')
+            ->leftJoin('quiz_sessions as sesi_awal', 'sesi_awal.id', '=', 'quiz_sessions.remidi_dari_session_id')
+            ->leftJoin('quizzes as kuis_awal', 'kuis_awal.id', '=', 'sesi_awal.quiz_id')
+            ->where('attempts.status', 'selesai')
+            ->whereNotNull('attempts.bergabung_at')
+            ->whereNotNull('attempts.nilai')
+            ->whereRaw('COALESCE(kuis_awal.is_percobaan, quizzes.is_percobaan) = ?', [false])
+            ->when($organizationId !== null, fn ($q) => $q->where('attempts.organization_id', $organizationId))
+            ->groupBy('attempts.user_id', DB::raw('COALESCE(kuis_awal.id, quizzes.id)'))
+            ->selectRaw('attempts.user_id, MAX(attempts.nilai) as nilai')
+            ->get();
+
+        $totalPerPeserta = $nilaiTerbaik
+            ->groupBy('user_id')
+            ->map(fn ($rows) => (int) $rows->sum('nilai'));
+
         $leaderboard = User::where('role', 'peserta')
             ->inCurrentOrganization()
-            ->whereHas('attempts', fn ($q) => $q->where('status', 'selesai'))
-            ->withSum(['attempts' => fn ($q) => $q->where('status', 'selesai')], 'skor_total')
-            ->orderByDesc('attempts_sum_skor_total')
-            ->limit(5)
-            ->get();
+            ->whereIn('id', $totalPerPeserta->keys())
+            ->get()
+            ->each(fn (User $peserta) => $peserta->attempts_sum_skor_total = $totalPerPeserta->get($peserta->id, 0))
+            ->sortByDesc('attempts_sum_skor_total')
+            ->take(5)
+            ->values();
 
         $stats = [
             'selesai' => $attempts->where('status', 'selesai')->count(),
-            'total_skor' => (int) $attempts->where('status', 'selesai')->sum('skor_total'),
+            'total_skor' => (int) $totalPerPeserta->get($user->id, 0),
             'streak' => max(1, $attempts->where('status', 'selesai')->count()),
             'target_harian' => 3,
         ];

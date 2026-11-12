@@ -91,6 +91,23 @@
         </section>
     </div>
 
+    @if ($nilaiAkhir)
+        <section class="mt-6 card border-leaf" aria-labelledby="nilai-akhir-heading">
+            <p class="pill pill-leaf">Nilai akhir</p>
+            <h2 id="nilai-akhir-heading" class="mt-3 text-2xl">Nilai akhir setelah remidi</h2>
+            <p class="display-number mt-4 text-5xl text-ink">{{ $nilaiAkhir->nilai_akhir }}</p>
+            <p class="mt-2 text-base text-ink-muted">
+                Diambil dari nilai {{ $nilaiAkhir->sumber === 'remidi' ? 'remidi' : 'awal' }}.
+                Nilai awal {{ $nilaiAkhir->nilai_awal }}@if ($nilaiAkhir->nilai_remidi !== null), nilai remidi {{ $nilaiAkhir->nilai_remidi }}@endif.
+            </p>
+        </section>
+    @elseif ($session->isRemidi() && $attempt->status === 'selesai')
+        <section class="mt-6 card" aria-labelledby="nilai-akhir-heading">
+            <h2 id="nilai-akhir-heading" class="text-2xl">Nilai remidi tersimpan</h2>
+            <p class="mt-2 text-base text-ink-muted">Nilai akhir menunggu admin memilih nilai terbaik antara nilai awal dan nilai remidi.</p>
+        </section>
+    @endif
+
     @if ($tampilkan)
         <section class="mt-6 card" aria-labelledby="rincian-hasil">
             <h2 id="rincian-hasil" class="text-2xl">Rincian jawaban</h2>

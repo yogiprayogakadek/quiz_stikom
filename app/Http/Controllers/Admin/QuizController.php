@@ -6,10 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
 use App\Models\Kelas;
-use App\Models\Question;
 use App\Models\Quiz;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -48,6 +46,8 @@ class QuizController extends Controller
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
                 'acak_opsi' => $request->boolean('acak_opsi', true),
                 'auto_grade_essay' => $request->boolean('auto_grade_essay'),
+                'is_percobaan' => $request->boolean('is_percobaan'),
+                'remidi_nilai_min' => $data['remidi_nilai_min'] ?? null,
                 'created_by' => request()->user()->id,
             ]);
         });
@@ -77,6 +77,8 @@ class QuizController extends Controller
             'jumlah_soal' => $data['jumlah_soal'] ?? null,
             'acak_opsi' => $request->boolean('acak_opsi'),
             'auto_grade_essay' => $request->boolean('auto_grade_essay'),
+            'is_percobaan' => $request->boolean('is_percobaan'),
+            'remidi_nilai_min' => $data['remidi_nilai_min'] ?? null,
         ]);
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis diperbarui.');

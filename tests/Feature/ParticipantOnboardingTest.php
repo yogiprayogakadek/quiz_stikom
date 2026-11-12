@@ -56,6 +56,7 @@ class ParticipantOnboardingTest extends TestCase
 
         $this->assertSame(3, $quiz->questions()->count());
         $this->assertSame(12, $quiz->questions()->withCount('options')->get()->sum('options_count'));
+        $this->assertTrue($quiz->is_percobaan);
 
         $session = QuizSession::where('quiz_id', $quiz->id)->where('nama', 'Uji Coba Sistem')->firstOrFail();
 

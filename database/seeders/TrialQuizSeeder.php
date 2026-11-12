@@ -28,6 +28,7 @@ class TrialQuizSeeder extends Seeder
                 'organization_id' => $organizationId,
                 'jumlah_soal' => 3,
                 'acak_opsi' => true,
+                'is_percobaan' => true,
                 'created_by' => $admin->id,
             ],
         );

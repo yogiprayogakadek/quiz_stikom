@@ -5,19 +5,20 @@ use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuizController;
+use App\Http\Controllers\Admin\RemedialController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
+use App\Http\Controllers\Auth\AccountRecoveryController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\OrganizationRegistrationController;
 use App\Http\Controllers\Auth\PasswordController;
-use App\Http\Controllers\Auth\AccountRecoveryController;
-use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LegalController;
-use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\Master\MailSettingController;
 use App\Http\Controllers\Master\OrganizationController;
 use App\Http\Controllers\Master\SystemController;
@@ -161,6 +162,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('answers/{answer}/saran-ai', [ReportController::class, 'saranNilaiEssay'])->name('answers.ai-suggestion');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
+
+    Route::get('sessions/{session}/remidi', [RemedialController::class, 'create'])->name('sessions.remidi.create');
+    Route::post('sessions/{session}/remidi', [RemedialController::class, 'store'])->name('sessions.remidi.store');
+    Route::post('sessions/{session}/remidi/kuis', [RemedialController::class, 'buatKuis'])->name('sessions.remidi.kuis');
+    Route::get('sessions/{session}/remidi/laporan', [RemedialController::class, 'laporan'])->name('sessions.remidi.laporan');
+    Route::post('sessions/{session}/remidi/terapkan', [RemedialController::class, 'terapkan'])->name('sessions.remidi.terapkan');
+    Route::get('sessions/{session}/remidi/csv', [RemedialController::class, 'export'])->name('sessions.remidi.export');
 
     Route::resource('sessions', AdminSessionController::class);
     Route::post('sessions/{session}/lobby', [AdminSessionController::class, 'openLobby'])->name('sessions.lobby');

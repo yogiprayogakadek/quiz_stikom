@@ -70,6 +70,12 @@
                         <a href="{{ route('admin.sessions.show', $sesi) }}" class="btn btn-primary">Ruang kendali</a>
                         @if ($sesi->status === 'selesai')
                             <a href="{{ route('admin.reports.session', $sesi) }}" class="btn btn-secondary">Laporan</a>
+                            @if ($sesi->jenis === 'utama' && ! $sesi->quiz->is_percobaan)
+                                @php $remidi = $sesi->remidi->first(); @endphp
+                                <a href="{{ $remidi ? route('admin.sessions.remidi.laporan', $remidi) : route('admin.sessions.remidi.create', $sesi) }}" class="btn btn-ghost">
+                                    {{ $remidi ? 'Laporan remidi' : 'Remidi' }}
+                                </a>
+                            @endif
                         @endif
                         @if ($sesi->status === 'draft')
                             <a href="{{ route('admin.sessions.edit', $sesi) }}" class="btn btn-ghost">Pengaturan</a>

@@ -12,7 +12,25 @@
             <x-icon name="download" :size="20" />
             Ekspor CSV
         </a>
+        @if ($session->jenis === 'utama' && $session->status === 'selesai' && ! $session->quiz->is_percobaan)
+            @php $remidi = $session->remidi->first(); @endphp
+            @if ($remidi)
+                <a href="{{ route('admin.sessions.remidi.laporan', $remidi) }}" class="btn btn-primary">Laporan remidi</a>
+            @else
+                <a href="{{ route('admin.sessions.remidi.create', $session) }}" class="btn btn-primary">Buat remidi</a>
+            @endif
+        @endif
+        @if ($session->jenis === 'remidi')
+            <a href="{{ route('admin.sessions.remidi.laporan', $session) }}" class="btn btn-primary">Laporan remidi</a>
+        @endif
     </x-slot:aksi>
+
+    @if ($session->quiz->is_percobaan)
+        <div class="mb-5 rounded-2xl border border-outline bg-surface px-5 py-4">
+            <span class="pill pill-neutral">Kuis percobaan</span>
+            <span class="ml-2 text-base font-semibold text-ink-muted">Skor tidak masuk leaderboard dan tidak menambah total skor peserta.</span>
+        </div>
+    @endif
 
     <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div class="card">

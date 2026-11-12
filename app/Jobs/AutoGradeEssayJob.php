@@ -6,6 +6,7 @@ use App\Events\EssayDinilai;
 use App\Events\SessionMonitorUpdated;
 use App\Models\Attempt;
 use App\Services\EssayGrader;
+use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -91,6 +92,7 @@ class AutoGradeEssayJob implements ShouldQueue
             }
 
             $engine->hitungSkorAcak($attempt);
+            app(NilaiService::class)->terapkanUntukSesi($attempt->quizSession);
 
             foreach ($dinilai as $item) {
                 EssayDinilai::safeDispatch(

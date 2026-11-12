@@ -33,7 +33,7 @@ class SessionController extends Controller
     {
         $status = $request->query('status');
 
-        $sessions = QuizSession::with('quiz')
+        $sessions = QuizSession::with('quiz', 'remidi')
             ->withCount('attempts')
             ->when(in_array($status, ['draft', 'lobby', 'berjalan', 'selesai'], true), fn ($q) => $q->where('status', $status))
             ->orderByRaw("CASE status WHEN 'berjalan' THEN 0 WHEN 'lobby' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END")
@@ -83,7 +83,7 @@ class SessionController extends Controller
 
     public function show(QuizSession $session): View
     {
-        $session->load('quiz', 'kelas');
+        $session->load('quiz', 'kelas', 'remidi');
 
         $data = $this->dataMonitor($session);
 

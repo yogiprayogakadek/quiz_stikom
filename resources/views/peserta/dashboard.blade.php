@@ -659,11 +659,12 @@
                                 </div>
 
                                 <span class="text-xs font-extrabold text-slate-900 tabular-nums">
-                                    {{ (int) ($pesertaTop->attempts_sum_skor_total ?? 0) }} pts
+                                    {{ (int) ($pesertaTop->attempts_sum_skor_total ?? 0) }} nilai
                                 </span>
                             </div>
                         @endforeach
                     </div>
+                    <p class="mt-3 text-xs text-slate-500">Nilai terbaik per kuis. Kuis percobaan tidak dihitung.</p>
                 @endif
             </div>
 

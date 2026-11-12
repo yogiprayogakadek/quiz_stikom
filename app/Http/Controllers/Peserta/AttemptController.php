@@ -12,7 +12,9 @@ use App\Models\Attempt;
 use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Models\ParticipantLoginActivity;
+use App\Models\QuizGrade;
 use App\Models\User;
+use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
@@ -301,8 +303,11 @@ class AttemptController extends Controller
                     'selesai_at' => now()->getTimestampMs(),
                     'jumlah_benar' => $benar,
                     'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
+                    'nilai' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
                 ]);
             }
+
+            app(NilaiService::class)->terapkanUntukSesi($attempt->quizSession);
 
             $freshSession = $attempt->quizSession->fresh();
             $engine->bukaPembahasanOtomatis($freshSession);
@@ -386,6 +391,7 @@ class AttemptController extends Controller
             'rincian' => $rincian,
             'tampilkan' => $tampilkan,
             'total_soal' => $attemptQuestions->count(),
+            'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
         ]);
     }
 

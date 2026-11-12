@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\QuizSession;
 use App\Services\EssayGrader;
+use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +27,7 @@ class ReportController extends Controller
 {
     public function session(Request $request, QuizSession $session): View
     {
-        $session->load('quiz');
+        $session->load('quiz', 'remidi');
 
         $tinjau = $request->boolean('tinjau');
 
@@ -209,6 +210,7 @@ class ReportController extends Controller
         }
 
         $engine->hitungSkorAcak($attempt);
+        app(NilaiService::class)->terapkanUntukSesi($attempt->quizSession);
 
         // Siarkan pembaruan nilai essay secara real-time ke peserta dan monitor admin
         foreach ($data['nilai'] as $qid => $val) {
