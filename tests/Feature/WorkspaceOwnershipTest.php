@@ -262,6 +262,167 @@ class WorkspaceOwnershipTest extends TestCase
             ->assertSee('Menunggu');
     }
 
+    public function test_master_menyetujui_permintaan_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+        $workspaceRequest = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Baru',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.approve.update', $workspaceRequest), [
+                'slug' => 'workspace-baru',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('master.owners.index'));
+
+        $workspaceRequest->refresh();
+        $this->assertSame(WorkspaceRequest::STATUS_APPROVED, $workspaceRequest->status);
+        $this->assertSame($master->id, $workspaceRequest->reviewed_by);
+        $this->assertNotNull($workspaceRequest->organization_id);
+        $this->assertTrue($workspaceRequest->organization->owners()->whereKey($owner->id)->exists());
+        $this->assertDatabaseHas('audit_logs', [
+            'organization_id' => $workspaceRequest->organization_id,
+            'action' => 'workspace_request_approved',
+        ]);
+    }
+
+    public function test_master_menolak_permintaan_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $workspaceRequest = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Baru',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.reject', $workspaceRequest), [
+                'rejection_reason' => 'Belum diperlukan saat ini.',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('master.owners.index'));
+
+        $workspaceRequest->refresh();
+        $this->assertSame(WorkspaceRequest::STATUS_REJECTED, $workspaceRequest->status);
+        $this->assertSame($master->id, $workspaceRequest->reviewed_by);
+        $this->assertSame('Belum diperlukan saat ini.', $workspaceRequest->rejection_reason);
+        $this->assertNull($workspaceRequest->organization_id);
+        $this->assertDatabaseHas('audit_logs', [
+            'organization_id' => null,
+            'action' => 'workspace_request_rejected',
+        ]);
+    }
+
+    public function test_master_tidak_dapat_menyetujui_permintaan_dua_kali(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $workspaceRequest = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Baru',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.approve.update', $workspaceRequest), [
+                'slug' => 'workspace-baru',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.approve.update', $workspaceRequest), [
+                'slug' => 'workspace-lain',
+            ])
+            ->assertSessionHasErrors('status');
+
+        $this->assertSame(1, Organization::where('name', 'Workspace Baru')->count());
+    }
+
+    public function test_master_melihat_antrean_permintaan_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+        WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Malam',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.owners.index'))
+            ->assertOk()
+            ->assertSee('Workspace Malam')
+            ->assertSee('owner_alpha')
+            ->assertSee('Tinjau');
+    }
+
+    public function test_master_melihat_form_persetujuan_permintaan_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $workspaceRequest = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Malam',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.workspace-requests.approve', $workspaceRequest))
+            ->assertOk()
+            ->assertSee('Workspace Malam')
+            ->assertSee('workspace-malam');
+    }
+
+    public function test_admin_biasa_tidak_dapat_menyetujui_permintaan_workspace(): void
+    {
+        $admin = $this->admin('admin_biasa');
+        $workspaceRequest = WorkspaceRequest::create([
+            'requester_id' => $admin->id,
+            'name' => 'Workspace Baru',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->put(route('master.workspace-requests.approve.update', $workspaceRequest), [
+                'slug' => 'workspace-baru',
+            ])
+            ->assertForbidden();
+    }
+
     private function master(): User
     {
         $master = User::create([

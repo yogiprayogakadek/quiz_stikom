@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Master;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\User;
+use App\Models\WorkspaceRequest;
 use App\Services\OrganizationOwnership;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,7 +34,13 @@ class OwnerController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        return view('master.owners.index', compact('owners', 'search'));
+        $pendingRequests = WorkspaceRequest::query()
+            ->where('status', WorkspaceRequest::STATUS_PENDING)
+            ->with('requester')
+            ->oldest()
+            ->get();
+
+        return view('master.owners.index', compact('owners', 'search', 'pendingRequests'));
     }
 
     public function editTransfer(Organization $organization): View

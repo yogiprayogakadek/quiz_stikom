@@ -25,6 +25,7 @@ use App\Http\Controllers\Master\OrganizationController;
 use App\Http\Controllers\Master\OwnerController;
 use App\Http\Controllers\Master\SystemController;
 use App\Http\Controllers\Master\SystemHealthController;
+use App\Http\Controllers\Master\WorkspaceRequestController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
@@ -86,6 +87,9 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/owner', [OwnerController::class, 'editTransfer'])->name('organizations.owner.edit');
     Route::put('organizations/{organization}/owner', [OwnerController::class, 'updateTransfer'])->name('organizations.owner.update');
+    Route::get('workspace-requests/{workspaceRequest}/approve', [WorkspaceRequestController::class, 'approveForm'])->name('workspace-requests.approve');
+    Route::put('workspace-requests/{workspaceRequest}/approve', [WorkspaceRequestController::class, 'approve'])->name('workspace-requests.approve.update');
+    Route::put('workspace-requests/{workspaceRequest}/reject', [WorkspaceRequestController::class, 'reject'])->name('workspace-requests.reject');
     Route::get('organizations/{organization}/kuota', [OrganizationController::class, 'editLimits'])->name('organizations.limits.edit');
     Route::put('organizations/{organization}/kuota', [OrganizationController::class, 'updateLimits'])->name('organizations.limits.update');
     Route::get('organizations/{organization}/nama', [OrganizationController::class, 'editName'])->name('organizations.name.edit');

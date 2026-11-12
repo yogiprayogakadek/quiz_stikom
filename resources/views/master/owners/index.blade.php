@@ -1,4 +1,47 @@
 <x-layouts.admin judul="Owner" keterangan="Akun owner dan workspace yang mereka kelola.">
+    @if ($pendingRequests->isNotEmpty())
+        <section class="card mb-6" aria-labelledby="workspace-request-queue-heading">
+            <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
+                <div>
+                    <h2 id="workspace-request-queue-heading" class="text-2xl">Permintaan workspace</h2>
+                    <p class="mt-1 text-sm text-ink-muted">Permintaan dari owner yang menunggu keputusan master.</p>
+                </div>
+                <span class="text-sm font-bold text-ink-muted">{{ $pendingRequests->count() }} permintaan</span>
+            </div>
+
+            <div class="mt-4 overflow-x-auto">
+                <table class="w-full min-w-[40rem] text-left text-sm">
+                    <thead class="text-xs text-ink-subtle">
+                        <tr>
+                            <th class="px-3 py-2 font-bold">Workspace</th>
+                            <th class="px-3 py-2 font-bold">Pemohon</th>
+                            <th class="px-3 py-2 font-bold">Diajukan</th>
+                            <th class="px-3 py-2 font-bold"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline">
+                        @foreach ($pendingRequests as $pendingRequest)
+                            <tr>
+                                <td class="px-3 py-3 align-top">
+                                    <p class="font-bold text-ink">{{ $pendingRequest->name }}</p>
+                                    <p class="text-xs text-ink-subtle">{{ ucfirst($pendingRequest->type) }} · {{ $pendingRequest->timezone }}</p>
+                                </td>
+                                <td class="px-3 py-3 align-top">
+                                    <p class="font-semibold text-ink">{{ $pendingRequest->requester?->nama ?? 'Akun tidak tersedia' }}</p>
+                                    <p class="text-xs text-ink-subtle">{{ $pendingRequest->requester ? '@'.$pendingRequest->requester->username : '—' }}</p>
+                                </td>
+                                <td class="px-3 py-3 align-top text-ink-muted">{{ $pendingRequest->created_at->format('d M Y H:i') }}</td>
+                                <td class="px-3 py-3 text-right align-top">
+                                    <a href="{{ route('master.workspace-requests.approve', $pendingRequest) }}" class="btn btn-secondary !px-3 !py-1.5 text-xs">Tinjau</a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    @endif
+
     <section class="card" aria-labelledby="owner-list-heading">
         <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
             <div>
