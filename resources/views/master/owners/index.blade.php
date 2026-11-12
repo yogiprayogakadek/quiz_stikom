@@ -52,6 +52,7 @@
                                             <div class="rounded-xl border border-outline bg-page px-3 py-2">
                                                 <p class="font-semibold text-ink">{{ $organization->name }}</p>
                                                 <p class="text-xs text-ink-subtle">/o/{{ $organization->slug }}</p>
+                                                <a href="{{ route('master.organizations.owner.edit', $organization) }}" class="mt-1 inline-block text-xs font-semibold text-brand-deep underline-offset-2 hover:underline">Pindahkan</a>
                                             </div>
                                         @endforeach
                                     </div>

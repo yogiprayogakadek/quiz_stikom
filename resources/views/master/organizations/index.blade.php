@@ -94,9 +94,7 @@
                                         @empty
                                             <p class="font-semibold text-coral-deep">Belum ada owner</p>
                                         @endforelse
-                                        @if (Route::has('master.organizations.owner.edit'))
-                                            <a href="{{ route('master.organizations.owner.edit', $organization) }}" class="mt-1 inline-block text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Pindahkan</a>
-                                        @endif
+                                        <a href="{{ route('master.organizations.owner.edit', $organization) }}" class="mt-1 inline-block text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Pindahkan</a>
                                     </td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->admin_count }}</td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->participant_count }}</td>

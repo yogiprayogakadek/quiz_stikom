@@ -83,6 +83,8 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::get('owners', [OwnerController::class, 'index'])->name('owners.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
+    Route::get('organizations/{organization}/owner', [OwnerController::class, 'editTransfer'])->name('organizations.owner.edit');
+    Route::put('organizations/{organization}/owner', [OwnerController::class, 'updateTransfer'])->name('organizations.owner.update');
     Route::get('organizations/{organization}/kuota', [OrganizationController::class, 'editLimits'])->name('organizations.limits.edit');
     Route::put('organizations/{organization}/kuota', [OrganizationController::class, 'updateLimits'])->name('organizations.limits.update');
     Route::get('organizations/{organization}/nama', [OrganizationController::class, 'editName'])->name('organizations.name.edit');
