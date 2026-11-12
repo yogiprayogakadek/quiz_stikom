@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Listeners\LogSentEmail;
 use App\Models\AppSetting;
 use App\Models\OrganizationSetting;
+use App\Models\WorkspaceRequest;
 use App\Services\PlatformMail;
 use App\Support\OrganizationContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -40,6 +41,17 @@ class AppServiceProvider extends ServiceProvider
             'appSettings' => app('app.settings'),
             'orgTimezone' => app(OrganizationContext::class)->timezone(),
         ]));
+
+        View::composer('components.layouts.admin', function ($view) {
+            $user = auth()->user();
+
+            $view->with([
+                'hasOwnedWorkspace' => $user?->ownedOrganizations()->exists() ?? false,
+                'pendingWorkspaceRequestCount' => $user && $user->isPlatformAdmin()
+                    ? WorkspaceRequest::query()->where('status', WorkspaceRequest::STATUS_PENDING)->count()
+                    : 0,
+            ]);
+        });
 
         Event::listen(MessageSent::class, LogSentEmail::class);
 

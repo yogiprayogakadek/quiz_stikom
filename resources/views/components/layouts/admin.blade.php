@@ -125,6 +125,17 @@
                 </a>
                 @if (auth()->user()->isPlatformAdmin())
                     <a
+                        href="{{ route('master.owners.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.owners.*', 'master.workspace-requests.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.owners.*', 'master.workspace-requests.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="crown" :size="20" class="{{ request()->routeIs('master.owners.*', 'master.workspace-requests.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Owner</span>
+                        @if ($pendingWorkspaceRequestCount > 0)
+                            <span class="ml-auto rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-extrabold text-coral-deep">{{ $pendingWorkspaceRequestCount }}</span>
+                        @endif
+                    </a>
+                    <a
                         href="{{ route('master.organizations.index') }}"
                         class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.organizations.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
                         @if (request()->routeIs('master.organizations.*')) aria-current="page" @endif
@@ -159,6 +170,16 @@
                         <span>Tim Admin</span>
                     </a>
                 @endif
+                @if ($hasOwnedWorkspace)
+                    <a
+                        href="{{ route('admin.workspace.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.workspace.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('admin.workspace.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="briefcase" :size="20" class="{{ request()->routeIs('admin.workspace.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Workspace saya</span>
+                    </a>
+                @endif
             </nav>
             <x-organization-switcher id="admin-mobile" class="mt-4" />
         </div>
@@ -177,6 +198,11 @@
                 <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
                     <x-icon name="lock" :size="18" />
                 </a>
+                @if ($hasOwnedWorkspace)
+                    <a href="{{ route('admin.workspace.index') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Workspace saya" aria-label="Workspace saya">
+                        <x-icon name="briefcase" :size="18" />
+                    </a>
+                @endif
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">
@@ -276,6 +302,19 @@
                     </a>
                     @if (auth()->user()->isPlatformAdmin())
                         <a
+                            href="{{ route('master.owners.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.owners.*', 'master.workspace-requests.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Owner' : ''"
+                            @if (request()->routeIs('master.owners.*', 'master.workspace-requests.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="crown" :size="20" class="{{ request()->routeIs('master.owners.*', 'master.workspace-requests.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Owner</span>
+                            @if ($pendingWorkspaceRequestCount > 0)
+                                <span x-show="!sidebarCollapsed" x-cloak class="ml-auto rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-extrabold text-coral-deep">{{ $pendingWorkspaceRequestCount }}</span>
+                            @endif
+                        </a>
+                        <a
                             href="{{ route('master.organizations.index') }}"
                             class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.organizations.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
                             :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
@@ -316,6 +355,18 @@
                         >
                             <x-icon name="shield-check" :size="20" class="{{ request()->routeIs('admin.team.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                             <span x-show="!sidebarCollapsed" x-cloak>Tim Admin</span>
+                        </a>
+                    @endif
+                    @if ($hasOwnedWorkspace)
+                        <a
+                            href="{{ route('admin.workspace.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.workspace.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Workspace saya' : ''"
+                            @if (request()->routeIs('admin.workspace.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="briefcase" :size="20" class="{{ request()->routeIs('admin.workspace.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Workspace saya</span>
                         </a>
                     @endif
                 </nav>
@@ -359,6 +410,11 @@
                     <a href="{{ route('password.change') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Ganti password" aria-label="Ganti password">
                         <x-icon name="lock" :size="18" />
                     </a>
+                    @if ($hasOwnedWorkspace)
+                        <a href="{{ route('admin.workspace.index') }}" class="p-2 text-slate-400 hover:text-brand-deep hover:bg-brand-soft rounded-xl transition" title="Workspace saya" aria-label="Workspace saya">
+                            <x-icon name="briefcase" :size="18" />
+                        </a>
+                    @endif
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Keluar" aria-label="Keluar">

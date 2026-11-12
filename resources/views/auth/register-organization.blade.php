@@ -1,8 +1,11 @@
 <x-layouts.guest judul="Daftarkan Organisasi">
     <div class="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-5 py-10 sm:px-8 sm:py-16">
-        <div class="mb-6 flex items-center justify-between gap-4">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
             <a href="{{ route('home') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>
-            <a href="{{ route('master.login') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Login master</a>
+            <div class="flex items-center gap-4">
+                <a href="{{ route('home') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Login workspace</a>
+                <a href="{{ route('master.login') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Login master</a>
+            </div>
         </div>
 
         <div class="card p-6 sm:p-9">

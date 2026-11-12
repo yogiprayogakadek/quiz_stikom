@@ -423,6 +423,41 @@ class WorkspaceOwnershipTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_owner_dengan_dua_workspace_melihat_pilihan_workspace(): void
+    {
+        $owner = $this->admin('owner_dua');
+        $alpha = $this->organization('alpha', 'Alpha');
+        $beta = $this->organization('beta', 'Beta');
+
+        foreach ([$alpha, $beta] as $organization) {
+            $organization->users()->attach($owner->id, [
+                'role' => 'owner',
+                'status' => 'active',
+            ]);
+        }
+
+        $this->actingAs($owner)
+            ->withSession([
+                'auth_token' => $owner->current_session_token,
+                'organization_id' => $alpha->id,
+            ])
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('Alpha')
+            ->assertSee('Beta')
+            ->assertSee('Workspace saya');
+
+        $this->actingAs($owner)
+            ->withSession([
+                'auth_token' => $owner->current_session_token,
+                'organization_id' => $alpha->id,
+            ])
+            ->post(route('organizations.switch'), ['organization_id' => $beta->id])
+            ->assertRedirect(route('admin.dashboard'));
+
+        $this->assertSame($beta->id, session('organization_id'));
+    }
+
     private function master(): User
     {
         $master = User::create([
