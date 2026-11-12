@@ -39,24 +39,13 @@
         @endif
     </x-slot:aksi>
 
-    <form method="GET" action="{{ $ruteIndex }}" class="flex flex-col gap-3 sm:flex-row">
-        <div class="flex-1">
-            <label for="cari" class="sr-only">Cari soal</label>
-            <input id="cari" name="q" type="search" value="{{ $cari }}" class="input" placeholder="Cari teks soal">
-        </div>
-        <button type="submit" class="btn btn-secondary">Cari</button>
-        @if ($cari !== '')
-            <a href="{{ $ruteIndex }}" class="btn btn-ghost">Bersihkan</a>
-        @endif
-    </form>
-
     @if ($questions->isEmpty())
         <x-empty-state
             class="mt-6"
-            :judul="$cari !== '' ? 'Soal tidak ditemukan' : 'Kuis ini belum memiliki soal'"
-            :keterangan="$cari !== '' ? 'Coba kata kunci lain.' : 'Tambahkan soal pilihan ganda atau essay khusus untuk kuis ini.'"
+            :judul="'Kuis ini belum memiliki soal'"
+            :keterangan="'Tambahkan soal pilihan ganda atau essay khusus untuk kuis ini.'"
         >
-            @if ($cari === '' && isset($quiz))
+            @if (isset($quiz))
                 <div class="mt-4 flex flex-wrap justify-center gap-3">
                     <a href="{{ $ruteCreate }}" class="btn btn-primary">Tambah soal pertama</a>
                     <a href="{{ $ruteAi }}" class="btn btn-secondary">
@@ -68,14 +57,21 @@
             @endif
         </x-empty-state>
     @else
-        <ul class="mt-6 space-y-3">
-            @foreach ($questions as $soal)
-                @php 
-                    $soalTerkunci = in_array($soal->id, $terkunci, true);
-                    $ruteEdit = isset($quiz) ? route('admin.quizzes.questions.edit', [$quiz, $soal]) : '#';
-                    $ruteHapus = isset($quiz) ? route('admin.quizzes.questions.destroy', [$quiz, $soal]) : '#';
-                @endphp
-                <li class="card">
+        <div class="mt-6">
+            <x-data-table :per-page="10" search-placeholder="Cari teks soal, tipe, atau pembahasan">
+                <ul class="space-y-3">
+                    @foreach ($questions as $soal)
+                        @php
+                            $soalTerkunci = in_array($soal->id, $terkunci, true);
+                            $ruteEdit = isset($quiz) ? route('admin.quizzes.questions.edit', [$quiz, $soal]) : '#';
+                            $ruteHapus = isset($quiz) ? route('admin.quizzes.questions.destroy', [$quiz, $soal]) : '#';
+                        @endphp
+                        <li
+                            class="card"
+                            data-item
+                            data-item-key="{{ $soal->id }}"
+                            data-search="{{ $soal->teks }} {{ $soal->tipe }} {{ $soal->pembahasan }}"
+                        >
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
@@ -111,10 +107,10 @@
                             @endif
                         </div>
                     </div>
-                </li>
-            @endforeach
-        </ul>
-
-        <div class="mt-6">{{ $questions->links() }}</div>
+                        </li>
+                    @endforeach
+                </ul>
+            </x-data-table>
+        </div>
     @endif
 </x-layouts.admin>

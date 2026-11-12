@@ -14,25 +14,15 @@ use Illuminate\View\View;
 
 class OwnerController extends Controller
 {
-    public function index(Request $request): View
+    public function index(): View
     {
-        $search = trim((string) $request->query('q'));
-
         $owners = User::query()
             ->where('role', 'admin')
-            ->whereHas('ownedOrganizations')
+            ->where('is_platform_admin', false)
             ->with(['ownedOrganizations' => fn ($query) => $query->orderBy('name')])
             ->withCount('ownedOrganizations')
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('nama', 'like', '%'.$search.'%')
-                        ->orWhere('username', 'like', '%'.$search.'%')
-                        ->orWhere('email', 'like', '%'.$search.'%');
-                });
-            })
             ->orderBy('nama')
-            ->paginate(20)
-            ->withQueryString();
+            ->get();
 
         $pendingRequests = WorkspaceRequest::query()
             ->where('status', WorkspaceRequest::STATUS_PENDING)
@@ -40,7 +30,7 @@ class OwnerController extends Controller
             ->oldest()
             ->get();
 
-        return view('master.owners.index', compact('owners', 'search', 'pendingRequests'));
+        return view('master.owners.index', compact('owners', 'pendingRequests'));
     }
 
     public function editTransfer(Organization $organization): View
@@ -49,6 +39,7 @@ class OwnerController extends Controller
 
         $candidates = User::query()
             ->where('role', 'admin')
+            ->where('is_platform_admin', false)
             ->when($currentOwners->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $currentOwners->pluck('id')))
             ->withCount('ownedOrganizations')
             ->orderBy('nama')
@@ -66,7 +57,7 @@ class OwnerController extends Controller
             'new_owner_id' => [
                 'required',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 'admin')->whereNull('deleted_at')),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 'admin')->where('is_platform_admin', false)->whereNull('deleted_at')),
             ],
             'previous_owner_action' => ['required', 'in:keep_admin,remove'],
         ], [
@@ -76,6 +67,7 @@ class OwnerController extends Controller
         $newOwner = User::query()
             ->whereKey($data['new_owner_id'])
             ->where('role', 'admin')
+            ->where('is_platform_admin', false)
             ->firstOrFail();
 
         $ownership->transfer(

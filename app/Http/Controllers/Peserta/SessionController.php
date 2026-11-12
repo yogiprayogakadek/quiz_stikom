@@ -240,6 +240,9 @@ class SessionController extends Controller
             return redirect()->route('peserta.session.play', $session);
         }
 
+        $attempt->loadMissing('quizSession.quiz');
+        $session->loadMissing('quiz');
+
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
         $tampilkan = $session->pembahasanTampil();

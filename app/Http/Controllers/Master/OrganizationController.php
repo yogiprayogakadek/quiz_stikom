@@ -32,6 +32,7 @@ class OrganizationController extends Controller
 
         $ownerCandidates = User::query()
             ->where('role', 'admin')
+            ->where('is_platform_admin', false)
             ->withCount('ownedOrganizations')
             ->orderBy('nama')
             ->get();
@@ -51,7 +52,7 @@ class OrganizationController extends Controller
             'owner_user_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 'admin')->whereNull('deleted_at')),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 'admin')->where('is_platform_admin', false)->whereNull('deleted_at')),
             ],
             'owner_name' => ['nullable', 'required_without:owner_user_id', 'string', 'max:120'],
             'owner_username' => ['nullable', 'required_without:owner_user_id', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')],
@@ -72,6 +73,7 @@ class OrganizationController extends Controller
                 $owner = User::query()
                     ->whereKey($data['owner_user_id'])
                     ->where('role', 'admin')
+                    ->where('is_platform_admin', false)
                     ->firstOrFail();
             } else {
                 $temporaryPassword = $data['owner_password'] ?? Str::password(12, symbols: false);

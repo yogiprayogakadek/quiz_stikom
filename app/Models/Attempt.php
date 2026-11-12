@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Attempt extends Model
 {
@@ -77,6 +78,39 @@ class Attempt extends Model
     public function quizSession(): BelongsTo
     {
         return $this->belongsTo(QuizSession::class);
+    }
+
+    public function feedback(): HasOne
+    {
+        return $this->hasOne(ParticipantFeedback::class);
+    }
+
+    public function isFirstCompletedRealAttempt(): bool
+    {
+        if ($this->status !== 'selesai') {
+            return false;
+        }
+
+        return static::query()
+            ->where('organization_id', $this->organization_id)
+            ->where('user_id', $this->user_id)
+            ->where('status', 'selesai')
+            ->whereHas('quizSession.quiz', fn (Builder $query) => $query->where('is_percobaan', false))
+            ->orderBy('selesai_at')
+            ->orderBy('id')
+            ->value('id') === $this->id;
+    }
+
+    public function needsFeedbackPrompt(): bool
+    {
+        if (! $this->isFirstCompletedRealAttempt()) {
+            return false;
+        }
+
+        return ! ParticipantFeedback::query()
+            ->where('user_id', $this->user_id)
+            ->where('organization_id', $this->organization_id)
+            ->exists();
     }
 
     public function attemptQuestions(): HasMany

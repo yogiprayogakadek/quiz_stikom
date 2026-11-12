@@ -21,6 +21,7 @@ use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Master\MailSettingController;
+use App\Http\Controllers\Master\ParticipantFeedbackController as MasterParticipantFeedbackController;
 use App\Http\Controllers\Master\OrganizationController;
 use App\Http\Controllers\Master\OwnerController;
 use App\Http\Controllers\Master\SystemController;
@@ -28,11 +29,16 @@ use App\Http\Controllers\Master\SystemHealthController;
 use App\Http\Controllers\Master\WorkspaceRequestController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
+use App\Http\Controllers\Peserta\FeedbackController as PesertaFeedbackController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+
+Route::get('/organisasi/cari', [HomeController::class, 'search'])
+    ->middleware('throttle:60,1')
+    ->name('organizations.search');
 
 Route::get('/login', fn () => redirect()->route('home'));
 
@@ -84,6 +90,7 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::get('owners', [OwnerController::class, 'index'])->name('owners.index');
+    Route::get('feedback', [MasterParticipantFeedbackController::class, 'index'])->name('feedback.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/owner', [OwnerController::class, 'editTransfer'])->name('organizations.owner.edit');
     Route::put('organizations/{organization}/owner', [OwnerController::class, 'updateTransfer'])->name('organizations.owner.update');
@@ -229,6 +236,7 @@ Route::middleware(['auth', 'role:peserta', 'organization_member'])->group(functi
     Route::get('/attempt/{attempt}/status', [AttemptController::class, 'status'])->name('peserta.attempt.status');
     Route::post('/attempt/{attempt}/pelanggaran', [AttemptController::class, 'pelanggaran'])->name('peserta.attempt.pelanggaran');
     Route::get('/attempt/{attempt}/hasil', [AttemptController::class, 'result'])->name('peserta.attempt.result');
+    Route::post('/attempt/{attempt}/masukan', [PesertaFeedbackController::class, 'store'])->name('peserta.attempt.feedback');
     Route::post('/attempt/{attempt}/events', [AttemptController::class, 'event'])
         ->middleware('throttle:attempt-events')
         ->name('peserta.attempt.events');

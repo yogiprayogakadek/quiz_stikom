@@ -1,13 +1,32 @@
-@php($activeOrganization = app(\App\Support\OrganizationContext::class)->current())
+@php
+    $activeOrganization = app(\App\Support\OrganizationContext::class)->current();
+    $tab = old('_section', $activeTab ?? 'identitas');
+    $tabs = ['identitas' => 'Identitas', 'workspace' => 'Workspace'];
+
+    if ($activeOrganization && $isOwner) {
+        $tabs['legal'] = 'Legal';
+    }
+
+    $tabs += ['peserta' => 'Peserta', 'ai' => 'AI', 'cover' => 'Cover'];
+
+    if ($usage) {
+        $tabs['kuota'] = 'Kuota';
+    }
+
+    if (! is_string($tab) || ! array_key_exists($tab, $tabs)) {
+        $tab = 'identitas';
+    }
+@endphp
 
 <x-layouts.admin judul="Pengaturan" :keterangan="$activeOrganization ? 'Pengaturan ini berlaku untuk workspace '.$activeOrganization->name.'.' : 'Sesuaikan identitas platform, layanan AI, dan cover kelas.'">
     <form
         method="POST"
         action="{{ route('admin.settings.update') }}"
         enctype="multipart/form-data"
-        class="max-w-5xl space-y-8"
-        data-progress-message="Menyimpan pengaturan publik..."
+        class="max-w-5xl space-y-6"
+        data-progress-message="Menyimpan pengaturan..."
         x-data="{
+            tab: @js($tab),
             siteName: @js(old('site_name', $settings->site_name)),
             siteTagline: @js(old('site_tagline', $settings->site_tagline)),
             primaryColor: @js(old('primary_color', $settings->primary_color)),
@@ -25,13 +44,38 @@
                 if (this.logoObjectUrl) URL.revokeObjectURL(this.logoObjectUrl);
                 this.logoObjectUrl = URL.createObjectURL(file);
                 this.logoPreview = this.logoObjectUrl;
+            },
+            tabLabel() {
+                return {
+                    identitas: 'identitas',
+                    workspace: 'workspace',
+                    legal: 'dokumen legal',
+                    peserta: 'kebijakan peserta',
+                    ai: 'provider AI',
+                    cover: 'cover kelas',
+                }[this.tab] ?? 'pengaturan';
             }
         }"
     >
         @csrf
         @method('PUT')
 
-        <section class="card" aria-labelledby="identitas-heading">
+        <div class="flex flex-wrap gap-2" role="tablist" aria-label="Kategori pengaturan">
+            @foreach ($tabs as $key => $label)
+                <button
+                    type="button"
+                    role="tab"
+                    id="tab-{{ $key }}"
+                    aria-controls="panel-{{ $key }}"
+                    :aria-selected="tab === '{{ $key }}'"
+                    @click="tab = '{{ $key }}'"
+                    class="pill"
+                    :class="tab === '{{ $key }}' ? 'pill-brand' : 'pill-neutral'"
+                >{{ $label }}</button>
+            @endforeach
+        </div>
+
+        <section class="card" aria-labelledby="identitas-heading" id="panel-identitas" role="tabpanel" x-show="tab === 'identitas'" @if ($tab !== 'identitas') x-cloak @endif>
             <div class="border-b border-outline pb-4">
                 <h2 id="identitas-heading" class="text-2xl">Identitas publik</h2>
                 <p class="mt-1 text-base text-ink-muted">Nama, warna, dan logo dipakai di halaman login serta navigasi aplikasi.</p>
@@ -92,7 +136,7 @@
             </div>
         </section>
 
-        <section class="card" aria-labelledby="preview-heading">
+        <section class="card" aria-labelledby="preview-heading" x-show="tab === 'identitas'" @if ($tab !== 'identitas') x-cloak @endif>
             <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
                 <div>
                     <h2 id="preview-heading" class="text-2xl">Pratinjau branding</h2>
@@ -167,7 +211,7 @@
             </div>
         </section>
 
-        <section class="card" aria-labelledby="workspace-heading">
+        <section class="card" aria-labelledby="workspace-heading" id="panel-workspace" role="tabpanel" x-show="tab === 'workspace'" @if ($tab !== 'workspace') x-cloak @endif>
             <div class="border-b border-outline pb-4">
                 <h2 id="workspace-heading" class="text-2xl">Workspace</h2>
                 <p class="mt-1 text-base text-ink-muted">Alamat login, zona waktu, dan bahasa pesan sistem untuk workspace ini.</p>
@@ -217,7 +261,7 @@
         </section>
 
         @if ($activeOrganization && $isOwner)
-            <section class="card" aria-labelledby="legal-heading">
+            <section class="card" aria-labelledby="legal-heading" id="panel-legal" role="tabpanel" x-show="tab === 'legal'" @if ($tab !== 'legal') x-cloak @endif>
                 <div class="border-b border-outline pb-4">
                     <h2 id="legal-heading" class="text-2xl">Dokumen legal workspace</h2>
                     <p class="mt-1 text-base text-ink-muted">Teks ini tampil di halaman syarat dan privasi workspace. Kosongkan untuk memakai teks platform.</p>
@@ -241,7 +285,7 @@
             </section>
         @endif
 
-        <section class="card" aria-labelledby="peserta-heading">
+        <section class="card" aria-labelledby="peserta-heading" id="panel-peserta" role="tabpanel" x-show="tab === 'peserta'" @if ($tab !== 'peserta') x-cloak @endif>
             <div class="border-b border-outline pb-4">
                 <h2 id="peserta-heading" class="text-2xl">Kebijakan peserta</h2>
                 <p class="mt-1 text-base text-ink-muted">Atur cara peserta masuk ke kelas pada workspace ini.</p>
@@ -255,7 +299,7 @@
             </label>
         </section>
 
-        <section class="card" aria-labelledby="ai-heading">
+        <section class="card" aria-labelledby="ai-heading" id="panel-ai" role="tabpanel" x-show="tab === 'ai'" @if ($tab !== 'ai') x-cloak @endif>
             <div class="border-b border-outline pb-4">
                 <h2 id="ai-heading" class="text-2xl">Provider AI soal</h2>
                 <p class="mt-1 text-base text-ink-muted">Gunakan 9Router atau endpoint lain yang kompatibel dengan OpenAI Chat Completions.</p>
@@ -287,7 +331,7 @@
             </div>
         </section>
 
-        <section class="card" aria-labelledby="cover-heading">
+        <section class="card" aria-labelledby="cover-heading" id="panel-cover" role="tabpanel" x-show="tab === 'cover'" @if ($tab !== 'cover') x-cloak @endif>
             <div class="border-b border-outline pb-4">
                 <h2 id="cover-heading" class="text-2xl">Cover kelas</h2>
                 <p class="mt-1 text-base text-ink-muted">Mode lokal selalu tersedia dan menjadi fallback bila layanan gambar gagal.</p>
@@ -327,7 +371,7 @@
         </section>
 
         @if ($usage)
-            <section class="card" aria-labelledby="usage-heading">
+            <section class="card" aria-labelledby="usage-heading" id="panel-kuota" role="tabpanel" x-show="tab === 'kuota'" @if ($tab !== 'kuota') x-cloak @endif>
                 <div class="border-b border-outline pb-4">
                     <h2 id="usage-heading" class="text-2xl">Pemakaian dan kuota</h2>
                     <p class="mt-1 text-base text-ink-muted">Batas berlaku untuk workspace ini dan ditetapkan operator platform.</p>
@@ -360,8 +404,8 @@
             </section>
         @endif
 
-        <div class="sticky bottom-4 flex justify-end rounded-2xl border border-outline bg-page/95 p-3 shadow-modal backdrop-blur-sm">
-            <button type="submit" class="btn btn-primary">Simpan pengaturan</button>
+        <div class="sticky bottom-4 flex justify-end rounded-2xl border border-outline bg-page/95 p-3 shadow-modal backdrop-blur-sm" x-show="tab !== 'kuota'">
+            <button type="submit" name="_section" :value="tab" class="btn btn-primary" formnovalidate x-text="'Simpan ' + tabLabel()">Simpan pengaturan</button>
         </div>
     </form>
 </x-layouts.admin>

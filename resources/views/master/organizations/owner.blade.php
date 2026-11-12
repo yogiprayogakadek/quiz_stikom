@@ -28,16 +28,24 @@
                     @csrf
                     @method('PUT')
 
-                    <div>
-                        <label for="new_owner_id" class="label">Owner baru</label>
+                    <div x-data="{ ownerSearch: '' }">
+                        <label for="new_owner_search" class="label">Cari owner</label>
+                        <input id="new_owner_search" type="search" class="input" x-model="ownerSearch" placeholder="Nama, username, atau email" autocomplete="off">
+                        <label for="new_owner_id" class="label mt-3">Owner baru</label>
                         <select id="new_owner_id" name="new_owner_id" class="input" required>
-                            <option value="">Pilih akun admin</option>
+                            <option value="" x-show="ownerSearch === ''">Pilih akun admin</option>
                             @foreach ($candidates as $candidate)
-                                <option value="{{ $candidate->id }}" @selected((string) old('new_owner_id') === (string) $candidate->id)>
+                                <option
+                                    value="{{ $candidate->id }}"
+                                    data-search="{{ strtolower($candidate->nama.' '.$candidate->username.' '.($candidate->email ?? '')) }}"
+                                    x-show="ownerSearch === '' || $el.dataset.search.includes(ownerSearch.toLowerCase())"
+                                    @selected((string) old('new_owner_id') === (string) $candidate->id)
+                                >
                                     {{ $candidate->nama }} ({{ '@'.$candidate->username }}) — {{ $candidate->owned_organizations_count }} workspace
                                 </option>
                             @endforeach
                         </select>
+                        <p class="help mt-1">Ketik untuk menyaring akun admin.</p>
                         @error('new_owner_id') <p class="field-error">{{ $message }}</p> @enderror
                     </div>
 

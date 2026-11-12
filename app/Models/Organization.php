@@ -56,4 +56,9 @@ class Organization extends Model
     {
         return $this->hasMany(Kelas::class);
     }
+
+    public function participantFeedbacks(): HasMany
+    {
+        return $this->hasMany(ParticipantFeedback::class);
+    }
 }

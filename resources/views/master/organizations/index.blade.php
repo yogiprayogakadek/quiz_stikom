@@ -60,21 +60,27 @@
                     <p class="mt-1 text-sm text-ink-muted">Isi formulir untuk membuat workspace pertama.</p>
                 </div>
             @else
-                <div class="mt-4 overflow-x-auto">
-                    <table class="w-full min-w-[42rem] text-left text-sm">
-                        <thead class="text-xs text-ink-subtle">
-                            <tr>
-                                <th class="px-3 py-2 font-bold">Organisasi</th>
-                                <th class="px-3 py-2 font-bold">Owner</th>
-                                <th class="px-3 py-2 font-bold">Admin</th>
-                                <th class="px-3 py-2 font-bold">Peserta</th>
-                                <th class="px-3 py-2 font-bold">Kelas</th>
-                                <th class="px-3 py-2 font-bold">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-outline">
-                            @foreach ($organizations as $organization)
-                                <tr>
+                <div class="mt-4">
+                    <x-data-table :per-page="10" search-placeholder="Cari workspace, owner, atau status">
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[42rem] text-left text-sm">
+                                <thead class="text-xs text-ink-subtle">
+                                    <tr>
+                                        <th class="px-3 py-2 font-bold">Organisasi</th>
+                                        <th class="px-3 py-2 font-bold">Owner</th>
+                                        <th class="px-3 py-2 font-bold">Admin</th>
+                                        <th class="px-3 py-2 font-bold">Peserta</th>
+                                        <th class="px-3 py-2 font-bold">Kelas</th>
+                                        <th class="px-3 py-2 font-bold">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-outline">
+                                    @foreach ($organizations as $organization)
+                                        <tr
+                                            data-item
+                                            data-item-key="{{ $organization->id }}"
+                                            data-search="{{ $organization->name }} {{ $organization->slug }} {{ $organization->owners->pluck('nama')->join(' ') }} {{ $organization->is_active ? 'aktif' : 'ditangguhkan' }}"
+                                        >
                                     <td class="px-3 py-3">
                                         <p class="font-bold text-ink">{{ $organization->name }}</p>
                                         <a href="{{ route('organizations.login', $organization) }}" class="text-xs font-semibold text-brand-deep hover:underline" target="_blank" rel="noopener">
@@ -116,8 +122,10 @@
                                     </td>
                                 </tr>
                             @endforeach
-                        </tbody>
-                    </table>
+                                </tbody>
+                            </table>
+                        </div>
+                    </x-data-table>
                 </div>
             @endif
         </section>
@@ -150,7 +158,7 @@
                         <input id="timezone" name="timezone" class="input" required value="{{ old('timezone', 'Asia/Singapore') }}">
                     </div>
                 </div>
-                <div class="border-t border-outline pt-4" x-data="{ ownerMode: '{{ old('owner_user_id') ? 'existing' : 'new' }}' }">
+                <div class="border-t border-outline pt-4" x-data="{ ownerMode: '{{ old('owner_user_id') ? 'existing' : 'new' }}', ownerSearch: '' }">
                     <p class="text-sm font-bold text-ink">Owner pertama</p>
                     <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                         <label class="flex cursor-pointer items-start gap-2 rounded-xl border border-outline px-3 py-2 text-sm">
@@ -173,11 +181,18 @@
                     </div>
 
                     <div x-show="ownerMode === 'existing'" x-cloak class="mt-4">
-                        <label for="owner_user_id" class="label">Owner</label>
+                        <label for="owner_search" class="label">Cari owner</label>
+                        <input id="owner_search" type="search" class="input" x-model="ownerSearch" placeholder="Nama, username, atau email" autocomplete="off">
+                        <label for="owner_user_id" class="label mt-3">Owner</label>
                         <select id="owner_user_id" name="owner_user_id" class="input" :disabled="ownerMode !== 'existing'">
-                            <option value="">Pilih owner</option>
+                            <option value="" x-show="ownerSearch === ''">Pilih owner</option>
                             @foreach ($ownerCandidates as $candidate)
-                                <option value="{{ $candidate->id }}" @selected((string) old('owner_user_id') === (string) $candidate->id)>
+                                <option
+                                    value="{{ $candidate->id }}"
+                                    data-search="{{ strtolower($candidate->nama.' '.$candidate->username.' '.($candidate->email ?? '')) }}"
+                                    x-show="ownerSearch === '' || $el.dataset.search.includes(ownerSearch.toLowerCase())"
+                                    @selected((string) old('owner_user_id') === (string) $candidate->id)
+                                >
                                     {{ $candidate->nama }} ({{ '@'.$candidate->username }}) — {{ $candidate->owned_organizations_count }} workspace
                                 </option>
                             @endforeach

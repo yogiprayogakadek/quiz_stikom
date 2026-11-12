@@ -142,6 +142,11 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->hasMany(Attempt::class);
     }
 
+    public function participantFeedbacks(): HasMany
+    {
+        return $this->hasMany(ParticipantFeedback::class);
+    }
+
     public function kelas(): BelongsToMany
     {
         return $this->belongsToMany(Kelas::class, 'kelas_user')->withTimestamps();

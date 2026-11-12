@@ -22,17 +22,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuestionController extends Controller
 {
-    public function index(Request $request, ?Quiz $quiz = null): View
+    public function index(?Quiz $quiz = null): View
     {
-        $cari = trim((string) $request->query('q'));
-
         $query = $quiz ? $quiz->questions() : Question::query();
 
         $questions = $query->withCount('options')
-            ->when($cari !== '', fn ($q) => $q->where('teks', 'like', "%{$cari}%"))
             ->orderByDesc('created_at')
-            ->paginate(12)
-            ->withQueryString();
+            ->get();
 
         $terkunci = Question::whereIn('id', $questions->pluck('id'))
             ->get()
@@ -40,7 +36,7 @@ class QuestionController extends Controller
             ->pluck('id')
             ->all();
 
-        return view('admin.questions.index', compact('questions', 'cari', 'terkunci', 'quiz'));
+        return view('admin.questions.index', compact('questions', 'terkunci', 'quiz'));
     }
 
     public function create(?Quiz $quiz = null): View

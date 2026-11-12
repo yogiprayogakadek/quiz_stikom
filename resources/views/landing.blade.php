@@ -80,14 +80,69 @@
                         </dl>
                     </div>
 
-                    <div id="cari" class="lg:col-span-5">
+                    @php($hasilAwal = $organizations->map(fn ($organization) => [
+                        'name' => $organization->name,
+                        'slug' => $organization->slug,
+                        'login_url' => route('organizations.login', $organization),
+                    ])->values())
+
+                    <div
+                        id="cari"
+                        class="lg:col-span-5"
+                        x-data="{
+                            q: @js($q),
+                            results: {{ json_encode($hasilAwal, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) }},
+                            loading: false,
+                            timer: null,
+                            sequence: 0,
+                            init() {
+                                this.$watch('q', () => {
+                                    clearTimeout(this.timer);
+                                    if (this.q.trim() === '') {
+                                        this.sequence++;
+                                        this.results = [];
+                                        this.loading = false;
+                                        return;
+                                    }
+                                    this.timer = setTimeout(() => this.cari(), 250);
+                                });
+                            },
+                            async cari() {
+                                if (this.q.trim() === '') {
+                                    this.sequence++;
+                                    this.results = [];
+                                    this.loading = false;
+                                    return;
+                                }
+                                const sequence = ++this.sequence;
+                                this.loading = true;
+                                try {
+                                    const response = await fetch('{{ route('organizations.search') }}?q=' + encodeURIComponent(this.q), {
+                                        headers: { Accept: 'application/json' },
+                                    });
+                                    const data = await response.json();
+                                    if (sequence === this.sequence) {
+                                        this.results = data.organizations ?? [];
+                                    }
+                                } catch {
+                                    if (sequence === this.sequence) {
+                                        this.results = [];
+                                    }
+                                } finally {
+                                    if (sequence === this.sequence) {
+                                        this.loading = false;
+                                    }
+                                }
+                            }
+                        }"
+                    >
                         <div class="rounded-2xl border border-outline bg-page p-5 shadow-lift sm:p-6">
                             <h2 class="font-display text-2xl font-extrabold tracking-tight text-ink">Masuk ke organisasi</h2>
                             <p class="mt-2 text-sm text-ink-muted">
                                 Ketik nama atau alamat organisasi. Login hanya tersedia di halaman organisasi yang terdaftar pada akunmu.
                             </p>
 
-                            <form method="GET" action="{{ route('home') }}#cari" class="mt-5" role="search">
+                            <form method="GET" action="{{ route('home') }}#cari" class="mt-5" role="search" @submit.prevent="cari()">
                                 <label for="q" class="label">Nama atau alamat organisasi</label>
                                 <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
                                     <div class="relative min-w-0 flex-1">
@@ -98,6 +153,7 @@
                                             id="q"
                                             name="q"
                                             type="search"
+                                            x-model="q"
                                             value="{{ $q }}"
                                             maxlength="80"
                                             autocomplete="off"
@@ -111,29 +167,31 @@
                                 <p id="q-help" class="help mt-2">Hanya organisasi aktif yang muncul. Tautan login juga bisa diminta langsung ke admin organisasi.</p>
                             </form>
 
-                            @if ($q !== '')
-                                <div class="mt-5 border-t border-outline pt-4" aria-live="polite">
-                                    @if ($organizations->isEmpty())
-                                        <p class="text-sm font-bold text-ink">Tidak ada organisasi aktif yang cocok dengan "{{ $q }}".</p>
-                                        <p class="mt-1 text-sm text-ink-muted">Periksa ejaan nama atau alamatnya. Kamu juga bisa meminta tautan login ke admin organisasi.</p>
-                                    @else
-                                        <p class="text-sm font-bold text-ink">{{ $organizations->count() }} organisasi ditemukan</p>
-                                        <ul class="mt-1 divide-y divide-outline">
-                                            @foreach ($organizations as $organization)
-                                                <li class="flex items-center justify-between gap-3 py-3">
-                                                    <div class="min-w-0">
-                                                        <p class="truncate font-display font-bold text-ink">{{ $organization->name }}</p>
-                                                        <p class="truncate text-sm text-ink-subtle">/o/{{ $organization->slug }}/login</p>
-                                                    </div>
-                                                    <a href="{{ route('organizations.login', $organization) }}" class="btn btn-secondary min-h-11 flex-none px-4 py-2 text-sm">
-                                                        Masuk
-                                                    </a>
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    @endif
+                            <div class="mt-5 border-t border-outline pt-4" aria-live="polite" x-show="q.trim() !== ''" x-cloak>
+                                <p x-show="loading" class="text-sm font-bold text-ink">Mencari organisasi...</p>
+
+                                <div x-show="!loading && results.length === 0">
+                                    <p class="text-sm font-bold text-ink">Tidak ada organisasi aktif yang cocok dengan "<span x-text="q"></span>".</p>
+                                    <p class="mt-1 text-sm text-ink-muted">Periksa ejaan nama atau alamatnya. Kamu juga bisa meminta tautan login ke admin organisasi.</p>
                                 </div>
-                            @endif
+
+                                <div x-show="!loading && results.length > 0">
+                                    <p class="text-sm font-bold text-ink"><span x-text="results.length"></span> organisasi ditemukan</p>
+                                    <ul class="mt-1 divide-y divide-outline">
+                                        <template x-for="organization in results" :key="organization.slug">
+                                            <li class="flex items-center justify-between gap-3 py-3">
+                                                <div class="min-w-0">
+                                                    <p class="truncate font-display font-bold text-ink" x-text="organization.name"></p>
+                                                    <p class="truncate text-sm text-ink-subtle" x-text="'/o/' + organization.slug + '/login'"></p>
+                                                </div>
+                                                <a :href="organization.login_url" class="btn btn-secondary min-h-11 flex-none px-4 py-2 text-sm">
+                                                    Masuk
+                                                </a>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
