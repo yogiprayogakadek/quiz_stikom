@@ -51,8 +51,8 @@
         aria-modal="true"
         aria-label="Menu navigasi administrator"
     >
-        <div>
-            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div class="flex flex-1 flex-col" style="min-height: 0;">
+            <div class="flex shrink-0 items-center justify-between pb-4 border-b border-slate-100">
                 <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
                         <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
@@ -72,7 +72,7 @@
                 </button>
             </div>
 
-            <nav class="mt-6 space-y-1.5" aria-label="Navigasi mobile administrator">
+            <nav class="mt-6 flex-1 space-y-1.5 overflow-y-auto" style="min-height: 0; overscroll-behavior: contain; scrollbar-width: thin;" aria-label="Navigasi mobile administrator">
                 <a
                     href="{{ route('admin.dashboard') }}"
                     class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.dashboard') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
@@ -181,10 +181,10 @@
                     </a>
                 @endif
             </nav>
-            <x-organization-switcher id="admin-mobile" class="mt-4" />
+            <x-organization-switcher id="admin-mobile" class="mt-4 shrink-0" />
         </div>
 
-        <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+        <div class="flex shrink-0 items-center justify-between border-t border-slate-100 pt-4">
             <div class="flex items-center gap-3 min-w-0">
                 <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white font-bold font-display text-base shadow-sm">
                     {{ strtoupper(substr(auth()->user()->nama, 0, 1)) }}
@@ -220,7 +220,7 @@
             class="hidden lg:flex lg:flex-col lg:justify-between lg:h-screen lg:sticky lg:top-0 bg-white border-r border-slate-200/80 p-5 flex-shrink-0 transition-all duration-300 ease-in-out"
             :class="sidebarCollapsed ? 'lg:w-20' : 'lg:w-64 xl:w-72'"
         >
-            <div>
+            <div class="flex-1 overflow-y-auto" style="min-height: 0; overscroll-behavior: contain; scrollbar-width: thin;">
                 {{-- Logo & App Title (No toggle here - toggle is in the top bar) --}}
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
                     <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? @js($appSettings->site_name) : ''">
@@ -391,7 +391,7 @@
 
             {{-- User Profile Footer --}}
             <div
-                class="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between"
+                class="mt-8 flex shrink-0 items-center justify-between border-t border-slate-100 pt-4"
                 :class="sidebarCollapsed ? 'lg:flex-col lg:gap-3 lg:justify-center' : ''"
             >
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
