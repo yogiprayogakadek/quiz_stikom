@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\OrganizationProvisioning;
 use App\Services\OrganizationUsage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,67 +24,86 @@ class OrganizationController extends Controller
 {
     public function index(): View
     {
-        $organizations = Organization::withCount([
+        $organizations = Organization::with('owners')->withCount([
             'memberships as admin_count' => fn ($query) => $query->whereIn('role', ['owner', 'admin'])->where('status', 'active'),
             'memberships as participant_count' => fn ($query) => $query->where('role', 'participant')->where('status', 'active'),
             'kelas',
         ])->latest()->get();
 
+        $ownerCandidates = User::query()
+            ->where('role', 'admin')
+            ->withCount('ownedOrganizations')
+            ->orderBy('nama')
+            ->get();
+
         $platformSettings = AppSetting::current();
 
-        return view('master.organizations.index', compact('organizations', 'platformSettings'));
+        return view('master.organizations.index', compact('organizations', 'ownerCandidates', 'platformSettings'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, OrganizationProvisioning $provisioning): RedirectResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'slug' => ['required', 'string', 'max:80', 'alpha_dash', Rule::unique('organizations', 'slug')],
             'type' => ['required', 'in:education,company,community,personal'],
             'timezone' => ['required', 'timezone:all'],
-            'owner_name' => ['required', 'string', 'max:120'],
-            'owner_username' => ['required', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')],
-            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'owner_user_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', 'admin')->whereNull('deleted_at')),
+            ],
+            'owner_name' => ['nullable', 'required_without:owner_user_id', 'string', 'max:120'],
+            'owner_username' => ['nullable', 'required_without:owner_user_id', 'string', 'max:60', 'alpha_dash', Rule::unique('users', 'username')],
+            'owner_email' => ['nullable', 'required_without:owner_user_id', 'email', 'max:255', Rule::unique('users', 'email')],
             'owner_password' => ['nullable', 'string', Password::min(8)],
         ], [
             'owner_email.required' => 'Email owner wajib diisi.',
             'owner_email.email' => 'Format email owner tidak valid.',
             'owner_email.unique' => 'Email owner sudah dipakai akun lain.',
+            'owner_user_id.exists' => 'Owner yang dipilih tidak tersedia.',
         ]);
 
-        $temporaryPassword = $data['owner_password'] ?? Str::password(12, symbols: false);
+        [$organization, $owner, $temporaryPassword] = DB::transaction(function () use ($data, $provisioning) {
+            $owner = null;
+            $temporaryPassword = null;
 
-        [$organization, $owner] = DB::transaction(function () use ($data, $temporaryPassword) {
-            $organization = Organization::create([
+            if (! empty($data['owner_user_id'])) {
+                $owner = User::query()
+                    ->whereKey($data['owner_user_id'])
+                    ->where('role', 'admin')
+                    ->firstOrFail();
+            } else {
+                $temporaryPassword = $data['owner_password'] ?? Str::password(12, symbols: false);
+                $owner = User::create([
+                    'nama' => $data['owner_name'],
+                    'username' => $data['owner_username'],
+                    'email' => $data['owner_email'],
+                    'password' => $temporaryPassword,
+                    'role' => 'admin',
+                    'must_change_password' => true,
+                ]);
+            }
+
+            $organization = $provisioning->createForOwner([
                 'name' => $data['name'],
-                'slug' => Str::lower($data['slug']),
+                'slug' => $data['slug'],
                 'type' => $data['type'],
                 'timezone' => $data['timezone'],
-                'is_active' => true,
+            ], $owner, [
+                'source' => empty($data['owner_user_id']) ? 'master_new_owner' : 'master_existing_owner',
             ]);
-            $owner = User::create([
-                'nama' => $data['owner_name'],
-                'username' => $data['owner_username'],
-                'email' => $data['owner_email'],
-                'password' => $temporaryPassword,
-                'role' => 'admin',
-                'must_change_password' => true,
-            ]);
-            $organization->users()->syncWithoutDetaching([
-                $owner->id => ['role' => 'owner', 'status' => 'active'],
-            ]);
-            AuditLog::record('organization_created', 'organization', $organization->id, [
-                'name' => $organization->name,
-                'owner_id' => $owner->id,
-                'owner_username' => $owner->username,
-            ], $organization->id);
 
-            return [$organization, $owner];
+            return [$organization, $owner, $temporaryPassword];
         });
 
-        return back()
-            ->with('sukses', 'Organisasi '.$organization->name.' dan akun owner berhasil dibuat.')
-            ->with('password_baru', ['username' => $owner->username, 'password' => $temporaryPassword]);
+        $response = back()->with('sukses', 'Workspace '.$organization->name.' berhasil dibuat untuk '.$owner->nama.'.');
+
+        if ($temporaryPassword !== null) {
+            $response->with('password_baru', ['username' => $owner->username, 'password' => $temporaryPassword]);
+        }
+
+        return $response;
     }
 
     public function editLimits(Organization $organization, OrganizationUsage $usage): View

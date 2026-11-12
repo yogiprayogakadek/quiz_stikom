@@ -65,6 +65,7 @@
                         <thead class="text-xs text-ink-subtle">
                             <tr>
                                 <th class="px-3 py-2 font-bold">Organisasi</th>
+                                <th class="px-3 py-2 font-bold">Owner</th>
                                 <th class="px-3 py-2 font-bold">Admin</th>
                                 <th class="px-3 py-2 font-bold">Peserta</th>
                                 <th class="px-3 py-2 font-bold">Kelas</th>
@@ -85,6 +86,17 @@
                                             <a href="{{ route('master.organizations.export', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Export</a>
                                             <a href="{{ route('master.organizations.delete', $organization) }}" class="text-xs font-semibold text-coral-deep underline-offset-2 hover:underline">Hapus</a>
                                         </div>
+                                    </td>
+                                    <td class="px-3 py-3">
+                                        @forelse ($organization->owners as $owner)
+                                            <p class="font-semibold text-ink">{{ $owner->nama }}</p>
+                                            <p class="text-xs text-ink-subtle">{{ '@'.$owner->username }}</p>
+                                        @empty
+                                            <p class="font-semibold text-coral-deep">Belum ada owner</p>
+                                        @endforelse
+                                        @if (Route::has('master.organizations.owner.edit'))
+                                            <a href="{{ route('master.organizations.owner.edit', $organization) }}" class="mt-1 inline-block text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Pindahkan</a>
+                                        @endif
                                     </td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->admin_count }}</td>
                                     <td class="px-3 py-3 text-ink-muted">{{ $organization->participant_count }}</td>
@@ -140,27 +152,63 @@
                         <input id="timezone" name="timezone" class="input" required value="{{ old('timezone', 'Asia/Singapore') }}">
                     </div>
                 </div>
-                <div class="border-t border-outline pt-4">
+                <div class="border-t border-outline pt-4" x-data="{ ownerMode: '{{ old('owner_user_id') ? 'existing' : 'new' }}' }">
                     <p class="text-sm font-bold text-ink">Owner pertama</p>
-                </div>
-                <div>
-                    <label for="owner_name" class="label">Nama owner</label>
-                    <input id="owner_name" name="owner_name" class="input" required maxlength="120" value="{{ old('owner_name') }}">
-                </div>
-                <div>
-                    <label for="owner_username" class="label">Username owner</label>
-                    <input id="owner_username" name="owner_username" class="input" required maxlength="60" value="{{ old('owner_username') }}">
-                </div>
-                <div>
-                    <label for="owner_email" class="label">Email owner</label>
-                    <input id="owner_email" name="owner_email" type="email" class="input" required maxlength="255" autocomplete="email" placeholder="nama@contoh.com" value="{{ old('owner_email') }}">
-                    <p class="help mt-1">Dipakai untuk verifikasi akun dan reset password.</p>
-                    @error('owner_email') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="owner_password" class="label">Password sementara <span class="font-normal text-ink-subtle">(opsional)</span></label>
-                    <input id="owner_password" name="owner_password" type="password" class="input" minlength="8" autocomplete="new-password">
-                    <p class="help mt-1">Kosongkan agar sistem membuat password acak.</p>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                        <label class="flex cursor-pointer items-start gap-2 rounded-xl border border-outline px-3 py-2 text-sm">
+                            <input type="radio" name="owner_mode" value="new" x-model="ownerMode" class="mt-0.5">
+                            <span>
+                                <span class="block font-semibold text-ink">Buat owner baru</span>
+                                <span class="block text-xs text-ink-muted">Akun admin baru langsung menjadi owner.</span>
+                            </span>
+                        </label>
+                        <label @class([
+                            'flex cursor-pointer items-start gap-2 rounded-xl border border-outline px-3 py-2 text-sm',
+                            'opacity-50' => $ownerCandidates->isEmpty(),
+                        ])>
+                            <input type="radio" name="owner_mode" value="existing" x-model="ownerMode" @if ($ownerCandidates->isEmpty()) disabled @endif class="mt-0.5">
+                            <span>
+                                <span class="block font-semibold text-ink">Pilih owner yang sudah ada</span>
+                                <span class="block text-xs text-ink-muted">Gunakan akun admin yang sudah terdaftar.</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div x-show="ownerMode === 'existing'" x-cloak class="mt-4">
+                        <label for="owner_user_id" class="label">Owner</label>
+                        <select id="owner_user_id" name="owner_user_id" class="input" :disabled="ownerMode !== 'existing'">
+                            <option value="">Pilih owner</option>
+                            @foreach ($ownerCandidates as $candidate)
+                                <option value="{{ $candidate->id }}" @selected((string) old('owner_user_id') === (string) $candidate->id)>
+                                    {{ $candidate->nama }} ({{ '@'.$candidate->username }}) — {{ $candidate->owned_organizations_count }} workspace
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="help mt-1">Owner terpilih langsung menjadi owner workspace ini. Password akun tidak berubah.</p>
+                        @error('owner_user_id') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
+
+                    <div x-show="ownerMode === 'new'" x-cloak class="mt-4 space-y-4">
+                        <div>
+                            <label for="owner_name" class="label">Nama owner</label>
+                            <input id="owner_name" name="owner_name" class="input" required maxlength="120" value="{{ old('owner_name') }}" :disabled="ownerMode !== 'new'">
+                        </div>
+                        <div>
+                            <label for="owner_username" class="label">Username owner</label>
+                            <input id="owner_username" name="owner_username" class="input" required maxlength="60" value="{{ old('owner_username') }}" :disabled="ownerMode !== 'new'">
+                        </div>
+                        <div>
+                            <label for="owner_email" class="label">Email owner</label>
+                            <input id="owner_email" name="owner_email" type="email" class="input" required maxlength="255" autocomplete="email" placeholder="nama@contoh.com" value="{{ old('owner_email') }}" :disabled="ownerMode !== 'new'">
+                            <p class="help mt-1">Dipakai untuk verifikasi akun dan reset password.</p>
+                            @error('owner_email') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="owner_password" class="label">Password sementara <span class="font-normal text-ink-subtle">(opsional)</span></label>
+                            <input id="owner_password" name="owner_password" type="password" class="input" minlength="8" autocomplete="new-password" :disabled="ownerMode !== 'new'">
+                            <p class="help mt-1">Kosongkan agar sistem membuat password acak.</p>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary w-full">Buat organisasi</button>
             </form>
