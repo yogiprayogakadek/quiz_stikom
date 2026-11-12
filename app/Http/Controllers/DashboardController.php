@@ -46,7 +46,9 @@ class DashboardController extends Controller
             ->where('status', 'selesai')
             ->orderByDesc('updated_at')
             ->limit(5)
-            ->get();
+            ->get()
+            ->sortByDesc('skor_total')
+            ->values();
 
         $loginHariIni = Attempt::whereHas('quizSession')
             ->where('created_at', '>=', now()->startOfDay())

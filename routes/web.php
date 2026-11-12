@@ -90,6 +90,7 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::get('owners', [OwnerController::class, 'index'])->name('owners.index');
+    Route::delete('owners/{owner}', [OwnerController::class, 'destroy'])->name('owners.destroy');
     Route::get('feedback', [MasterParticipantFeedbackController::class, 'index'])->name('feedback.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/owner', [OwnerController::class, 'editTransfer'])->name('organizations.owner.edit');

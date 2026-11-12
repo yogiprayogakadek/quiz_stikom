@@ -76,6 +76,126 @@ class WorkspaceOwnershipTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_master_menghapus_owner_tanpa_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_yatim');
+        $owner->organizations()->detach();
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $owner))
+            ->assertRedirect(route('master.owners.index'))
+            ->assertSessionHas('sukses');
+
+        $this->assertSoftDeleted('users', ['id' => $owner->id]);
+        $this->assertNull(User::withTrashed()->findOrFail($owner->id)->current_session_token);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'owner_deleted',
+            'subject_type' => 'user',
+            'subject_id' => $owner->id,
+            'actor_id' => $master->id,
+        ]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_owner_yang_masih_memiliki_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_aktif');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $owner))
+            ->assertStatus(422);
+
+        $this->assertNotSoftDeleted('users', ['id' => $owner->id]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_admin_yang_masih_anggota_workspace(): void
+    {
+        $master = $this->master();
+        $admin = $this->admin('admin_anggota');
+        $organization = $this->organization('beta', 'Beta');
+        $organization->users()->attach($admin->id, [
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $admin))
+            ->assertStatus(422);
+
+        $this->assertNotSoftDeleted('users', ['id' => $admin->id]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_owner_dengan_permintaan_workspace_pending(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_pending');
+        $owner->organizations()->detach();
+        WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Pending',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $owner))
+            ->assertStatus(422);
+
+        $this->assertNotSoftDeleted('users', ['id' => $owner->id]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_platform_admin(): void
+    {
+        $master = $this->master();
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $master))
+            ->assertNotFound();
+
+        $this->assertNotSoftDeleted('users', ['id' => $master->id]);
+    }
+
+    public function test_daftar_owner_menampilkan_hapus_hanya_untuk_akun_yatim(): void
+    {
+        $master = $this->master();
+        $orphan = $this->admin('owner_yatim');
+        $orphan->organizations()->detach();
+
+        $member = $this->admin('admin_anggota');
+
+        $pending = $this->admin('owner_pending');
+        $pending->organizations()->detach();
+        WorkspaceRequest::create([
+            'requester_id' => $pending->id,
+            'name' => 'Workspace Pending',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.owners.index'))
+            ->assertOk()
+            ->assertSee(route('master.owners.destroy', $orphan), false)
+            ->assertDontSee(route('master.owners.destroy', $member), false)
+            ->assertDontSee(route('master.owners.destroy', $pending), false)
+            ->assertSee('Masih anggota workspace')
+            ->assertSee('Permintaan pending');
+    }
+
     public function test_master_memindahkan_owner_dan_owner_lama_tetap_admin(): void
     {
         $master = $this->master();

@@ -60,16 +60,23 @@
             <div class="mt-4">
                 <x-data-table :per-page="10" search-placeholder="Cari nama, username, email, atau workspace">
                     <div class="overflow-x-auto">
-                        <table class="w-full min-w-[44rem] text-left text-sm">
+                        <table class="w-full min-w-[48rem] text-left text-sm">
                             <thead class="text-xs text-ink-subtle">
                                 <tr>
                                     <th class="px-3 py-2 font-bold">Owner</th>
                                     <th class="px-3 py-2 font-bold">Workspace</th>
                                     <th class="px-3 py-2 font-bold">Jumlah</th>
+                                    <th class="px-3 py-2 text-right font-bold">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-outline">
                                 @foreach ($owners as $owner)
+                                    @php
+                                        $punyaPermintaanPending = $pendingRequests->contains('requester_id', $owner->id);
+                                        $bisaDihapus = $owner->owned_organizations_count === 0
+                                            && $owner->organizations_count === 0
+                                            && ! $punyaPermintaanPending;
+                                    @endphp
                                     <tr
                                         data-item
                                         data-item-key="{{ $owner->id }}"
@@ -96,6 +103,25 @@
                                             </div>
                                         </td>
                                         <td class="px-3 py-3 align-top text-ink-muted">{{ $owner->owned_organizations_count }}</td>
+                                        <td class="px-3 py-3 text-right align-top">
+                                            @if ($bisaDihapus)
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route('master.owners.destroy', $owner) }}"
+                                                    onsubmit="return confirm('Hapus akun owner ini? Tindakan ini tidak bisa dibatalkan.')"
+                                                >
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-ghost !px-3 !py-1.5 text-xs text-coral-deep" aria-label="Hapus akun {{ $owner->nama }}">
+                                                        Hapus akun
+                                                    </button>
+                                                </form>
+                                            @elseif ($owner->owned_organizations_count === 0 && $owner->organizations_count > 0)
+                                                <span class="text-xs text-ink-subtle">Masih anggota workspace</span>
+                                            @elseif ($owner->owned_organizations_count === 0 && $punyaPermintaanPending)
+                                                <span class="text-xs text-ink-subtle">Permintaan pending</span>
+                                            @endif
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>
