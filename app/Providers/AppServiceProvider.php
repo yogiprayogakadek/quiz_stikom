@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Listeners\LogSentEmail;
 use App\Models\AppSetting;
 use App\Models\OrganizationSetting;
 use App\Services\PlatformMail;
 use App\Support\OrganizationContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
@@ -37,6 +40,8 @@ class AppServiceProvider extends ServiceProvider
             'appSettings' => app('app.settings'),
             'orgTimezone' => app(OrganizationContext::class)->timezone(),
         ]));
+
+        Event::listen(MessageSent::class, LogSentEmail::class);
 
         // TLS diterminasi di edge, jadi request ke PHP selalu http. Paksa https
         // hanya kalau APP_URL memang https, supaya redirect dan asset tidak

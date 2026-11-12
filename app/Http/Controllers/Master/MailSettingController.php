@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\SmtpTestMail;
 use App\Models\AppSetting;
 use App\Models\AuditLog;
+use App\Models\EmailLog;
 use App\Services\PlatformMail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ class MailSettingController extends Controller
 {
     public function edit(): View
     {
-        return view('master.mail.edit', ['settings' => AppSetting::current()]);
+        return view('master.mail.edit', [
+            'settings' => AppSetting::current(),
+            'emailLogs' => EmailLog::with('organization')->latest('sent_at')->paginate(20),
+        ]);
     }
 
     public function update(Request $request): RedirectResponse

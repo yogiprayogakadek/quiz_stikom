@@ -80,6 +80,7 @@
                                             /o/{{ $organization->slug }}/login
                                         </a>
                                         <div class="mt-1 flex flex-wrap gap-3">
+                                            <a href="{{ route('master.organizations.name.edit', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Nama</a>
                                             <a href="{{ route('master.organizations.limits.edit', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Kuota</a>
                                             <a href="{{ route('master.organizations.export', $organization) }}" class="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-brand-deep hover:underline">Export</a>
                                             <a href="{{ route('master.organizations.delete', $organization) }}" class="text-xs font-semibold text-coral-deep underline-offset-2 hover:underline">Hapus</a>

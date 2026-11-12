@@ -27,7 +27,7 @@ class SettingController extends Controller
         return view('admin.settings.edit', [
             'settings' => app('app.settings'),
             'usage' => $organization ? $usage->summary($organization->id) : null,
-            'canRenameOrganization' => $this->isOwner(request()->user(), $organization),
+            'isOwner' => $this->isOwner(request()->user(), $organization),
         ]);
     }
 
@@ -73,6 +73,8 @@ class SettingController extends Controller
             $rules['organization_timezone'] = ['required', 'timezone:all'];
             if ($this->isOwner($request->user(), $organization)) {
                 $rules['organization_name'] = ['required', 'string', 'max:120'];
+                $rules['terms_content'] = ['nullable', 'string', 'max:20000'];
+                $rules['privacy_content'] = ['nullable', 'string', 'max:20000'];
             }
         }
 
@@ -107,10 +109,17 @@ class SettingController extends Controller
                 AuditLog::record('organization_renamed', 'organization', $organization->id, [
                     'from' => $organization->name,
                     'to' => $data['organization_name'],
+                    'source' => 'owner',
                 ], $organization->id);
                 $organization->update(['name' => $data['organization_name']]);
             }
             unset($data['organization_name']);
+        }
+
+        foreach (['terms_content', 'privacy_content'] as $legalField) {
+            if (array_key_exists($legalField, $data)) {
+                $data[$legalField] = filled($data[$legalField]) ? trim($data[$legalField]) : null;
+            }
         }
 
         if ($request->hasFile('logo')) {

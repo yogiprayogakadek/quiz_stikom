@@ -18,6 +18,8 @@ class OrganizationSetting extends Model
         'login_description',
         'login_layout',
         'locale',
+        'terms_content',
+        'privacy_content',
         'allow_pin_enrollment',
         'ai_base_url',
         'ai_api_key',

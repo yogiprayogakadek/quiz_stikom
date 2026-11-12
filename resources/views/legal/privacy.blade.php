@@ -1,17 +1,27 @@
-<x-layouts.guest judul="Kebijakan Privasi">
+@php($organization = $organization ?? null)
+
+<x-layouts.guest :judul="'Kebijakan Privasi'.($organization ? ' - '.$organization->name : '')">
     <div class="mx-auto min-h-screen w-full max-w-3xl px-5 py-10 sm:px-8 sm:py-16">
         <div class="mb-6 flex items-center justify-between gap-4">
-            <a href="{{ route('home') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>
-            <a href="{{ route('terms.show') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Syarat Penggunaan</a>
+            <a href="{{ $organization ? route('organizations.login', $organization) : route('home') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">
+                {{ $organization ? 'Kembali ke login organisasi' : 'Kembali ke halaman utama' }}
+            </a>
+            <a href="{{ $organization ? route('organizations.terms', $organization) : route('terms.show') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Syarat Penggunaan</a>
         </div>
 
         <article class="card space-y-6 p-6 sm:p-9">
             <header>
                 <p class="text-sm font-bold text-brand-deep">Dokumen legal</p>
                 <h1 class="mt-2 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">Kebijakan Privasi</h1>
-                <p class="mt-2 text-sm text-ink-muted">Ringkasan data yang diproses platform dan cara mengelolanya.</p>
+                <p class="mt-2 text-sm text-ink-muted">{{ $organization ? 'Berlaku untuk workspace '.$organization->name.'.' : 'Ringkasan data yang diproses platform dan cara mengelolanya.' }}</p>
             </header>
 
+            @if (filled($customContent ?? null))
+                <div class="rounded-xl border border-outline bg-surface-sunken p-4 text-sm text-ink-muted" role="note">
+                    Dokumen ini diisi oleh pengelola workspace. Hubungi admin workspace untuk pertanyaan tentang ketentuan ini.
+                </div>
+                <x-legal-content :content="$customContent" />
+            @else
             <div class="rounded-xl border border-sun-deep/30 bg-sun-soft p-4 text-sm text-sun-deep" role="note">
                 <p class="font-bold">Draf, belum ditinjau secara hukum.</p>
                 <p class="mt-1">Teks ini adalah kerangka operasional. Ganti dengan dokumen final sebelum dipakai sebagai dasar hukum.</p>
@@ -51,6 +61,7 @@
                 <h2 class="text-xl text-ink">7. Kontak</h2>
                 <p class="text-base leading-relaxed text-ink-muted">Pertanyaan privasi dapat dikirim ke <a href="mailto:{{ $contactEmail }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">{{ $contactEmail }}</a>.</p>
             </section>
+            @endif
         </article>
     </div>
 </x-layouts.guest>

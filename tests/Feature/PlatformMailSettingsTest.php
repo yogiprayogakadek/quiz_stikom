@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Mail\SmtpTestMail;
 use App\Models\AppSetting;
+use App\Models\EmailLog;
 use App\Models\User;
 use App\Services\PlatformMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -24,7 +25,8 @@ class PlatformMailSettingsTest extends TestCase
             ->get(route('master.mail.edit'))
             ->assertOk()
             ->assertSee('Email platform')
-            ->assertSee('Kirim email uji');
+            ->assertSee('Kirim email uji')
+            ->assertSee('Riwayat email terkirim');
     }
 
     public function test_admin_organisasi_ditolak_dari_pengaturan_email(): void
@@ -150,6 +152,54 @@ class PlatformMailSettingsTest extends TestCase
 
         $this->assertSame('log', config('mail.default'));
         $this->assertSame('env-host', config('mail.mailers.smtp.host'));
+    }
+
+    public function test_email_berhasil_dicatat_di_riwayat_master(): void
+    {
+        Mail::mailer('array')
+            ->to('penerima@example.test')
+            ->send(new SmtpTestMail('Log'));
+
+        $this->assertDatabaseHas('email_logs', [
+            'recipients' => 'penerima@example.test',
+            'subject' => 'Uji SMTP Log',
+            'type' => SmtpTestMail::class,
+        ]);
+        $this->assertSame(1, EmailLog::query()->count());
+
+        $this->actingAs($this->master())
+            ->withSession(['auth_token' => 'master-mail-token'])
+            ->get(route('master.mail.edit'))
+            ->assertOk()
+            ->assertSee('penerima@example.test')
+            ->assertSee('Uji SMTP Log');
+    }
+
+    public function test_riwayat_email_menyimpan_workspace_aktif(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Log Workspace',
+            'username' => 'admin_log_workspace',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-log-workspace-token',
+        ]);
+        $organization = $admin->organizations()->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession([
+                'auth_token' => 'admin-log-workspace-token',
+                'organization_id' => $organization->id,
+            ]);
+
+        Mail::mailer('array')
+            ->to('workspace@example.test')
+            ->send(new SmtpTestMail('Workspace'));
+
+        $this->assertDatabaseHas('email_logs', [
+            'organization_id' => $organization->id,
+            'recipients' => 'workspace@example.test',
+        ]);
     }
 
     public function test_email_uji_terkirim(): void

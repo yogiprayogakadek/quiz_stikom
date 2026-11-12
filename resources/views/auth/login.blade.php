@@ -1,6 +1,7 @@
 @props(['judul' => null, 'masterLogin' => false])
 
 @php($judul ??= $masterLogin ? 'Login Master' : 'Masuk')
+@php($loginOrganization = $organization ?? null)
 
 <x-layouts.guest :judul="$judul">
     <div class="min-h-screen w-full grid grid-cols-1 lg:grid-cols-12 bg-surface font-sans">
@@ -245,13 +246,13 @@
                             @if ($masterLogin)
                                 Bukan master? <a href="{{ route('home') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>.
                             @else
-                                Kendala akun? Hubungi admin kelas. Master platform <a href="{{ route('master.login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">masuk di sini</a>.
+                                Kendala akun? Hubungi admin kelas.
                             @endif
                         </p>
                         <p class="mt-3 text-xs text-ink-subtle">
-                            <a href="{{ route('terms.show') }}" class="underline-offset-2 hover:underline">Syarat</a>
+                            <a href="{{ $loginOrganization ? route('organizations.terms', $loginOrganization) : route('terms.show') }}" class="underline-offset-2 hover:underline">Syarat</a>
                             ·
-                            <a href="{{ route('privacy.show') }}" class="underline-offset-2 hover:underline">Privasi</a>
+                            <a href="{{ $loginOrganization ? route('organizations.privacy', $loginOrganization) : route('privacy.show') }}" class="underline-offset-2 hover:underline">Privasi</a>
                         </p>
                     </div>
                 </div>

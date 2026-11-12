@@ -34,6 +34,8 @@ Route::get('/login', fn () => redirect()->route('home'));
 
 Route::get('/syarat', [LegalController::class, 'terms'])->name('terms.show');
 Route::get('/privasi', [LegalController::class, 'privacy'])->name('privacy.show');
+Route::get('/o/{organization:slug}/syarat', [LegalController::class, 'terms'])->name('organizations.terms');
+Route::get('/o/{organization:slug}/privasi', [LegalController::class, 'privacy'])->name('organizations.privacy');
 
 Route::middleware('guest')->group(function () {
     Route::get('/daftar', [OrganizationRegistrationController::class, 'create'])->name('register.organization');
@@ -80,6 +82,8 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/kuota', [OrganizationController::class, 'editLimits'])->name('organizations.limits.edit');
     Route::put('organizations/{organization}/kuota', [OrganizationController::class, 'updateLimits'])->name('organizations.limits.update');
+    Route::get('organizations/{organization}/nama', [OrganizationController::class, 'editName'])->name('organizations.name.edit');
+    Route::put('organizations/{organization}/nama', [OrganizationController::class, 'updateName'])->name('organizations.name.update');
     Route::get('organizations/{organization}/export', [OrganizationController::class, 'export'])->name('organizations.export');
     Route::get('organizations/{organization}/delete', [OrganizationController::class, 'showDelete'])->name('organizations.delete');
     Route::delete('organizations/{organization}', [OrganizationController::class, 'destroy'])->name('organizations.destroy');

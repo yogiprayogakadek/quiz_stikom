@@ -213,7 +213,11 @@
 
         <footer class="mt-auto">
             <div class="mx-auto flex w-full max-w-6xl flex-col gap-3 px-5 py-6 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-8">
-                <p>&copy; {{ date('Y') }} {{ $appSettings->site_name }}</p>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p>&copy; {{ date('Y') }} {{ $appSettings->site_name }}</p>
+                    <span aria-hidden="true">·</span>
+                    <p>Dibuat oleh Yogi Prayoga</p>
+                </div>
                 <nav class="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="Tautan footer">
                     <a href="{{ route('terms.show') }}" class="inline-flex min-h-11 items-center font-semibold hover:text-ink">Syarat</a>
                     <a href="{{ route('privacy.show') }}" class="inline-flex min-h-11 items-center font-semibold hover:text-ink">Privasi</a>

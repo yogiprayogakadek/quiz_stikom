@@ -174,7 +174,7 @@
             </div>
             <div class="mt-5 grid gap-5 sm:grid-cols-2">
                 @if ($activeOrganization)
-                    @if ($canRenameOrganization)
+                    @if ($isOwner)
                         <div class="sm:col-span-2">
                             <label for="organization_name" class="label">Nama organisasi</label>
                             <input id="organization_name" name="organization_name" class="input" required maxlength="120" value="{{ old('organization_name', $activeOrganization->name) }}">
@@ -215,6 +215,31 @@
                 </div>
             </div>
         </section>
+
+        @if ($activeOrganization && $isOwner)
+            <section class="card" aria-labelledby="legal-heading">
+                <div class="border-b border-outline pb-4">
+                    <h2 id="legal-heading" class="text-2xl">Dokumen legal workspace</h2>
+                    <p class="mt-1 text-base text-ink-muted">Teks ini tampil di halaman syarat dan privasi workspace. Kosongkan untuk memakai teks platform.</p>
+                </div>
+                <div class="mt-5 grid gap-5">
+                    <div>
+                        <label for="terms_content" class="label">Syarat penggunaan</label>
+                        <textarea id="terms_content" name="terms_content" class="input min-h-40" maxlength="20000" placeholder="Kosongkan untuk memakai teks platform.">{{ old('terms_content', $settings->terms_content) }}</textarea>
+                        <p class="help mt-1">Pisahkan paragraf dengan baris kosong. Awali judul bagian dengan <code>##</code>. HTML tidak dijalankan.</p>
+                        <p class="mt-1 text-sm"><a href="{{ route('organizations.terms', $activeOrganization) }}" class="font-semibold text-brand-deep underline-offset-2 hover:underline" target="_blank" rel="noopener">Lihat halaman syarat</a></p>
+                        @error('terms_content') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="privacy_content" class="label">Kebijakan privasi</label>
+                        <textarea id="privacy_content" name="privacy_content" class="input min-h-40" maxlength="20000" placeholder="Kosongkan untuk memakai teks platform.">{{ old('privacy_content', $settings->privacy_content) }}</textarea>
+                        <p class="help mt-1">Pisahkan paragraf dengan baris kosong. Awali judul bagian dengan <code>##</code>. HTML tidak dijalankan.</p>
+                        <p class="mt-1 text-sm"><a href="{{ route('organizations.privacy', $activeOrganization) }}" class="font-semibold text-brand-deep underline-offset-2 hover:underline" target="_blank" rel="noopener">Lihat halaman privasi</a></p>
+                        @error('privacy_content') <p class="field-error">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            </section>
+        @endif
 
         <section class="card" aria-labelledby="peserta-heading">
             <div class="border-b border-outline pb-4">

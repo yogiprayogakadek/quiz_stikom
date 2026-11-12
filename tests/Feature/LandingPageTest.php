@@ -32,6 +32,7 @@ class LandingPageTest extends TestCase
             ->assertOk()
             ->assertSee('Kampus Alpha')
             ->assertSee(route('organizations.login', $alpha))
+            ->assertSee('Dibuat oleh Yogi Prayoga')
             ->assertDontSee('Kampus Beta');
     }
 

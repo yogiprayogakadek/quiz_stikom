@@ -115,5 +115,51 @@
                 </button>
             </form>
         </section>
+
+        <section class="card" aria-labelledby="email-log-heading">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 id="email-log-heading" class="text-xl">Riwayat email terkirim</h2>
+                    <p class="mt-1 text-sm text-ink-muted">Catatan email yang berhasil dikirim. Isi pesan, token, dan password tidak disimpan.</p>
+                </div>
+                <span class="pill">{{ $emailLogs->total() }} email</span>
+            </div>
+
+            @if ($emailLogs->isEmpty())
+                <p class="mt-5 rounded-xl border border-dashed border-outline p-5 text-sm text-ink-muted">Belum ada email yang tercatat.</p>
+            @else
+                <div class="mt-5 overflow-x-auto">
+                    <table class="w-full min-w-[720px] text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-outline text-xs font-bold uppercase tracking-wide text-ink-subtle">
+                                <th class="px-3 py-3">Waktu</th>
+                                <th class="px-3 py-3">Penerima</th>
+                                <th class="px-3 py-3">Subjek</th>
+                                <th class="px-3 py-3">Workspace</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-outline">
+                            @foreach ($emailLogs as $log)
+                                <tr>
+                                    <td class="whitespace-nowrap px-3 py-3 text-ink-muted">{{ $log->sent_at->format('d M Y H:i') }}</td>
+                                    <td class="max-w-[220px] px-3 py-3"><span class="break-all">{{ $log->recipients }}</span></td>
+                                    <td class="max-w-[280px] px-3 py-3">
+                                        <span class="block break-words">{{ $log->subject ?: '(tanpa subjek)' }}</span>
+                                        @if (filled($log->type))
+                                            <span class="mt-0.5 block text-xs text-ink-subtle">{{ class_basename($log->type) }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="px-3 py-3 text-ink-muted">{{ $log->organization?->name ?? 'Platform' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                @if ($emailLogs->hasPages())
+                    <div class="mt-6">{{ $emailLogs->links() }}</div>
+                @endif
+            @endif
+        </section>
     </div>
 </x-layouts.admin>

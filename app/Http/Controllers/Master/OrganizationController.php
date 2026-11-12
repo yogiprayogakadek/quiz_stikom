@@ -94,6 +94,34 @@ class OrganizationController extends Controller
         ]);
     }
 
+    public function editName(Organization $organization): View
+    {
+        return view('master.organizations.name', ['organization' => $organization]);
+    }
+
+    public function updateName(Request $request, Organization $organization): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+        ]);
+
+        $previous = $organization->name;
+
+        if ($previous !== $data['name']) {
+            $organization->update(['name' => $data['name']]);
+
+            AuditLog::record('organization_renamed', 'organization', $organization->id, [
+                'from' => $previous,
+                'to' => $organization->name,
+                'source' => 'master',
+            ], $organization->id);
+        }
+
+        return redirect()
+            ->route('master.organizations.index')
+            ->with('sukses', 'Nama workspace '.$organization->name.' disimpan.');
+    }
+
     public function updateLimits(Request $request, Organization $organization): RedirectResponse
     {
         $data = $request->validate([

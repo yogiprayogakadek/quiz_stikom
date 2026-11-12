@@ -60,6 +60,32 @@ class OrganizationNameSettingTest extends TestCase
             ->assertDontSee('name="organization_name"', false);
     }
 
+    public function test_owner_dapat_mengubah_nama_workspace_lain_yang_dimilikinya(): void
+    {
+        $owner = $this->user('owner_kedua', 'admin');
+        $first = $owner->organizations()->firstOrFail();
+        $firstName = $first->name;
+        $owner->organizations()->updateExistingPivot($first->id, ['role' => 'owner']);
+
+        $second = Organization::create([
+            'name' => 'Workspace Kedua',
+            'slug' => 'workspace-kedua',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'is_active' => true,
+        ]);
+        $owner->organizations()->attach($second->id, ['role' => 'owner', 'status' => 'active']);
+
+        $this->actingAs($owner)
+            ->withSession(['auth_token' => 'owner_kedua-token', 'organization_id' => $second->id])
+            ->put(route('admin.settings.update'), $this->payload($second, ['organization_name' => 'Workspace Kedua Baru']))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Workspace Kedua Baru', $second->fresh()->name);
+        $this->assertSame($firstName, $first->fresh()->name);
+    }
+
     private function user(string $username, string $role): User
     {
         return User::create([
