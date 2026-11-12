@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withEvents(discover: false)
     ->withMiddleware(function (Middleware $middleware): void {
         // Aplikasi berada di belakang reverse proxy (edge TLS provider). Tanpa ini
         // Request::ip() selalu berisi IP proxy, sehingga rate limit login 5/menit
