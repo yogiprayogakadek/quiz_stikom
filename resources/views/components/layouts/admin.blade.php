@@ -450,6 +450,8 @@
                     {{ $slot }}
                 </div>
             @endif
+
+            <x-site-footer />
         </main>
     </div>
     <x-global-progress />

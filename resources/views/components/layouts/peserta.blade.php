@@ -292,6 +292,10 @@
                     {{ $slot }}
                 </div>
             @endif
+
+            @unless ($fokus)
+                <x-site-footer />
+            @endunless
         </main>
     </div>
 

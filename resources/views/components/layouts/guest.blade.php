@@ -13,6 +13,7 @@
 </head>
 <body class="min-h-screen bg-page">
     {{ $slot }}
+    <x-site-footer class="px-5" />
     <x-global-progress />
 </body>
 </html>
