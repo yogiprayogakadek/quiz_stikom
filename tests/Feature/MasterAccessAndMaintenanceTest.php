@@ -24,7 +24,7 @@ class MasterAccessAndMaintenanceTest extends TestCase
     {
         $master = $this->master();
 
-        $this->post(route('login.store'), [
+        $this->post(route('organizations.login.store', Organization::query()->firstOrFail()), [
             'username' => $master->username,
             'password' => 'password123',
         ])->assertRedirect(route('master.login'))
@@ -83,7 +83,7 @@ class MasterAccessAndMaintenanceTest extends TestCase
         $this->assertNotNull($settings->maintenance_started_at);
 
         auth()->logout();
-        $this->get(route('login'))
+        $this->get('/')
             ->assertStatus(503)
             ->assertHeader('Retry-After', '300')
             ->assertSee('Pembaruan server berlangsung sampai selesai.');
@@ -136,10 +136,10 @@ class MasterAccessAndMaintenanceTest extends TestCase
             ->assertForbidden();
         auth()->logout();
         $this->get(route('organizations.login', $organization))->assertNotFound();
-        $this->post(route('login.store'), [
+        $this->post(route('organizations.login.store', $organization), [
             'username' => $admin->username,
             'password' => 'password123',
-        ])->assertSessionHasErrors('username');
+        ])->assertNotFound();
         $this->assertGuest();
 
         $this->actingAs($master)

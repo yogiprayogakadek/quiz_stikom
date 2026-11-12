@@ -6,10 +6,16 @@ use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    public function test_tamu_diarahkan_ke_halaman_masuk(): void
+    public function test_tamu_melihat_halaman_utama(): void
     {
-        $response = $this->get('/');
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Masuk ke organisasi')
+            ->assertSee(route('register.organization'));
+    }
 
-        $response->assertRedirect(route('login'));
+    public function test_alamat_login_lama_diarahkan_ke_halaman_utama(): void
+    {
+        $this->get('/login')->assertRedirect(route('home'));
     }
 }

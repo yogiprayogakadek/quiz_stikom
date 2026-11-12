@@ -17,18 +17,6 @@ use Illuminate\View\View;
 
 class LoginController extends Controller
 {
-    public function show(): View|RedirectResponse
-    {
-        if (Auth::check()) {
-            return redirect()->route(Auth::user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard');
-        }
-
-        session()->forget('organization_id');
-        app(OrganizationContext::class)->applyLocale();
-
-        return view('auth.login');
-    }
-
     public function showOrganization(Organization $organization, OrganizationContext $context): View|RedirectResponse
     {
         abort_unless($organization->is_active, 404);
@@ -39,13 +27,13 @@ class LoginController extends Controller
         $context->set($organization);
         $context->applyLocale($organization);
 
-        return view('auth.login');
+        return view('auth.login', ['organization' => $organization]);
     }
 
     public function showMaster(): View|RedirectResponse
     {
         if (Auth::check()) {
-            return redirect()->route(Auth::user()->isPlatformAdmin() ? 'master.organizations.index' : 'login');
+            return redirect()->route(Auth::user()->isPlatformAdmin() ? 'master.organizations.index' : 'home');
         }
 
         session()->forget('organization_id');
@@ -54,8 +42,16 @@ class LoginController extends Controller
         return view('auth.login', ['masterLogin' => true]);
     }
 
-    public function login(LoginRequest $request): RedirectResponse
+    public function login(LoginRequest $request, ?Organization $organization = null): RedirectResponse
     {
+        $masterLogin = $request->routeIs('master.login.store');
+
+        if (! $masterLogin) {
+            abort_unless($organization?->is_active, 404);
+            app(OrganizationContext::class)->set($organization);
+            app(OrganizationContext::class)->applyLocale($organization);
+        }
+
         $key = Str::lower($request->input('username')).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($key, 5)) {
@@ -80,12 +76,11 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
-        $masterLogin = $request->routeIs('master.login.store');
         if ($masterLogin && ! $user->isPlatformAdmin()) {
-            return $this->rejectLogin($request, 'Akun ini tidak memiliki akses master.', 'master.login');
+            return $this->rejectLogin($request, 'Akun ini tidak memiliki akses master.', route('master.login'));
         }
         if (! $masterLogin && $user->isPlatformAdmin()) {
-            return $this->rejectLogin($request, 'Gunakan halaman login khusus master.', 'master.login');
+            return $this->rejectLogin($request, 'Gunakan halaman login khusus master.', route('master.login'));
         }
 
         $requestedOrganizationId = $request->session()->get('organization_id');
@@ -97,14 +92,14 @@ class LoginController extends Controller
             Auth::logout();
             $request->session()->regenerateToken();
 
-            return back()
+            return redirect()->route('organizations.login', $organization)
                 ->withInput($request->only('username'))
                 ->withErrors(['username' => 'Akun ini tidak dapat mengakses organisasi tersebut.']);
         }
         if (! $requestedOrganizationId
             && ! $user->isPlatformAdmin()
             && ! $user->organizations()->where('organizations.is_active', true)->wherePivot('status', 'active')->exists()) {
-            return $this->rejectLogin($request, 'Organisasi akun ini sedang tidak aktif. Hubungi pengelola platform.', 'login');
+            return $this->rejectLogin($request, 'Organisasi akun ini sedang tidak aktif. Hubungi pengelola platform.', route('home'));
         }
 
         $token = Str::random(64);
@@ -133,7 +128,10 @@ class LoginController extends Controller
     public function logout(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $loginRoute = $user?->isPlatformAdmin() ? 'master.login' : 'login';
+        $organization = app(OrganizationContext::class)->current();
+        $location = $user?->isPlatformAdmin()
+            ? route('master.login')
+            : ($organization ? route('organizations.login', $organization) : route('home'));
 
         if ($user !== null) {
             User::whereKey($user->id)->update(['current_session_token' => null]);
@@ -147,16 +145,16 @@ class LoginController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route($loginRoute)->with('sukses', 'Anda sudah keluar.');
+        return redirect()->to($location)->with('sukses', 'Anda sudah keluar.');
     }
 
-    private function rejectLogin(Request $request, string $message, string $route): RedirectResponse
+    private function rejectLogin(Request $request, string $message, string $location): RedirectResponse
     {
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route($route)
+        return redirect()->to($location)
             ->withInput($request->only('username'))
             ->withErrors(['username' => $message]);
     }

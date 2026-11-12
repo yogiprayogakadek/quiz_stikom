@@ -26,6 +26,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // berlaku untuk seluruh peserta sekaligus, bukan per pengguna.
         $middleware->trustProxies(at: '*');
 
+        $middleware->redirectGuestsTo(function () {
+            $organization = app(\App\Support\OrganizationContext::class)->current();
+
+            return $organization ? route('organizations.login', $organization) : route('home');
+        });
+
         $middleware->web(append: [
             EnsureSingleSession::class,
             SetOrganizationLocale::class,

@@ -363,10 +363,14 @@ class SessionController extends Controller
             User::whereKey($user->id)->update(['current_session_token' => null]);
         }
 
+        $organization = app(OrganizationContext::class)->current();
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login')->with('peringatan', 'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena keluar dari mode layar penuh.');
+        return redirect()
+            ->to($organization ? route('organizations.login', $organization) : route('home'))
+            ->with('peringatan', 'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena keluar dari mode layar penuh.');
     }
 }

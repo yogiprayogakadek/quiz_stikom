@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\PesertaStatusLogin;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,9 @@ class OnlinePesertaTest extends TestCase
             'current_session_token' => 'token-session-123',
         ]);
 
-        $this->post(route('login.store'), [
+        $organization = Organization::query()->firstOrFail();
+
+        $this->post(route('organizations.login.store', $organization), [
             'username' => 'yogi_test',
             'password' => 'password123',
         ]);
@@ -41,10 +44,10 @@ class OnlinePesertaTest extends TestCase
 
         // Logout
         $resLogout = $this->actingAs($peserta)
-            ->withSession(['auth_token' => 'token-session-123'])
+            ->withSession(['auth_token' => 'token-session-123', 'organization_id' => $organization->id])
             ->post(route('logout'));
 
-        $resLogout->assertRedirect(route('login'));
+        $resLogout->assertRedirect(route('organizations.login', $organization));
 
         Event::assertDispatched(PesertaStatusLogin::class, function (PesertaStatusLogin $event) use ($peserta) {
             return $event->userId === $peserta->id && $event->status === 'logout';

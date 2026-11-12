@@ -24,7 +24,7 @@ class AccountSecurityTest extends TestCase
 
         $this->assertTrue($admin->hasVerifiedEmail());
 
-        $this->post(route('login.store'), [
+        $this->post(route('organizations.login.store', $this->organization()), [
             'username' => $admin->username,
             'password' => 'password123',
         ])->assertRedirect(route('admin.dashboard'));
@@ -255,7 +255,7 @@ class AccountSecurityTest extends TestCase
             'email' => $user->email,
             'password' => 'password456',
             'password_confirmation' => 'password456',
-        ])->assertRedirect(route('login'))
+        ])->assertRedirect(route('organizations.login', $this->organization()))
             ->assertSessionHas('sukses');
 
         $user->refresh();

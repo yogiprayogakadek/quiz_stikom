@@ -28,7 +28,7 @@ class OrganizationRegistrationController extends Controller
     public function store(Request $request): RedirectResponse
     {
         if (filled($request->input('website'))) {
-            return redirect()->route('login')->with('sukses', 'Permintaan pendaftaran diterima.');
+            return redirect()->route('home')->with('sukses', 'Permintaan pendaftaran diterima.');
         }
 
         $data = $request->validate([

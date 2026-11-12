@@ -45,16 +45,17 @@ class AccountRecoveryController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
-        $loginRoute = 'login';
+        $login = null;
+        $resetUser = null;
 
-        $status = PasswordBroker::reset($data, function (User $user, string $password) use (&$loginRoute) {
+        $status = PasswordBroker::reset($data, function (User $user, string $password) use (&$resetUser) {
             $user->forceFill([
                 'password' => Hash::make($password),
                 'must_change_password' => false,
                 'current_session_token' => null,
                 'remember_token' => Str::random(60),
             ])->save();
-            $loginRoute = $user->isPlatformAdmin() ? 'master.login' : 'login';
+            $resetUser = $user;
             event(new PasswordReset($user));
         });
 
@@ -64,6 +65,19 @@ class AccountRecoveryController extends Controller
                 ->withErrors(['email' => 'Tautan reset tidak dapat dipakai. Minta tautan baru atau coba lagi nanti.']);
         }
 
-        return redirect()->route($loginRoute)->with('sukses', 'Password berhasil direset. Silakan masuk kembali.');
+        if ($resetUser?->isPlatformAdmin()) {
+            $login = route('master.login');
+        } else {
+            $organizations = $resetUser?->organizations()
+                ->where('organizations.is_active', true)
+                ->wherePivot('status', 'active');
+            $current = app(\App\Support\OrganizationContext::class)->current();
+            $organization = $current && $organizations && (clone $organizations)->whereKey($current->id)->exists()
+                ? $current
+                : $organizations?->orderBy('organizations.id')->first();
+            $login = $organization ? route('organizations.login', $organization) : route('home');
+        }
+
+        return redirect()->to($login)->with('sukses', 'Password berhasil direset. Silakan masuk kembali.');
     }
 }

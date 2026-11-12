@@ -189,7 +189,7 @@ class OrganizationTenancyTest extends TestCase
         [, $participantB] = $this->organizationWithUser('beta', 'participant_beta', 'peserta');
 
         $this->withSession(['organization_id' => $organizationA->id])
-            ->post(route('login.store'), [
+            ->post(route('organizations.login.store', $organizationA), [
                 'username' => $participantB->username,
                 'password' => 'password123',
             ])

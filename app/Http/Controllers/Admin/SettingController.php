@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\AuditLog;
+use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use App\Models\User;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +27,7 @@ class SettingController extends Controller
         return view('admin.settings.edit', [
             'settings' => app('app.settings'),
             'usage' => $organization ? $usage->summary($organization->id) : null,
+            'canRenameOrganization' => $this->isOwner(request()->user(), $organization),
         ]);
     }
 
@@ -34,7 +38,6 @@ class SettingController extends Controller
         $rules = [
             'site_name' => ['required', 'string', 'max:80'],
             'site_tagline' => ['required', 'string', 'max:160'],
-            'organization_name' => ['nullable', 'string', 'max:120'],
             'primary_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/', function (string $attribute, mixed $value, \Closure $fail) {
                 if (! is_string($value) || ! preg_match('/^#([0-9A-Fa-f]{6})$/', $value, $matches)) {
                     return;
@@ -68,6 +71,9 @@ class SettingController extends Controller
                 Rule::unique('organizations', 'slug')->ignore($organization->id),
             ];
             $rules['organization_timezone'] = ['required', 'timezone:all'];
+            if ($this->isOwner($request->user(), $organization)) {
+                $rules['organization_name'] = ['required', 'string', 'max:120'];
+            }
         }
 
         $data = $request->validate($rules, [
@@ -96,6 +102,15 @@ class SettingController extends Controller
                 'timezone' => $data['organization_timezone'],
             ]);
             unset($data['organization_slug'], $data['organization_timezone']);
+
+            if (isset($data['organization_name']) && $data['organization_name'] !== $organization->name) {
+                AuditLog::record('organization_renamed', 'organization', $organization->id, [
+                    'from' => $organization->name,
+                    'to' => $data['organization_name'],
+                ], $organization->id);
+                $organization->update(['name' => $data['organization_name']]);
+            }
+            unset($data['organization_name']);
         }
 
         if ($request->hasFile('logo')) {
@@ -115,5 +130,14 @@ class SettingController extends Controller
         $settings->fill($data)->save();
 
         return back()->with('sukses', 'Pengaturan publik diperbarui.');
+    }
+
+    private function isOwner(?User $user, ?Organization $organization): bool
+    {
+        return $organization !== null && $user !== null && $user->organizations()
+            ->whereKey($organization->id)
+            ->wherePivot('role', 'owner')
+            ->wherePivot('status', 'active')
+            ->exists();
     }
 }

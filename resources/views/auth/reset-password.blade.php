@@ -72,7 +72,7 @@
                 </form>
 
                 <div class="border-t border-outline pt-4 text-center">
-                    <a href="{{ route('login') }}" class="text-sm font-semibold text-ink-muted hover:text-ink hover:underline">
+                    <a href="{{ route('home') }}" class="text-sm font-semibold text-ink-muted hover:text-ink hover:underline">
                         Kembali ke login
                     </a>
                 </div>

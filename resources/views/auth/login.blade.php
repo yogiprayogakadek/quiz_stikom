@@ -130,7 +130,7 @@
                     {{-- Login Form --}}
                     <form
                         method="POST"
-                        action="{{ route($masterLogin ? 'master.login.store' : 'login.store') }}"
+                        action="{{ $masterLogin ? route('master.login.store') : route('organizations.login.store', $organization) }}"
                         class="mt-6 space-y-4"
                         @submit="submitting = true"
                     >
@@ -243,7 +243,7 @@
                         @endif
                         <p class="text-xs text-ink-subtle">
                             @if ($masterLogin)
-                                Bukan master? <a href="{{ route('login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke login pengguna</a>.
+                                Bukan master? <a href="{{ route('home') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>.
                             @else
                                 Kendala akun? Hubungi admin kelas. Master platform <a href="{{ route('master.login') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">masuk di sini</a>.
                             @endif

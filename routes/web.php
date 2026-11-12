@@ -15,6 +15,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\Master\MailSettingController;
@@ -27,29 +28,20 @@ use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    if (auth()->check()) {
-        return redirect()->route(
-            auth()->user()->isPlatformAdmin()
-                ? 'master.organizations.index'
-                : (auth()->user()->isAdmin() ? 'admin.dashboard' : 'peserta.dashboard')
-        );
-    }
+Route::get('/', HomeController::class)->name('home');
 
-    return redirect()->route('login');
-});
+Route::get('/login', fn () => redirect()->route('home'));
 
 Route::get('/syarat', [LegalController::class, 'terms'])->name('terms.show');
 Route::get('/privasi', [LegalController::class, 'privacy'])->name('privacy.show');
 
 Route::middleware('guest')->group(function () {
-    Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::get('/daftar', [OrganizationRegistrationController::class, 'create'])->name('register.organization');
     Route::post('/daftar', [OrganizationRegistrationController::class, 'store'])
         ->middleware('throttle:5,1')
         ->name('register.organization.store');
     Route::get('/o/{organization:slug}/login', [LoginController::class, 'showOrganization'])->name('organizations.login');
-    Route::post('/login', [LoginController::class, 'login'])->name('login.store');
+    Route::post('/o/{organization:slug}/login', [LoginController::class, 'login'])->name('organizations.login.store');
     Route::get('/lupa-password', [AccountRecoveryController::class, 'requestForm'])->name('password.request');
     Route::post('/lupa-password', [AccountRecoveryController::class, 'sendResetLink'])->name('password.email');
     Route::get('/reset-password/{token}', [AccountRecoveryController::class, 'resetForm'])->name('password.reset');

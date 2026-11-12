@@ -40,12 +40,8 @@
                 <div>
                     <label for="site_name" class="label">Nama aplikasi</label>
                     <input id="site_name" name="site_name" class="input" required maxlength="80" value="{{ old('site_name', $settings->site_name) }}" x-model="siteName">
+                    <p class="help mt-1">Dipakai sebagai judul halaman dan nama platform di navigasi.</p>
                     @error('site_name') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="organization_name" class="label">Nama organisasi <span class="font-normal text-ink-subtle">(opsional)</span></label>
-                    <input id="organization_name" name="organization_name" class="input" maxlength="120" value="{{ old('organization_name', $settings->organization_name) }}">
-                    @error('organization_name') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
                 <div class="sm:col-span-2">
                     <label for="site_tagline" class="label">Deskripsi singkat</label>
@@ -178,6 +174,14 @@
             </div>
             <div class="mt-5 grid gap-5 sm:grid-cols-2">
                 @if ($activeOrganization)
+                    @if ($canRenameOrganization)
+                        <div class="sm:col-span-2">
+                            <label for="organization_name" class="label">Nama organisasi</label>
+                            <input id="organization_name" name="organization_name" class="input" required maxlength="120" value="{{ old('organization_name', $activeOrganization->name) }}">
+                            <p class="help mt-1">Dipakai di pengalih workspace, laporan, dan halaman milik organisasi. Hanya owner yang dapat mengubahnya.</p>
+                            @error('organization_name') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                    @endif
                     <div class="sm:col-span-2">
                         <label for="organization_slug" class="label">Slug alamat login</label>
                         <div class="flex flex-wrap items-center gap-2">

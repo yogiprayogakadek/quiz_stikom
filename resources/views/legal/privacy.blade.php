@@ -1,7 +1,7 @@
 <x-layouts.guest judul="Kebijakan Privasi">
     <div class="mx-auto min-h-screen w-full max-w-3xl px-5 py-10 sm:px-8 sm:py-16">
         <div class="mb-6 flex items-center justify-between gap-4">
-            <a href="{{ route('login') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke login</a>
+            <a href="{{ route('home') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>
             <a href="{{ route('terms.show') }}" class="text-sm font-bold text-brand-deep underline-offset-2 hover:underline">Syarat Penggunaan</a>
         </div>
 

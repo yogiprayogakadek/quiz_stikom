@@ -87,7 +87,7 @@ class OrganizationRegistrationTest extends TestCase
         $this->post(route('register.organization.store'), $this->payload([
             'slug' => 'workspace-bot',
             'website' => 'https://spam.example',
-        ]))->assertRedirect(route('login'));
+        ]))->assertRedirect(route('home'));
 
         $this->assertDatabaseMissing('organizations', ['slug' => 'workspace-bot']);
     }
