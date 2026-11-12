@@ -96,6 +96,40 @@
             </div>
         </section>
 
+        <section class="card" aria-labelledby="tipografi-heading">
+            <div class="border-b border-outline pb-4">
+                <h2 id="tipografi-heading" class="text-2xl">Tipografi</h2>
+                <p class="mt-1 text-base text-ink-muted">Font pilihan berlaku untuk semua halaman workspace ini. Unggahan font ada di kartu bawah halaman.</p>
+            </div>
+            <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                <div>
+                    <label for="font_utama_id" class="label">Font teks isi</label>
+                    <select id="font_utama_id" name="font_utama_id" class="input">
+                        <option value="">Bawaan sistem</option>
+                        @foreach ($fonts as $font)
+                            <option value="{{ $font->id }}" @selected((int) old('font_utama_id', $settings->font_utama_id) === $font->id)>{{ $font->label() }}</option>
+                        @endforeach
+                    </select>
+                    @error('font_utama_id') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label for="font_judul_id" class="label">Font judul</label>
+                    <select id="font_judul_id" name="font_judul_id" class="input">
+                        <option value="">Bawaan sistem</option>
+                        @foreach ($fonts as $font)
+                            <option value="{{ $font->id }}" @selected((int) old('font_judul_id', $settings->font_judul_id) === $font->id)>{{ $font->label() }}</option>
+                        @endforeach
+                    </select>
+                    @error('font_judul_id') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+            </div>
+            @if ($fonts->isEmpty())
+                <p class="mt-4 rounded-xl border border-outline bg-page px-4 py-3 text-sm text-ink-muted">
+                    Belum ada font unggahan. Tambahkan lewat kartu Font di bawah.
+                </p>
+            @endif
+        </section>
+
         <section class="card" aria-labelledby="preview-heading">
             <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
                 <div>
@@ -322,7 +356,7 @@
                         <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" aria-valuenow="{{ $usage['storage_percent'] }}" aria-valuemin="0" aria-valuemax="100" aria-label="Pemakaian kuota penyimpanan">
                             <div @class(['h-full rounded-full', 'bg-coral' => $usage['storage_percent'] >= 100, 'bg-brand' => $usage['storage_percent'] < 100]) style="width: {{ $usage['storage_percent'] }}%"></div>
                         </div>
-                        <p class="mt-2 text-sm text-ink-muted">Sisa {{ number_format(max(0, $usage['storage_limit'] - $usage['storage_used']) / 1048576, 1, ',', '.') }} MB. Logo dan cover kelas dihitung; backup database tidak.</p>
+                        <p class="mt-2 text-sm text-ink-muted">Sisa {{ number_format(max(0, $usage['storage_limit'] - $usage['storage_used']) / 1048576, 1, ',', '.') }} MB. Logo, cover kelas, dan font dihitung; backup database tidak.</p>
                     </div>
                 </div>
                 @if ($usage['ai_percent'] >= 100 || $usage['storage_percent'] >= 100)
@@ -335,4 +369,79 @@
             <button type="submit" class="btn btn-primary">Simpan pengaturan</button>
         </div>
     </form>
+
+    <div class="mt-8 max-w-5xl space-y-5">
+        <section class="card" aria-labelledby="font-unggah-heading">
+            <div class="border-b border-outline pb-4">
+                <h2 id="font-unggah-heading" class="text-2xl">Font</h2>
+                <p class="mt-1 text-base text-ink-muted">Unggah file font per berat. Setiap file muncul sebagai pilihan di bagian Tipografi.</p>
+            </div>
+
+            <form method="POST" action="{{ route('admin.settings.fonts.store') }}" enctype="multipart/form-data" class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                @csrf
+                <div class="sm:col-span-2">
+                    <label for="nama" class="label">Nama font</label>
+                    <input id="nama" name="nama" class="input" required maxlength="60" value="{{ old('nama') }}" placeholder="Contoh: Inter">
+                    @error('nama') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label for="berat" class="label">Berat</label>
+                    <select id="berat" name="berat" class="input">
+                        @foreach (['300' => 'Tipis 300', '400' => 'Normal 400', '500' => 'Sedang 500', '600' => 'Tebal 600', '700' => 'Tebal 700', '800' => 'Sangat tebal 800'] as $nilai => $label)
+                            <option value="{{ $nilai }}" @selected(old('berat', '400') === $nilai)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="gaya" class="label">Gaya</label>
+                    <select id="gaya" name="gaya" class="input">
+                        <option value="normal" @selected(old('gaya', 'normal') === 'normal')>Normal</option>
+                        <option value="italic" @selected(old('gaya') === 'italic')>Miring</option>
+                    </select>
+                </div>
+                <div class="sm:col-span-2 lg:col-span-4">
+                    <label for="berkas" class="label">File font</label>
+                    <input id="berkas" name="berkas" type="file" class="input" required accept=".woff2,.woff,.ttf,.otf">
+                    <p class="help mt-1">Format woff2, woff, ttf, atau otf. Maksimal 4 MB per file.</p>
+                    @error('berkas') <p class="field-error">{{ $message }}</p> @enderror
+                </div>
+                <div class="sm:col-span-2 lg:col-span-4">
+                    <button type="submit" class="btn btn-primary">Unggah font</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card" aria-labelledby="font-daftar-heading">
+            <h2 id="font-daftar-heading" class="text-xl">Font tersedia</h2>
+
+            @if ($fonts->isEmpty())
+                <p class="mt-3 text-base text-ink-muted">Belum ada font unggahan. Semua halaman memakai font bawaan sistem.</p>
+            @else
+                <ul class="mt-4 divide-y divide-outline">
+                    @foreach ($fonts as $font)
+                        <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-base font-bold text-ink">{{ $font->nama }}</p>
+                                <p class="text-sm text-ink-muted">
+                                    {{ $font->berat }}{{ $font->gaya === 'italic' ? ' miring' : '' }} · {{ strtoupper($font->format) }}
+                                    @if ($font->organization_id === null)
+                                        · <span class="font-semibold">Font platform</span>
+                                    @endif
+                                </p>
+                            </div>
+                            @if ($font->organization_id !== null)
+                                <form method="POST" action="{{ route('admin.settings.fonts.destroy', $font) }}" onsubmit="return confirm('Hapus font {{ $font->nama }}?')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-ghost !px-3 !py-2 text-sm">Hapus</button>
+                                </form>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+
+            @error('font') <p class="field-error mt-3">{{ $message }}</p> @enderror
+        </section>
+    </div>
 </x-layouts.admin>

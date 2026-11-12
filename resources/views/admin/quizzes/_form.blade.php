@@ -56,6 +56,45 @@
         </label>
     </div>
 
+    <div>
+        @php
+            $isPercobaan = (bool) old('is_percobaan', $quiz?->is_percobaan ?? false);
+        @endphp
+        <label class="flex items-start gap-3.5 cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:bg-slate-50 transition">
+            <input type="checkbox" name="is_percobaan" value="1" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500" @checked($isPercobaan)>
+            <div class="min-w-0">
+                <span class="text-sm font-bold text-slate-900 block">Kuis percobaan sistem</span>
+                <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    Skor kuis ini tetap disimpan dan tampil di laporan, tetapi tidak masuk leaderboard dan tidak menambah total skor peserta.
+                </p>
+            </div>
+        </label>
+    </div>
+
+    <div>
+        @php
+            $remidiAktif = (bool) old('remidi_aktif', $quiz?->remidi_aktif ?? false);
+        @endphp
+        <div class="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
+            <label class="flex items-start gap-3.5 cursor-pointer">
+                <input type="checkbox" name="remidi_aktif" value="1" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500" @checked($remidiAktif)>
+                <div class="min-w-0">
+                    <span class="text-sm font-bold text-slate-900 block">Aktifkan remidi untuk kuis ini</span>
+                    <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                        Admin bisa membuat sesi remidi dari laporan sesi yang sudah selesai. Soal remidi boleh memakai soal lama atau kuis soal baru.
+                    </p>
+                </div>
+            </label>
+
+            <div class="mt-4 max-w-xs">
+                <label for="remidi_nilai_min" class="label">Nilai minimum lulus (opsional)</label>
+                <input id="remidi_nilai_min" name="remidi_nilai_min" type="number" min="0" max="100" class="input" value="{{ old('remidi_nilai_min', $quiz?->remidi_nilai_min) }}">
+                <p class="help mt-1">Peserta di bawah angka ini ditandai sebagai calon remidi. Kosongkan untuk menampilkan semua peserta.</p>
+                @error('remidi_nilai_min') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+        </div>
+    </div>
+
     @if (isset($quiz))
         <div class="rounded-2xl border border-outline bg-surface p-4">
             <p class="text-sm font-bold text-ink">Kelola soal kuis</p>

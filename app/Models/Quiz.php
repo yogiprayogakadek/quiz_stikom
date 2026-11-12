@@ -18,6 +18,9 @@ class Quiz extends Model
         'jumlah_soal',
         'acak_opsi',
         'auto_grade_essay',
+        'is_percobaan',
+        'remidi_aktif',
+        'remidi_nilai_min',
         'created_by',
     ];
 
@@ -28,6 +31,9 @@ class Quiz extends Model
             'jumlah_soal' => 'integer',
             'acak_opsi' => 'boolean',
             'auto_grade_essay' => 'boolean',
+            'is_percobaan' => 'boolean',
+            'remidi_aktif' => 'boolean',
+            'remidi_nilai_min' => 'integer',
         ];
     }
 

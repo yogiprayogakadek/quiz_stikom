@@ -42,6 +42,12 @@
 
         @if ($session->status === 'selesai')
             <a href="{{ route('admin.reports.session', $session) }}" class="btn btn-primary">Buka laporan</a>
+            @if ($session->jenis === 'utama' && $session->quiz->remidi_aktif && ! $session->quiz->is_percobaan)
+                <a href="{{ route('admin.sessions.remidi.create', $session) }}" class="btn btn-secondary">Buat remidi</a>
+            @endif
+        @endif
+        @if ($session->jenis === 'remidi')
+            <a href="{{ route('admin.sessions.remidi.laporan', $session) }}" class="btn btn-secondary">Laporan remidi</a>
         @endif
     </x-slot:aksi>
 

@@ -19,6 +19,9 @@ class QuizSession extends Model
         'kelas_id',
         'nama',
         'mode',
+        'jenis',
+        'remidi_dari_session_id',
+        'remidi_soal',
         'acak_opsi',
         'tampilkan_pembahasan',
         'pembahasan_mode',
@@ -55,6 +58,21 @@ class QuizSession extends Model
     public function quiz(): BelongsTo
     {
         return $this->belongsTo(Quiz::class);
+    }
+
+    public function remidiDari(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'remidi_dari_session_id');
+    }
+
+    public function remidi(): HasMany
+    {
+        return $this->hasMany(self::class, 'remidi_dari_session_id');
+    }
+
+    public function isRemidi(): bool
+    {
+        return $this->jenis === 'remidi';
     }
 
     public function creator(): BelongsTo

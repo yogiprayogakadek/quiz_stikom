@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\OrganizationSetting;
+use App\Services\FontLibrary;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +25,7 @@ class SettingController extends Controller
         return view('admin.settings.edit', [
             'settings' => app('app.settings'),
             'usage' => $organization ? $usage->summary($organization->id) : null,
+            'fonts' => app(FontLibrary::class)->options($organization?->id),
         ]);
     }
 
@@ -35,6 +37,8 @@ class SettingController extends Controller
             'site_name' => ['required', 'string', 'max:80'],
             'site_tagline' => ['required', 'string', 'max:160'],
             'organization_name' => ['nullable', 'string', 'max:120'],
+            'font_utama_id' => ['nullable', 'integer'],
+            'font_judul_id' => ['nullable', 'integer'],
             'primary_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/', function (string $attribute, mixed $value, \Closure $fail) {
                 if (! is_string($value) || ! preg_match('/^#([0-9A-Fa-f]{6})$/', $value, $matches)) {
                     return;
@@ -77,6 +81,10 @@ class SettingController extends Controller
         ]);
 
         $data['allow_pin_enrollment'] = $request->boolean('allow_pin_enrollment');
+
+        $library = app(FontLibrary::class);
+        $library->assertUsable($data['font_utama_id'] ?? null, $organization?->id, 'font_utama_id');
+        $library->assertUsable($data['font_judul_id'] ?? null, $organization?->id, 'font_judul_id');
 
         $organizationId = $organization?->id;
         $settings = $organizationId === null

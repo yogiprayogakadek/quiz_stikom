@@ -48,6 +48,9 @@ class QuizController extends Controller
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
                 'acak_opsi' => $request->boolean('acak_opsi', true),
                 'auto_grade_essay' => $request->boolean('auto_grade_essay'),
+                'is_percobaan' => $request->boolean('is_percobaan'),
+                'remidi_aktif' => $request->boolean('remidi_aktif'),
+                'remidi_nilai_min' => $data['remidi_nilai_min'] ?? null,
                 'created_by' => request()->user()->id,
             ]);
         });
@@ -77,6 +80,9 @@ class QuizController extends Controller
             'jumlah_soal' => $data['jumlah_soal'] ?? null,
             'acak_opsi' => $request->boolean('acak_opsi'),
             'auto_grade_essay' => $request->boolean('auto_grade_essay'),
+            'is_percobaan' => $request->boolean('is_percobaan'),
+            'remidi_aktif' => $request->boolean('remidi_aktif'),
+            'remidi_nilai_min' => $data['remidi_nilai_min'] ?? null,
         ]);
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis diperbarui.');

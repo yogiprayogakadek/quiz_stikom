@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\GenerateClassCoverJob;
 use App\Models\AiUsageEvent;
 use App\Models\AppSetting;
+use App\Models\Font;
 use App\Models\Kelas;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
@@ -115,5 +116,30 @@ class OrganizationUsageTest extends TestCase
             'kind' => 'cover',
             'requests' => 1,
         ]);
+    }
+
+    public function test_pemakaian_penyimpanan_menghitung_font(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('fonts/alpha.woff2', str_repeat('a', 1024));
+
+        $organization = Organization::create([
+            'name' => 'Alpha',
+            'slug' => 'alpha',
+            'type' => 'education',
+            'timezone' => 'Asia/Singapore',
+            'is_active' => true,
+        ]);
+
+        Font::create([
+            'organization_id' => $organization->id,
+            'nama' => 'Alpha Sans',
+            'file_path' => 'fonts/alpha.woff2',
+            'berat' => '400',
+            'gaya' => 'normal',
+            'format' => 'woff2',
+        ]);
+
+        $this->assertSame(1024, app(OrganizationUsage::class)->storageUsed($organization->id));
     }
 }

@@ -17,6 +17,9 @@ class StoreQuizRequest extends FormRequest
             'jumlah_soal' => ['nullable', 'integer', 'min:1'],
             'acak_opsi' => ['nullable', 'boolean'],
             'auto_grade_essay' => ['nullable', 'boolean'],
+            'is_percobaan' => ['nullable', 'boolean'],
+            'remidi_aktif' => ['nullable', 'boolean'],
+            'remidi_nilai_min' => ['nullable', 'integer', 'min:0', 'max:100'],
         ];
     }
 

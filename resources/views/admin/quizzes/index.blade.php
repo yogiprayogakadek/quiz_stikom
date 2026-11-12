@@ -31,6 +31,12 @@
                         @if ($kuis->auto_grade_essay)
                             <span class="pill pill-sun text-xs">Nilai AI otomatis</span>
                         @endif
+                        @if ($kuis->is_percobaan)
+                            <span class="pill pill-neutral text-xs">Percobaan</span>
+                        @endif
+                        @if ($kuis->remidi_aktif)
+                            <span class="pill pill-brand text-xs">Remidi aktif</span>
+                        @endif
                     </div>
 
                     <h2 class="mt-3 text-2xl">{{ $kuis->judul }}</h2>

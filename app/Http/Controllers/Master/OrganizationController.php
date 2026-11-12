@@ -203,7 +203,14 @@ class OrganizationController extends Controller
 
         $logoPath = DB::table('organization_settings')->where('organization_id', $organization->id)->value('logo_path');
         $coverPaths = DB::table('kelas')->where('organization_id', $organization->id)->whereNotNull('cover_path')->pluck('cover_path');
-        $files = $coverPaths->when($logoPath !== null, fn ($paths) => $paths->push($logoPath))->filter()->unique()->values()->all();
+        $fontPaths = DB::table('fonts')->where('organization_id', $organization->id)->pluck('file_path');
+        $files = $coverPaths
+            ->merge($fontPaths)
+            ->when($logoPath !== null, fn ($paths) => $paths->push($logoPath))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         DB::transaction(function () use ($organization) {
             $sessionIds = DB::table('quiz_sessions')->where('organization_id', $organization->id)->pluck('id');

@@ -442,6 +442,10 @@
                     <div class="rounded-panel border border-outline bg-page p-8">
                         <h2 class="text-3xl">Papan skor sementara</h2>
 
+                        <p x-show="state?.percobaan" class="mt-4 rounded-2xl bg-surface px-5 py-4 text-lg font-semibold text-ink-muted">
+                            Kuis percobaan sistem. Skor tetap disimpan di laporan, tetapi tidak dihitung di leaderboard.
+                        </p>
+
                         <template x-if="daftarSkor.length">
                             <ol class="mt-6 max-h-[24rem] space-y-3 overflow-y-auto pr-2">
                                 <template x-for="baris in leaderboardHalaman" :key="baris.posisi">
@@ -460,6 +464,7 @@
 
                         <template x-if="daftarSkor.length === 0">
                             <p
+                                x-show="!state?.percobaan"
                                 class="mt-6 text-xl text-ink-muted"
                                 x-text="state.leaderboard_live
                                     ? 'Belum ada peserta yang selesai. Leaderboard muncul setelah peserta pertama menyelesaikan semua soal.'

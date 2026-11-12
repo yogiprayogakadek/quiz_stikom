@@ -13,6 +13,8 @@ class OrganizationSetting extends Model
         'site_tagline',
         'organization_name',
         'primary_color',
+        'font_utama_id',
+        'font_judul_id',
         'logo_path',
         'login_title',
         'login_description',
@@ -36,6 +38,8 @@ class OrganizationSetting extends Model
             'image_api_key' => 'encrypted',
             'ai_timeout' => 'integer',
             'allow_pin_enrollment' => 'boolean',
+            'font_utama_id' => 'integer',
+            'font_judul_id' => 'integer',
         ];
     }
 

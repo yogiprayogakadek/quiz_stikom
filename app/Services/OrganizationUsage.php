@@ -69,6 +69,9 @@ class OrganizationUsage
                 ->where('organization_id', $organizationId)
                 ->whereNotNull('cover_path')
                 ->pluck('cover_path'))
+            ->merge(DB::table('fonts')
+                ->where('organization_id', $organizationId)
+                ->pluck('file_path'))
             ->unique();
 
         $disk = Storage::disk('public');

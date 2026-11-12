@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\FontController;
 use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\RemedialController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
@@ -122,6 +124,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('backups.download');
     Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('settings/fonts', [FontController::class, 'store'])->name('settings.fonts.store');
+    Route::delete('settings/fonts/{font}', [FontController::class, 'destroy'])->name('settings.fonts.destroy');
     Route::middleware('organization_owner')->group(function () {
         Route::get('team', [TeamController::class, 'index'])->name('team.index');
         Route::post('team', [TeamController::class, 'store'])->name('team.store');
@@ -182,6 +186,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('sessions.attempts.reset');
     Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
         ->name('sessions.attempts.kick');
+
+    Route::get('sessions/{session}/remidi', [RemedialController::class, 'create'])->name('sessions.remidi.create');
+    Route::post('sessions/{session}/remidi', [RemedialController::class, 'store'])->name('sessions.remidi.store');
+    Route::post('sessions/{session}/remidi/kuis', [RemedialController::class, 'buatKuis'])->name('sessions.remidi.kuis');
+    Route::get('sessions/{session}/remidi/laporan', [RemedialController::class, 'laporan'])->name('sessions.remidi.laporan');
+    Route::post('sessions/{session}/remidi/terapkan', [RemedialController::class, 'terapkan'])->name('sessions.remidi.terapkan');
+    Route::get('sessions/{session}/remidi/laporan/csv', [RemedialController::class, 'export'])->name('sessions.remidi.export');
 });
 
 Route::middleware(['auth', 'role:peserta', 'organization_member'])->group(function () {

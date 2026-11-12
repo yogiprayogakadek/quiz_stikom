@@ -219,7 +219,8 @@ class QuizEngine
             'jumlah_benar' => $benar,
             'poin_total' => $poin,
             'poin_maksimal' => $maksimal,
-            'skor_total' => $maksimal > 0 ? (int) round($poin / $maksimal * 100) : 0,
+            'skor_total' => $skor = $maksimal > 0 ? (int) round($poin / $maksimal * 100) : 0,
+            'nilai' => max(0, min(100, $skor)),
         ]);
 
         return $attempt->fresh();
@@ -565,6 +566,12 @@ class QuizEngine
 
             if ($attempt->status === 'berjalan' && $session->mode === 'acak') {
                 $this->hitungSelesaiAcakTerkunci($attempt);
+            } elseif ($session->mode === 'serempak') {
+                $this->hitungUlangSkorSerempak($attempt->id);
+                $attempt->update([
+                    'status' => 'selesai',
+                    'selesai_at' => now()->getTimestampMs(),
+                ]);
             } else {
                 $attempt->update([
                     'status' => 'selesai',
@@ -639,7 +646,7 @@ class QuizEngine
         }
     }
 
-    private function hitungUlangSkorSerempak(int $attemptId): void
+    public function hitungUlangSkorSerempak(int $attemptId): void
     {
         $attempt = Attempt::find($attemptId);
 
@@ -655,9 +662,13 @@ class QuizEngine
             ->where('options.is_correct', true)
             ->count();
 
+        $totalSoal = max(1, $attempt->quizSession?->sessionQuestions()->count() ?? 1);
+        $skor = (int) $answers->sum('skor');
+
         $attempt->update([
             'jumlah_benar' => $benar,
-            'skor_total' => (int) $answers->sum('skor'),
+            'skor_total' => $skor,
+            'nilai' => max(0, min(100, (int) round($skor / ($totalSoal * 1000) * 100))),
         ]);
     }
 
@@ -698,11 +709,15 @@ class QuizEngine
 
     public function leaderboard(QuizSession $session, ?int $limit = 5): array
     {
+        if ($session->quiz?->is_percobaan) {
+            return [];
+        }
+
         return $session->attempts()
             ->bergabung()
             ->when($session->mode === 'acak', fn ($q) => $q->where('status', 'selesai'))
             ->when($session->mode === 'serempak', fn ($q) => $q->where('status', '!=', 'menunggu'))
-            ->orderByDesc('skor_total')
+            ->orderByDesc('nilai')
             ->orderBy('selesai_at')
             ->when($limit !== null, fn ($q) => $q->limit($limit))
             ->with('user')
@@ -712,6 +727,7 @@ class QuizEngine
                 'posisi' => $i + 1,
                 'nama' => $a->user->nama,
                 'skor' => $a->skor_total,
+                'nilai' => (int) $a->nilai,
             ])
             ->all();
     }
@@ -741,6 +757,7 @@ class QuizEngine
             'kuis' => $session->quiz->judul,
             'mode' => $session->mode,
             'status' => $session->status,
+            'percobaan' => (bool) $session->quiz->is_percobaan,
             'server_now' => now()->getTimestampMs(),
             'total_peserta' => $session->attempts()->bergabung()->count(),
             'peringatan' => $this->peringatanTerbaru($session),
@@ -912,7 +929,7 @@ class QuizEngine
             ->all();
 
         return [
-            'leaderboard' => $attempts
+            'leaderboard' => $session->quiz->is_percobaan ? [] : $attempts
                 ->sortBy([['skor_total', 'desc'], ['selesai_at', 'asc']])
                 ->values()
                 ->map(fn (Attempt $a, int $i) => [

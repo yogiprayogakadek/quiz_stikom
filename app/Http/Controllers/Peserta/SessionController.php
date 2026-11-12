@@ -12,6 +12,7 @@ use App\Models\Attempt;
 use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Models\ParticipantLoginActivity;
+use App\Models\QuizGrade;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\QuizEngine;
@@ -267,6 +268,7 @@ class SessionController extends Controller
             'rincian' => $rincian,
             'tampilkan' => $tampilkan,
             'total_soal' => $attemptQuestions->count(),
+            'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
         ]);
     }
 
@@ -344,11 +346,14 @@ class SessionController extends Controller
                     ->where('options.is_correct', true)
                     ->count();
 
+                $skor = $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0;
+
                 $attempt->update([
                     'status' => 'selesai',
                     'selesai_at' => now()->getTimestampMs(),
                     'jumlah_benar' => $benar,
-                    'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
+                    'skor_total' => $skor,
+                    'nilai' => max(0, min(100, $skor)),
                 ]);
 
                 $freshSession = $session->fresh();

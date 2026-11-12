@@ -24,6 +24,7 @@ class Attempt extends Model
         'last_seen_at',
         'jumlah_benar',
         'skor_total',
+        'nilai',
         'poin_total',
         'poin_maksimal',
     ];
@@ -38,6 +39,7 @@ class Attempt extends Model
             'last_seen_at' => 'integer',
             'jumlah_benar' => 'integer',
             'skor_total' => 'integer',
+            'nilai' => 'integer',
             'poin_total' => 'integer',
             'poin_maksimal' => 'integer',
         ];
