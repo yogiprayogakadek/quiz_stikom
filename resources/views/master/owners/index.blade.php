@@ -72,10 +72,7 @@
                             <tbody class="divide-y divide-outline">
                                 @foreach ($owners as $owner)
                                     @php
-                                        $punyaPermintaanPending = $pendingRequests->contains('requester_id', $owner->id);
-                                        $bisaDihapus = $owner->owned_organizations_count === 0
-                                            && $owner->organizations_count === 0
-                                            && ! $punyaPermintaanPending;
+                                        $alasanTidakBisaDihapus = $owner->orphanDeletionBlocker();
                                     @endphp
                                     <tr
                                         data-item
@@ -104,7 +101,7 @@
                                         </td>
                                         <td class="px-3 py-3 align-top text-ink-muted">{{ $owner->owned_organizations_count }}</td>
                                         <td class="px-3 py-3 text-right align-top">
-                                            @if ($bisaDihapus)
+                                            @if ($alasanTidakBisaDihapus === null)
                                                 <form
                                                     method="POST"
                                                     action="{{ route('master.owners.destroy', $owner) }}"
@@ -116,9 +113,9 @@
                                                         Hapus akun
                                                     </button>
                                                 </form>
-                                            @elseif ($owner->owned_organizations_count === 0 && $owner->organizations_count > 0)
+                                            @elseif ($alasanTidakBisaDihapus === 'member')
                                                 <span class="text-xs text-ink-subtle">Masih anggota workspace</span>
-                                            @elseif ($owner->owned_organizations_count === 0 && $punyaPermintaanPending)
+                                            @elseif ($alasanTidakBisaDihapus === 'pending')
                                                 <span class="text-xs text-ink-subtle">Permintaan pending</span>
                                             @endif
                                         </td>

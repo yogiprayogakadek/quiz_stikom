@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\WorkspaceRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -91,6 +92,7 @@ class WorkspaceOwnershipTest extends TestCase
         $this->assertSoftDeleted('users', ['id' => $owner->id]);
         $this->assertNull(User::withTrashed()->findOrFail($owner->id)->current_session_token);
         $this->assertDatabaseHas('audit_logs', [
+            'organization_id' => null,
             'action' => 'owner_deleted',
             'subject_type' => 'user',
             'subject_id' => $owner->id,
@@ -165,6 +167,65 @@ class WorkspaceOwnershipTest extends TestCase
             ->assertNotFound();
 
         $this->assertNotSoftDeleted('users', ['id' => $master->id]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_admin_dengan_keanggotaan_nonaktif(): void
+    {
+        $master = $this->master();
+        $admin = $this->admin('admin_nonaktif');
+        $admin->organizations()->detach();
+        $organization = $this->organization('gamma', 'Gamma');
+        $organization->users()->attach($admin->id, [
+            'role' => 'admin',
+            'status' => 'inactive',
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $admin))
+            ->assertStatus(422);
+
+        $this->assertNotSoftDeleted('users', ['id' => $admin->id]);
+    }
+
+    public function test_master_tidak_dapat_menghapus_akun_peserta(): void
+    {
+        $master = $this->master();
+        $participant = User::create([
+            'nama' => 'Peserta Yatim',
+            'username' => 'peserta_yatim',
+            'password' => Hash::make('password'),
+            'role' => 'peserta',
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $participant))
+            ->assertNotFound();
+
+        $this->assertNotSoftDeleted('users', ['id' => $participant->id]);
+    }
+
+    public function test_guard_penghapusan_owner_dijalankan_di_dalam_transaksi(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_yatim');
+        $owner->organizations()->detach();
+
+        $levels = [];
+        DB::listen(function ($query) use (&$levels) {
+            if (str_contains($query->sql, 'count(*)') && str_contains($query->sql, 'organization_memberships')) {
+                $levels[] = DB::transactionLevel();
+            }
+        });
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->delete(route('master.owners.destroy', $owner))
+            ->assertRedirect(route('master.owners.index'));
+
+        $this->assertNotEmpty($levels);
+        $this->assertSame(2, $levels[0]);
     }
 
     public function test_daftar_owner_menampilkan_hapus_hanya_untuk_akun_yatim(): void

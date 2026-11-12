@@ -3,14 +3,14 @@
 namespace App\Models;
 
 use App\Support\OrganizationContext;
+use Illuminate\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
-use Illuminate\Auth\MustVerifyEmail;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
 
@@ -119,6 +119,34 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->organizations()
             ->wherePivot('role', 'owner')
             ->wherePivot('status', 'active');
+    }
+
+    public function workspaceRequests(): HasMany
+    {
+        return $this->hasMany(WorkspaceRequest::class, 'requester_id');
+    }
+
+    public function orphanDeletionBlocker(): ?string
+    {
+        $owned = $this->owned_organizations_count ?? $this->ownedOrganizations()->count();
+        $memberships = $this->organizations_count ?? $this->organizations()->count();
+        $pending = $this->has_pending_workspace_request ?? $this->workspaceRequests()
+            ->where('status', WorkspaceRequest::STATUS_PENDING)
+            ->exists();
+
+        if ($owned > 0) {
+            return 'owned';
+        }
+
+        if ($memberships > 0) {
+            return 'member';
+        }
+
+        if ($pending) {
+            return 'pending';
+        }
+
+        return null;
     }
 
     public function organizationMemberships(): HasMany

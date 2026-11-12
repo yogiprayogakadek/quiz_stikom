@@ -22,8 +22,11 @@ class OwnerController extends Controller
             ->where('role', 'admin')
             ->where('is_platform_admin', false)
             ->with(['ownedOrganizations' => fn ($query) => $query->orderBy('name')])
-            ->withCount('ownedOrganizations')
-            ->withCount('organizations')
+            ->withCount(['ownedOrganizations', 'organizations'])
+            ->withExists([
+                'workspaceRequests as has_pending_workspace_request' => fn ($query) => $query
+                    ->where('status', WorkspaceRequest::STATUS_PENDING),
+            ])
             ->orderBy('nama')
             ->get();
 
@@ -38,30 +41,48 @@ class OwnerController extends Controller
 
     public function destroy(User $owner): RedirectResponse
     {
-        abort_unless($owner->isAdmin() && ! $owner->isPlatformAdmin(), 404);
-
-        abort_if($owner->ownedOrganizations()->exists(), 422, 'Owner ini masih memiliki workspace.');
-        abort_if($owner->organizations()->exists(), 422, 'Akun ini masih terdaftar di sebuah workspace.');
-        abort_if(
-            WorkspaceRequest::query()
-                ->where('requester_id', $owner->id)
-                ->where('status', WorkspaceRequest::STATUS_PENDING)
-                ->exists(),
-            422,
-            'Akun ini masih memiliki permintaan workspace pending.',
-        );
-
         DB::transaction(function () use ($owner) {
+            $locked = User::query()
+                ->whereKey($owner->getKey())
+                ->withCount(['ownedOrganizations', 'organizations'])
+                ->withExists([
+                    'workspaceRequests as has_pending_workspace_request' => fn ($query) => $query
+                        ->where('status', WorkspaceRequest::STATUS_PENDING),
+                ])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            abort_unless($locked->isAdmin() && ! $locked->isPlatformAdmin(), 404);
+
+            $blocker = $locked->orphanDeletionBlocker();
+
+            if ($blocker !== null) {
+                abort(422, match ($blocker) {
+                    'owned' => 'Owner ini masih memiliki workspace.',
+                    'member' => 'Akun ini masih terdaftar di sebuah workspace.',
+                    'pending' => 'Akun ini masih memiliki permintaan workspace pending.',
+                    default => 'Akun ini masih terhubung ke workspace.',
+                });
+            }
+
             $metadata = [
-                'name' => $owner->nama,
-                'username' => $owner->username,
-                'email' => $owner->email,
+                'name' => $locked->nama,
+                'username' => $locked->username,
+                'email' => $locked->email,
             ];
 
-            $owner->forceFill(['current_session_token' => null])->save();
-            $owner->delete();
+            $locked->forceFill(['current_session_token' => null])->save();
+            $locked->delete();
 
-            AuditLog::record('owner_deleted', 'user', $owner->id, $metadata);
+            AuditLog::create([
+                'organization_id' => null,
+                'actor_id' => auth()->id(),
+                'action' => 'owner_deleted',
+                'subject_type' => 'user',
+                'subject_id' => $locked->id,
+                'metadata' => $metadata,
+                'ip_address' => request()->ip(),
+            ]);
         });
 
         return redirect()
