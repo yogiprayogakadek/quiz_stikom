@@ -45,6 +45,13 @@ class Organization extends Model
             ->withTimestamps();
     }
 
+    public function owners(): BelongsToMany
+    {
+        return $this->users()
+            ->wherePivot('role', 'owner')
+            ->wherePivot('status', 'active');
+    }
+
     public function kelas(): HasMany
     {
         return $this->hasMany(Kelas::class);
