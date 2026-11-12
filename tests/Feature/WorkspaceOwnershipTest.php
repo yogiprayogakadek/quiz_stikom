@@ -47,6 +47,34 @@ class WorkspaceOwnershipTest extends TestCase
         ]);
     }
 
+    public function test_master_melihat_daftar_owner_dan_workspace(): void
+    {
+        $master = $this->master();
+        $owner = $this->admin('owner_alpha');
+        $organization = $this->organization('alpha', 'Alpha');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.owners.index'))
+            ->assertOk()
+            ->assertSee('owner_alpha')
+            ->assertSee('Alpha');
+    }
+
+    public function test_admin_biasa_tidak_dapat_melihat_daftar_owner(): void
+    {
+        $owner = $this->admin('owner_biasa');
+
+        $this->actingAs($owner)
+            ->withSession(['auth_token' => $owner->current_session_token])
+            ->get(route('master.owners.index'))
+            ->assertForbidden();
+    }
+
     private function master(): User
     {
         $master = User::create([

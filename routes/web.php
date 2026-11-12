@@ -21,6 +21,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Master\MailSettingController;
 use App\Http\Controllers\Master\OrganizationController;
+use App\Http\Controllers\Master\OwnerController;
 use App\Http\Controllers\Master\SystemController;
 use App\Http\Controllers\Master\SystemHealthController;
 use App\Http\Controllers\OrganizationSwitchController;
@@ -80,6 +81,7 @@ Route::get('/display/{token}/state', [DisplayController::class, 'state'])
 
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
+    Route::get('owners', [OwnerController::class, 'index'])->name('owners.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/kuota', [OrganizationController::class, 'editLimits'])->name('organizations.limits.edit');
     Route::put('organizations/{organization}/kuota', [OrganizationController::class, 'updateLimits'])->name('organizations.limits.update');
