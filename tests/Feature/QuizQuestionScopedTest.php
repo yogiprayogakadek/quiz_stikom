@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Kelas;
 use App\Models\Question;
 use App\Models\Quiz;
+use App\Models\QuizSession;
+use App\Models\SessionQuestion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -199,6 +201,176 @@ class QuizQuestionScopedTest extends TestCase
 
         $this->assertDatabaseMissing('quizzes', ['id' => $quiz->id]);
         $this->assertDatabaseMissing('questions', ['id' => $question->id]);
+    }
+
+    public function test_admin_menghapus_beberapa_soal_sekaligus_dan_melewati_soal_terkunci(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Bulk',
+            'username' => 'admin-quiz-bulk',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-bulk-token',
+        ]);
+
+        $kelas1 = Kelas::create(['nama' => 'Kelas Bulk 1', 'pin' => '444444', 'created_by' => $admin->id]);
+        $kelas2 = Kelas::create(['nama' => 'Kelas Bulk 2', 'pin' => '555555', 'created_by' => $admin->id]);
+
+        $quiz1 = Quiz::create(['kelas_id' => $kelas1->id, 'judul' => 'Kuis Bulk', 'created_by' => $admin->id]);
+        $quiz2 = Quiz::create(['kelas_id' => $kelas2->id, 'judul' => 'Kuis Lain', 'created_by' => $admin->id]);
+
+        $bisaDihapus1 = Question::create([
+            'quiz_id' => $quiz1->id,
+            'teks' => 'Soal bisa dihapus satu',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+        $bisaDihapus2 = Question::create([
+            'quiz_id' => $quiz1->id,
+            'teks' => 'Soal bisa dihapus dua',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+        $terkunci = Question::create([
+            'quiz_id' => $quiz1->id,
+            'teks' => 'Soal terkunci',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+        $milikKuisLain = Question::create([
+            'quiz_id' => $quiz2->id,
+            'teks' => 'Soal milik kuis lain',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+
+        $sesiLain = QuizSession::create([
+            'quiz_id' => $quiz2->id,
+            'kelas_id' => $kelas2->id,
+            'nama' => 'Sesi Lain',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-bulk-lain',
+            'created_by' => $admin->id,
+        ]);
+
+        SessionQuestion::create([
+            'quiz_session_id' => $sesiLain->id,
+            'question_id' => $terkunci->id,
+            'urutan' => 1,
+        ]);
+
+        $halaman = $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->get(route('admin.quizzes.questions.index', $quiz1));
+
+        $halaman->assertOk();
+        $halaman->assertSee('Pilih semua');
+        $halaman->assertSee('form-hapus-soal-massal');
+        $this->assertSame(2, substr_count($halaman->getContent(), 'name="question_ids[]"'));
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->delete(route('admin.quizzes.questions.bulk-destroy', $quiz1), [
+                'question_ids' => [
+                    $bisaDihapus1->id,
+                    $bisaDihapus2->id,
+                    $terkunci->id,
+                    $milikKuisLain->id,
+                ],
+            ]);
+
+        $response->assertRedirect(route('admin.quizzes.questions.index', $quiz1));
+        $response->assertSessionHas('sukses', fn (string $pesan) => str_contains($pesan, '2 soal dihapus')
+            && str_contains($pesan, '2 soal dilewati'));
+
+        $this->assertSoftDeleted('questions', ['id' => $bisaDihapus1->id]);
+        $this->assertSoftDeleted('questions', ['id' => $bisaDihapus2->id]);
+        $this->assertNotSoftDeleted('questions', ['id' => $terkunci->id]);
+        $this->assertNotSoftDeleted('questions', ['id' => $milikKuisLain->id]);
+    }
+
+    public function test_bulk_hapus_menolak_jika_semua_soal_terkunci(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Bulk Terkunci',
+            'username' => 'admin-quiz-bulk-locked',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-bulk-locked-token',
+        ]);
+
+        $kelas = Kelas::create(['nama' => 'Kelas Terkunci', 'pin' => '666666', 'created_by' => $admin->id]);
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Terkunci', 'created_by' => $admin->id]);
+
+        $soal1 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal terkunci satu',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+        $soal2 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal terkunci dua',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+
+        QuizSession::create([
+            'quiz_id' => $quiz->id,
+            'kelas_id' => $kelas->id,
+            'nama' => 'Sesi Terkunci',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-bulk-terkunci',
+            'created_by' => $admin->id,
+        ]);
+
+        $halaman = $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->get(route('admin.quizzes.questions.index', $quiz));
+
+        $halaman->assertOk();
+        $halaman->assertDontSee('Pilih semua');
+        $this->assertSame(0, substr_count($halaman->getContent(), 'name="question_ids[]"'));
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->delete(route('admin.quizzes.questions.bulk-destroy', $quiz), [
+                'question_ids' => [$soal1->id, $soal2->id],
+            ]);
+
+        $response->assertSessionHasErrors('questions');
+        $this->assertNotSoftDeleted('questions', ['id' => $soal1->id]);
+        $this->assertNotSoftDeleted('questions', ['id' => $soal2->id]);
+    }
+
+    public function test_bulk_hapus_menolak_pilihan_kosong(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Bulk Kosong',
+            'username' => 'admin-quiz-bulk-empty',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-bulk-empty-token',
+        ]);
+
+        $kelas = Kelas::create(['nama' => 'Kelas Kosong', 'pin' => '777777', 'created_by' => $admin->id]);
+        $quiz = Quiz::create(['kelas_id' => $kelas->id, 'judul' => 'Kuis Kosong', 'created_by' => $admin->id]);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->delete(route('admin.quizzes.questions.bulk-destroy', $quiz), [
+                'question_ids' => [],
+            ]);
+
+        $response->assertSessionHasErrors('question_ids');
     }
 
     public function test_participant_must_enroll_class_to_see_quizzes(): void

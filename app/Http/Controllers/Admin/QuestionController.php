@@ -30,11 +30,9 @@ class QuestionController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        $terkunci = Question::whereIn('id', $questions->pluck('id'))
-            ->get()
-            ->filter(fn (Question $q) => $q->isLocked())
-            ->pluck('id')
-            ->all();
+        $ids = $questions->pluck('id');
+        $terbuka = Question::whereIn('id', $ids)->unlocked()->pluck('id')->all();
+        $terkunci = $ids->diff($terbuka)->values()->all();
 
         return view('admin.questions.index', compact('questions', 'terkunci', 'quiz'));
     }
@@ -163,6 +161,38 @@ class QuestionController extends Controller
         }
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Soal dihapus.');
+    }
+
+    public function bulkDestroy(Request $request, Quiz $quiz): RedirectResponse
+    {
+        $data = $request->validate([
+            'question_ids' => ['required', 'array', 'min:1'],
+            'question_ids.*' => ['integer'],
+        ], [
+            'question_ids.required' => 'Pilih minimal satu soal.',
+            'question_ids.array' => 'Pilihan soal tidak valid.',
+            'question_ids.min' => 'Pilih minimal satu soal.',
+            'question_ids.*.integer' => 'Pilihan soal tidak valid.',
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $data['question_ids'])));
+        $bisaDihapus = $quiz->questions()->whereIn('id', $ids)->unlocked()->get();
+        $dihapus = $bisaDihapus->count();
+
+        if ($dihapus === 0) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['questions' => 'Tidak ada soal yang bisa dihapus. Soal mungkin terkunci atau bukan milik kuis ini.']);
+        }
+
+        $bisaDihapus->each->delete();
+
+        $dilewati = count($ids) - $dihapus;
+        $pesan = "{$dihapus} soal dihapus.";
+        if ($dilewati > 0) {
+            $pesan .= " {$dilewati} soal dilewati karena terkunci atau bukan milik kuis ini.";
+        }
+
+        return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', $pesan);
     }
 
     private function simpanOpsi(Question $question, array $opsi, int $correct): void

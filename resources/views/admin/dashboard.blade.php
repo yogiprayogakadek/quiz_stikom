@@ -954,41 +954,78 @@
                 </div>
             </div>
 
-            {{-- WIDGET 2: HASIL NILAI TERBARU --}}
-            <div class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs">
+            {{-- WIDGET 2: NILAI TERTINGGI --}}
+            <div id="nilai-tertinggi" class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-display text-base font-extrabold text-slate-900">Nilai Terbaru</h3>
+                    <h3 class="font-display text-base font-extrabold text-slate-900">Nilai Tertinggi</h3>
                     <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Selesai</span>
                 </div>
 
+                <form method="GET" action="{{ route('admin.dashboard') }}#nilai-tertinggi" class="mb-4 space-y-3">
+                    <div>
+                        <label for="filter-kelas-nilai" class="label">Kelas</label>
+                        <select id="filter-kelas-nilai" name="kelas" class="input">
+                            <option value="">Semua kelas</option>
+                            @foreach ($opsiKelas as $opsi)
+                                <option value="{{ $opsi->kelas_id }}" @selected((int) $filterKelasId === (int) $opsi->kelas_id)>{{ $opsi->kelas_nama }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filter-kuis-nilai" class="label">Kuis</label>
+                        <select id="filter-kuis-nilai" name="kuis" class="input">
+                            <option value="">Semua kuis</option>
+                            @foreach ($opsiKuis as $opsi)
+                                <option value="{{ $opsi->kuis_id }}" @selected((int) $filterKuisId === (int) $opsi->kuis_id)>{{ $opsi->kuis_judul }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="submit" class="btn btn-secondary min-h-11">Terapkan</button>
+                        @if ($filterKelasId !== null || $filterKuisId !== null)
+                            <a href="{{ route('admin.dashboard') }}#nilai-tertinggi" class="btn btn-ghost min-h-11">Reset</a>
+                        @endif
+                    </div>
+                </form>
+
                 @if ($leaderboardTerbaru->isEmpty())
-                    <p class="text-xs text-slate-500 py-4 text-center">Belum ada peserta yang menyelesaikan ujian.</p>
+                    <div class="py-4 text-center">
+                        <p class="text-xs text-slate-500">Belum ada nilai yang cocok dengan filter ini.</p>
+                        @if ($filterKelasId !== null || $filterKuisId !== null)
+                            <a href="{{ route('admin.dashboard') }}#nilai-tertinggi" class="mt-2 inline-block text-xs font-extrabold text-blue-600 hover:underline">
+                                Tampilkan semua nilai
+                            </a>
+                        @endif
+                    </div>
                 @else
                     <div class="space-y-3">
-                        @foreach ($leaderboardTerbaru as $idx => $attempt)
+                        @foreach ($leaderboardTerbaru as $idx => $baris)
                             <div class="flex items-center justify-between gap-3 p-2.5 rounded-2xl hover:bg-slate-50 transition">
                                 <div class="flex items-center gap-3 min-w-0">
                                     <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-extrabold {{ $idx === 0 ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600' }}">
                                         {{ $idx + 1 }}
                                     </span>
                                     <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-700 text-xs font-bold font-display">
-                                        {{ strtoupper(substr($attempt->user->nama ?? 'P', 0, 1)) }}
+                                        {{ strtoupper(substr($baris->nama ?? 'P', 0, 1)) }}
                                     </div>
                                     <div class="min-w-0">
                                         <p class="text-xs font-bold text-slate-800 truncate">
-                                            {{ $attempt->user->nama ?? '-' }}
+                                            {{ $baris->nama ?? '-' }}
                                         </p>
                                         <p class="text-[10px] text-slate-400 truncate">
-                                            {{ $attempt->quizSession->quiz->judul ?? '-' }}
+                                            {{ $baris->kuis_judul ?? '-' }}
+                                            <span aria-hidden="true">·</span>
+                                            {{ $baris->kelas_nama ?? 'Tanpa kelas' }}
                                         </p>
                                     </div>
                                 </div>
                                 <span class="text-xs font-extrabold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg tabular-nums">
-                                    Skor {{ $attempt->skor_total ?? 0 }}
+                                    Nilai {{ (int) $baris->nilai }}
                                 </span>
                             </div>
                         @endforeach
                     </div>
+                    <p class="mt-3 text-xs text-slate-500">Nilai terbaik per peserta per kuis. Kuis percobaan tidak dihitung.</p>
                 @endif
             </div>
 

@@ -57,8 +57,58 @@
             @endif
         </x-empty-state>
     @else
-        <div class="mt-6">
+        @php
+            $adaSoalTerbuka = isset($quiz) && $questions->count() > count($terkunci);
+        @endphp
+        <div
+            class="mt-6"
+            x-data="{
+                terpilih: [],
+                semua: false,
+                pilihSemua() {
+                    this.semua = ! this.semua;
+                    this.terpilih = this.semua
+                        ? Array.from(this.$root.querySelectorAll('input[data-pilih-soal]')).map((el) => el.value)
+                        : [];
+                },
+            }"
+        >
+            @if ($adaSoalTerbuka)
+                <form
+                    id="form-hapus-soal-massal"
+                    method="POST"
+                    action="{{ route('admin.quizzes.questions.bulk-destroy', $quiz) }}"
+                    onsubmit="return confirm('Hapus soal yang dipilih?')"
+                >
+                    @csrf
+                    @method('DELETE')
+                </form>
+            @endif
+
             <x-data-table :per-page="10" search-placeholder="Cari teks soal, tipe, atau pembahasan">
+                @if ($adaSoalTerbuka)
+                    <x-slot:toolbarAksi>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                @click="pilihSemua()"
+                                class="btn btn-secondary min-h-11"
+                                :aria-pressed="semua"
+                            >
+                                <span x-text="semua ? 'Batal pilih semua' : 'Pilih semua'"></span>
+                            </button>
+                            <button
+                                type="submit"
+                                form="form-hapus-soal-massal"
+                                class="btn btn-ghost min-h-11 text-coral-deep disabled:pointer-events-none disabled:opacity-40"
+                                :disabled="terpilih.length === 0"
+                            >
+                                Hapus terpilih (<span x-text="terpilih.length"></span>)
+                            </button>
+                        </div>
+                    </x-slot:toolbarAksi>
+                @endif
+
                 <ul class="space-y-3">
                     @foreach ($questions as $soal)
                         @php
@@ -72,41 +122,58 @@
                             data-item-key="{{ $soal->id }}"
                             data-search="{{ $soal->teks }} {{ $soal->tipe }} {{ $soal->pembahasan }}"
                         >
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="pill {{ $soal->tipe === 'essay' ? 'pill-sun' : 'pill-leaf' }}">{{ $soal->tipe === 'essay' ? 'Essay' : 'Pilihan ganda' }}</span>
-                                <span class="pill pill-neutral">Bobot {{ $soal->bobot }}</span>
-                                @if ($soal->tipe !== 'essay')
-                                    <span class="pill pill-neutral">{{ $soal->options_count }} opsi</span>
-                                @endif
-                                <span class="pill pill-brand">{{ $soal->durasi_detik }} detik</span>
-                                @if ($soalTerkunci)
-                                    <span class="pill pill-sun">
-                                        <x-icon name="lock" :size="14" />
-                                        Terkunci di sesi
-                                    </span>
-                                @endif
-                            </div>
-                            <p class="mt-3 text-lg font-bold text-ink">{{ \Illuminate\Support\Str::limit($soal->teks, 180) }}</p>
-                            @if ($soal->pembahasan)
-                                <p class="mt-1 text-base text-ink-muted">Ada pembahasan</p>
-                            @endif
-                        </div>
+                            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="flex min-w-0 flex-1 items-start gap-3">
+                                    @if (! $soalTerkunci && isset($quiz))
+                                        <label class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl hover:bg-slate-50">
+                                            <input
+                                                type="checkbox"
+                                                name="question_ids[]"
+                                                value="{{ $soal->id }}"
+                                                form="form-hapus-soal-massal"
+                                                data-pilih-soal
+                                                x-model="terpilih"
+                                                class="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            >
+                                            <span class="sr-only">Pilih soal: {{ \Illuminate\Support\Str::limit($soal->teks, 80) }}</span>
+                                        </label>
+                                    @endif
 
-                        <div class="flex flex-wrap items-center gap-2">
-                            @if ($soalTerkunci)
-                                <span class="text-sm text-ink-subtle">Dipakai sesi yang sudah dibuka</span>
-                            @else
-                                <a href="{{ $ruteEdit }}" class="btn btn-secondary">Edit</a>
-                                <form method="POST" action="{{ $ruteHapus }}" onsubmit="return confirm('Hapus soal ini?')">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-ghost text-coral-deep">Hapus</button>
-                                </form>
-                            @endif
-                        </div>
-                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="pill {{ $soal->tipe === 'essay' ? 'pill-sun' : 'pill-leaf' }}">{{ $soal->tipe === 'essay' ? 'Essay' : 'Pilihan ganda' }}</span>
+                                            <span class="pill pill-neutral">Bobot {{ $soal->bobot }}</span>
+                                            @if ($soal->tipe !== 'essay')
+                                                <span class="pill pill-neutral">{{ $soal->options_count }} opsi</span>
+                                            @endif
+                                            <span class="pill pill-brand">{{ $soal->durasi_detik }} detik</span>
+                                            @if ($soalTerkunci)
+                                                <span class="pill pill-sun">
+                                                    <x-icon name="lock" :size="14" />
+                                                    Terkunci di sesi
+                                                </span>
+                                            @endif
+                                        </div>
+                                        <p class="mt-3 text-lg font-bold text-ink">{{ \Illuminate\Support\Str::limit($soal->teks, 180) }}</p>
+                                        @if ($soal->pembahasan)
+                                            <p class="mt-1 text-base text-ink-muted">Ada pembahasan</p>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-2">
+                                    @if ($soalTerkunci)
+                                        <span class="text-sm text-ink-subtle">Dipakai sesi yang sudah dibuka</span>
+                                    @else
+                                        <a href="{{ $ruteEdit }}" class="btn btn-secondary">Edit</a>
+                                        <form method="POST" action="{{ $ruteHapus }}" onsubmit="return confirm('Hapus soal ini?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-ghost text-coral-deep">Hapus</button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
                         </li>
                     @endforeach
                 </ul>

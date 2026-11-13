@@ -550,7 +550,7 @@
                         <x-icon name="diamond" :size="20" />
                     </span>
                     <div>
-                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Skor Total</p>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Nilai</p>
                         <p class="text-base font-extrabold text-slate-900">{{ $stats['total_skor'] }}</p>
                     </div>
                 </div>
@@ -619,14 +619,34 @@
             </div>
 
             {{-- WIDGET 2: LEADERBOARD / PERINGKAT KELAS --}}
-            <div class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs" data-tour="leaderboard">
+            <div id="peringkat-kelas" class="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-xs" data-tour="leaderboard">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-display text-base font-extrabold text-slate-900">Peringkat Kelas</h3>
-                    <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Top Skor</span>
+                    <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Top Nilai</span>
                 </div>
 
+                <form method="GET" action="{{ route('peserta.dashboard') }}#peringkat-kelas" class="mb-4">
+                    <label for="filter-kelas-peringkat" class="label">Kelas</label>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <select id="filter-kelas-peringkat" name="kelas" class="input min-h-11 w-full sm:flex-1">
+                            <option value="">Semua kelas saya</option>
+                            @foreach ($kelasSaya as $kelas)
+                                <option value="{{ $kelas->id }}" @selected((int) $kelasFilter === (int) $kelas->id)>{{ $kelas->nama }}</option>
+                            @endforeach
+                        </select>
+                        <button type="submit" class="btn btn-secondary min-h-11 w-full sm:w-auto">Terapkan</button>
+                    </div>
+                </form>
+
                 @if ($leaderboard->isEmpty())
-                    <p class="text-xs text-slate-500 py-4 text-center">Belum ada nilai kuis tercatat.</p>
+                    <div class="py-4 text-center">
+                        <p class="text-xs text-slate-500">Belum ada nilai kuis tercatat untuk filter ini.</p>
+                        @if ($kelasFilter !== null)
+                            <a href="{{ route('peserta.dashboard') }}#peringkat-kelas" class="mt-2 inline-block text-xs font-extrabold text-blue-600 hover:underline">
+                                Tampilkan semua kelas saya
+                            </a>
+                        @endif
+                    </div>
                 @else
                     <div class="space-y-3">
                         @foreach ($leaderboard as $idx => $pesertaTop)

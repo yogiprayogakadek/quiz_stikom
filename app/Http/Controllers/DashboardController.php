@@ -17,7 +17,7 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function admin(): View
+    public function admin(Request $request): View
     {
         $ringkasan = [
             'peserta' => User::where('role', 'peserta')->inCurrentOrganization()->count(),
@@ -40,15 +40,41 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
-        $leaderboardTerbaru = Attempt::with(['user', 'quizSession.quiz'])
-            ->whereHas('quizSession')
-            ->whereHas('quizSession.quiz', fn ($q) => $q->where('is_percobaan', false))
-            ->where('status', 'selesai')
-            ->orderByDesc('updated_at')
-            ->limit(5)
-            ->get()
-            ->sortByDesc('skor_total')
+        $organizationId = app(OrganizationContext::class)->id();
+        $dasarNilai = $this->bestScoresQuery($organizationId);
+        $semuaNilai = (clone $dasarNilai)->get();
+
+        $opsiKelas = $semuaNilai
+            ->whereNotNull('kelas_id')
+            ->unique('kelas_id')
+            ->sortBy('kelas_nama')
             ->values();
+
+        $opsiKuis = $semuaNilai
+            ->unique('kuis_id')
+            ->sortBy('kuis_judul')
+            ->values();
+
+        $filterKelasId = $request->integer('kelas') ?: null;
+        if ($filterKelasId !== null && ! $opsiKelas->contains(fn ($opsi) => (int) $opsi->kelas_id === $filterKelasId)) {
+            $filterKelasId = null;
+        }
+
+        $filterKuisId = $request->integer('kuis') ?: null;
+        if ($filterKuisId !== null && ! $opsiKuis->contains(fn ($opsi) => (int) $opsi->kuis_id === $filterKuisId)) {
+            $filterKuisId = null;
+        }
+
+        $leaderboardTerbaru = (clone $dasarNilai)
+            ->when($filterKelasId !== null, fn ($query) => $this->batasiKelas($query, [$filterKelasId]))
+            ->when($filterKuisId !== null, fn ($query) => $query->whereRaw(
+                'COALESCE(kuis_awal.id, quizzes.id) = ?',
+                [$filterKuisId]
+            ))
+            ->orderByRaw('MAX(attempts.nilai) DESC')
+            ->orderByRaw('MAX(attempts.updated_at) DESC')
+            ->limit(5)
+            ->get();
 
         $loginHariIni = Attempt::whereHas('quizSession')
             ->where('created_at', '>=', now()->startOfDay())
@@ -56,7 +82,19 @@ class DashboardController extends Controller
         $pesertaOnline = $this->getPesertaOnline();
         $aktivitasLogin = $this->getAktivitasLogin();
 
-        return view('admin.dashboard', compact('ringkasan', 'sesiAktif', 'sesiTerakhir', 'leaderboardTerbaru', 'loginHariIni', 'pesertaOnline', 'aktivitasLogin'));
+        return view('admin.dashboard', compact(
+            'ringkasan',
+            'sesiAktif',
+            'sesiTerakhir',
+            'leaderboardTerbaru',
+            'loginHariIni',
+            'pesertaOnline',
+            'aktivitasLogin',
+            'opsiKelas',
+            'opsiKuis',
+            'filterKelasId',
+            'filterKuisId'
+        ));
     }
 
     public function pesertaOnline(): JsonResponse
@@ -239,30 +277,26 @@ class DashboardController extends Controller
         $sesiList = $this->formatSesi($sesiTersedia, $attempts);
 
         $organizationId = app(OrganizationContext::class)->id();
+        $kelasIds = $kelasSaya->pluck('id')->all();
 
-        $nilaiTerbaik = DB::table('attempts')
-            ->join('quiz_sessions', 'quiz_sessions.id', '=', 'attempts.quiz_session_id')
-            ->join('quizzes', 'quizzes.id', '=', 'quiz_sessions.quiz_id')
-            ->leftJoin('quiz_sessions as sesi_awal', 'sesi_awal.id', '=', 'quiz_sessions.remidi_dari_session_id')
-            ->leftJoin('quizzes as kuis_awal', 'kuis_awal.id', '=', 'sesi_awal.quiz_id')
-            ->where('attempts.status', 'selesai')
-            ->whereNotNull('attempts.bergabung_at')
-            ->whereNotNull('attempts.nilai')
-            ->whereRaw('COALESCE(kuis_awal.is_percobaan, quizzes.is_percobaan) = ?', [false])
-            ->when($organizationId !== null, fn ($q) => $q->where('attempts.organization_id', $organizationId))
-            ->groupBy('attempts.user_id', DB::raw('COALESCE(kuis_awal.id, quizzes.id)'))
-            ->selectRaw('attempts.user_id, MAX(attempts.nilai) as nilai')
-            ->get();
+        $nilaiTerbaik = $this->batasiKelas($this->bestScoresQuery($organizationId), $kelasIds)->get();
 
-        $totalPerPeserta = $nilaiTerbaik
-            ->groupBy('user_id')
-            ->map(fn ($rows) => (int) $rows->sum('nilai'));
+        $filterKelasId = (int) $request->query('kelas', 0);
+        $kelasFilter = $filterKelasId > 0 ? $kelasSaya->firstWhere('id', $filterKelasId) : null;
+        $kelasFilter = $kelasFilter?->id;
+
+        $nilaiPeringkat = $kelasFilter === null
+            ? $nilaiTerbaik
+            : $this->batasiKelas($this->bestScoresQuery($organizationId), [$kelasFilter])->get();
+
+        $totalPerPeserta = $this->totalNilaiPerPeserta($nilaiTerbaik);
+        $totalPeringkat = $this->totalNilaiPerPeserta($nilaiPeringkat);
 
         $leaderboard = User::where('role', 'peserta')
             ->inCurrentOrganization()
-            ->whereIn('id', $totalPerPeserta->keys())
+            ->whereIn('id', $totalPeringkat->keys())
             ->get()
-            ->each(fn (User $peserta) => $peserta->attempts_sum_skor_total = $totalPerPeserta->get($peserta->id, 0))
+            ->each(fn (User $peserta) => $peserta->attempts_sum_skor_total = $totalPeringkat->get($peserta->id, 0))
             ->sortByDesc('attempts_sum_skor_total')
             ->take(5)
             ->values();
@@ -276,7 +310,7 @@ class DashboardController extends Controller
 
         $tourBaru = $user->tour_completed_at === null;
 
-        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats', 'tourBaru'));
+        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats', 'tourBaru', 'kelasFilter'));
     }
 
     public function selesaikanTour(Request $request): JsonResponse
@@ -312,6 +346,67 @@ class DashboardController extends Controller
             'sesi_tersedia' => $this->formatSesi($sesiTersedia, $attempts),
             'server_now' => now()->getTimestampMs(),
         ]);
+    }
+
+    private function bestScoresQuery(?int $organizationId)
+    {
+        return DB::table('attempts')
+            ->join('users', 'users.id', '=', 'attempts.user_id')
+            ->join('quiz_sessions', 'quiz_sessions.id', '=', 'attempts.quiz_session_id')
+            ->join('quizzes', 'quizzes.id', '=', 'quiz_sessions.quiz_id')
+            ->leftJoin('quiz_sessions as sesi_awal', 'sesi_awal.id', '=', 'quiz_sessions.remidi_dari_session_id')
+            ->leftJoin('quizzes as kuis_awal', 'kuis_awal.id', '=', 'sesi_awal.quiz_id')
+            ->leftJoin('kelas as kelas_sesi', 'kelas_sesi.id', '=', 'quiz_sessions.kelas_id')
+            ->leftJoin('kelas as kelas_kuis_awal', 'kelas_kuis_awal.id', '=', 'kuis_awal.kelas_id')
+            ->leftJoin('kelas as kelas_kuis', 'kelas_kuis.id', '=', 'quizzes.kelas_id')
+            ->where('attempts.status', 'selesai')
+            ->whereNotNull('attempts.bergabung_at')
+            ->whereNotNull('attempts.nilai')
+            ->whereRaw('COALESCE(kuis_awal.is_percobaan, quizzes.is_percobaan) = ?', [false])
+            ->when($organizationId !== null, fn ($query) => $query->where('attempts.organization_id', $organizationId))
+            ->groupBy(
+                'attempts.user_id',
+                'users.nama',
+                'users.username',
+                DB::raw('COALESCE(kuis_awal.id, quizzes.id)'),
+                DB::raw('COALESCE(kuis_awal.judul, quizzes.judul)'),
+                DB::raw('COALESCE(quiz_sessions.kelas_id, kuis_awal.kelas_id, quizzes.kelas_id)'),
+                DB::raw('COALESCE(kelas_sesi.nama, kelas_kuis_awal.nama, kelas_kuis.nama)')
+            )
+            ->selectRaw('
+                attempts.user_id,
+                users.nama,
+                users.username,
+                COALESCE(kuis_awal.id, quizzes.id) as kuis_id,
+                COALESCE(kuis_awal.judul, quizzes.judul) as kuis_judul,
+                COALESCE(quiz_sessions.kelas_id, kuis_awal.kelas_id, quizzes.kelas_id) as kelas_id,
+                COALESCE(kelas_sesi.nama, kelas_kuis_awal.nama, kelas_kuis.nama) as kelas_nama,
+                MAX(attempts.nilai) as nilai,
+                MAX(attempts.updated_at) as updated_at
+            ');
+    }
+
+    private function batasiKelas($query, array $kelasIds)
+    {
+        if ($kelasIds === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($kelasIds), '?'));
+
+        return $query->whereRaw(
+            'COALESCE(quiz_sessions.kelas_id, kuis_awal.kelas_id, quizzes.kelas_id) IN ('.$placeholders.')',
+            array_values($kelasIds)
+        );
+    }
+
+    private function totalNilaiPerPeserta($rows)
+    {
+        return $rows
+            ->groupBy('user_id')
+            ->map(fn ($userRows) => (int) $userRows
+                ->groupBy('kuis_id')
+                ->sum(fn ($quizRows) => (int) $quizRows->max('nilai')));
     }
 
     private function formatSesi($sesiTersedia, $attempts): array

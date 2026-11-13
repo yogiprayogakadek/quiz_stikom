@@ -323,6 +323,7 @@ class RemedialTest extends TestCase
     {
         [$admin, $kelas, $quiz] = $this->dasar(true);
         $peserta = $this->peserta('peserta-dashboard-remidi');
+        $peserta->kelas()->attach($kelas->id);
         $awal = $this->sesi($quiz, $admin, 'acak', 'selesai');
 
         $this->attempt($peserta, $awal, 60);
@@ -358,6 +359,64 @@ class RemedialTest extends TestCase
                 return $baris !== null && (int) $baris->attempts_sum_skor_total === 90;
             })
             ->assertViewHas('stats', fn ($stats) => (int) $stats['total_skor'] === 90);
+    }
+
+    public function test_dashboard_peserta_memfilter_peringkat_berdasarkan_kelas_yang_diikuti(): void
+    {
+        [$admin, $kelasA, $quizA] = $this->dasar(true);
+
+        $kelasB = Kelas::create(['nama' => 'TI-3B', 'pin' => '8888', 'created_by' => $admin->id]);
+        $kelasC = Kelas::create(['nama' => 'TI-3C', 'pin' => '9999', 'created_by' => $admin->id]);
+
+        $quizB = Quiz::create(['kelas_id' => $kelasB->id, 'judul' => 'Kuis Basis Data', 'created_by' => $admin->id]);
+        $quizC = Quiz::create(['kelas_id' => $kelasC->id, 'judul' => 'Kuis Jaringan', 'created_by' => $admin->id]);
+
+        $peserta = $this->peserta('peserta-filter');
+        $peserta->kelas()->attach([$kelasA->id, $kelasB->id]);
+
+        $temanA = $this->peserta('teman-a');
+        $temanA->kelas()->attach($kelasA->id);
+
+        $temanB = $this->peserta('teman-b');
+        $temanB->kelas()->attach($kelasB->id);
+
+        $outsider = $this->peserta('outsider');
+        $outsider->kelas()->attach($kelasC->id);
+
+        $sesiA = $this->sesi($quizA, $admin, 'acak', 'selesai');
+        $sesiB = $this->sesi($quizB, $admin, 'acak', 'selesai');
+        $sesiC = $this->sesi($quizC, $admin, 'acak', 'selesai');
+
+        $this->attempt($peserta, $sesiA, 70);
+        $this->attempt($peserta, $sesiB, 80);
+        $this->attempt($temanA, $sesiA, 90);
+        $this->attempt($temanB, $sesiB, 60);
+        $this->attempt($outsider, $sesiC, 100);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.dashboard'))
+            ->assertOk()
+            ->assertViewHas('kelasFilter', null)
+            ->assertViewHas('leaderboard', function ($rows) use ($peserta, $temanA, $temanB) {
+                $ids = collect($rows)->pluck('id')->all();
+                $milikPeserta = collect($rows)->firstWhere('id', $peserta->id);
+
+                return $ids === [$peserta->id, $temanA->id, $temanB->id]
+                    && $milikPeserta !== null
+                    && (int) $milikPeserta->attempts_sum_skor_total === 150;
+            })
+            ->assertViewHas('stats', fn ($stats) => (int) $stats['total_skor'] === 150);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.dashboard', ['kelas' => $kelasA->id]))
+            ->assertOk()
+            ->assertViewHas('kelasFilter', $kelasA->id)
+            ->assertViewHas('leaderboard', function ($rows) use ($peserta, $temanA) {
+                return collect($rows)->pluck('id')->all() === [$temanA->id, $peserta->id];
+            })
+            ->assertViewHas('stats', fn ($stats) => (int) $stats['total_skor'] === 150);
     }
 
     public function test_hasil_peserta_menampilkan_nilai_akhir_remidi(): void

@@ -175,6 +175,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/progress', [QuestionController::class, 'aiProgress'])->name('quizzes.questions.ai.progress');
     Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/state', [QuestionController::class, 'aiProgressState'])->name('quizzes.questions.ai.state');
     Route::get('quizzes/{quiz}/questions/ai-generate/{generation}/pratinjau', [QuestionController::class, 'aiPreview'])->name('quizzes.questions.ai.preview');
+    Route::delete('quizzes/{quiz}/questions/bulk', [QuestionController::class, 'bulkDestroy'])->name('quizzes.questions.bulk-destroy');
     Route::resource('quizzes.questions', QuestionController::class);
 
     // Backward-compatible question routes (redirects / fallback if needed)
