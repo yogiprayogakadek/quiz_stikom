@@ -17,6 +17,9 @@
                 File harus berformat CSV dengan header <span class="font-mono text-base text-ink">nama,username,password</span>.
                 Kolom password boleh kosong. Password kosong akan dibuat otomatis 8 karakter.
             </p>
+            <p class="mt-2 text-sm text-ink-muted">
+                NIM yang sudah terdaftar dengan nama yang sama akan ditautkan ke workspace ini. Nama yang berbeda ditolak. Password dan email akun existing tidak diubah.
+            </p>
 
             <x-import-progress>
                 <form method="POST" action="{{ route('admin.participants.import.store') }}" enctype="multipart/form-data" class="mt-5 space-y-4" @submit="handleSubmit($event)">

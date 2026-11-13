@@ -6,7 +6,7 @@
 
     <div class="grid gap-5 sm:grid-cols-2">
         <div class="card border-leaf bg-leaf-soft">
-            <p class="text-base font-bold text-leaf-deep">Berhasil masuk</p>
+            <p class="text-base font-bold text-leaf-deep">Berhasil diproses</p>
             <p class="display-number mt-2 text-5xl text-ink">{{ $ringkasan['berhasil'] }}</p>
         </div>
         <div class="card border-coral bg-coral-soft">
@@ -14,6 +14,10 @@
             <p class="display-number mt-2 text-5xl text-ink">{{ $ringkasan['gagal'] }}</p>
         </div>
     </div>
+
+    <p class="mt-3 text-sm text-ink-muted">
+        Baris dengan NIM yang sudah terdaftar akan ditautkan ke akun yang sama. Nama, email, dan password akun tersebut tidak diubah.
+    </p>
 
     @if ($unduhan)
         <div class="mt-6 card border-sun bg-sun-soft">
@@ -28,7 +32,7 @@
         </div>
     @else
         <x-alert jenis="info" class="mt-6">
-            Tidak ada password yang dibuat otomatis. Semua baris yang berhasil memakai password dari file.
+            Tidak ada password yang dibuat otomatis. Akun baru memakai password dari file; akun yang ditautkan tidak mengubah password.
         </x-alert>
     @endif
 

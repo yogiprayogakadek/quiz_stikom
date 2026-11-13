@@ -50,12 +50,21 @@
                                 >
                                     <td>
                                         <div class="flex items-center gap-2.5">
-                                            <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
+                                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
                                                 {{ strtoupper(substr($peserta->nama, 0, 1)) }}
                                             </div>
-                                            <p class="font-bold text-slate-900 text-sm sm:text-base leading-snug">
-                                                {{ $peserta->nama }}
-                                            </p>
+                                            <div class="min-w-0">
+                                                <p class="font-bold text-slate-900 text-sm sm:text-base leading-snug">
+                                                    {{ $peserta->nama }}
+                                                </p>
+                                                @if (! $peserta->hasVerifiedEmail())
+                                                    @if (($peserta->active_workspace_count ?? 0) > 1)
+                                                        <span class="pill pill-neutral mt-1 text-[10px]">Perlu verifikasi master</span>
+                                                    @else
+                                                        <span class="pill pill-coral mt-1 text-[10px]">Belum verifikasi</span>
+                                                    @endif
+                                                @endif
+                                            </div>
                                         </div>
                                     </td>
                                     <td>
@@ -69,27 +78,45 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="flex items-center justify-end gap-1.5">
+                                        <div class="flex flex-wrap items-center justify-end gap-1.5">
+                                            @if (! $peserta->hasVerifiedEmail() && ($peserta->active_workspace_count ?? 0) <= 1)
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route('admin.participants.verify', $peserta) }}"
+                                                    onsubmit="return confirm('Tandai email {{ $peserta->username }} terverifikasi?')"
+                                                >
+                                                    @csrf
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-leaf-deep hover:bg-leaf-soft"
+                                                        title="Tandai email terverifikasi"
+                                                    >
+                                                        Verifikasi
+                                                    </button>
+                                                </form>
+                                            @endif
                                             <a
                                                 href="{{ route('admin.participants.edit', $peserta) }}"
                                                 class="btn btn-secondary !py-1.5 !px-3 text-xs"
                                             >
                                                 Edit
                                             </a>
-                                            <form
-                                                method="POST"
-                                                action="{{ route('admin.participants.reset-password', $peserta) }}"
-                                                onsubmit="return confirm('Reset password {{ $peserta->username }}? Password lama tidak berlaku lagi.')"
-                                            >
-                                                @csrf
-                                                <button
-                                                    type="submit"
-                                                    class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-amber-700 hover:bg-amber-50"
-                                                    title="Reset password ke acak"
+                                            @if (($peserta->active_workspace_count ?? 0) <= 1)
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route('admin.participants.reset-password', $peserta) }}"
+                                                    onsubmit="return confirm('Reset password {{ $peserta->username }}? Password lama tidak berlaku lagi.')"
                                                 >
-                                                    Reset Pass
-                                                </button>
-                                            </form>
+                                                    @csrf
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-amber-700 hover:bg-amber-50"
+                                                        title="Reset password ke acak"
+                                                    >
+                                                        Reset Pass
+                                                    </button>
+                                                </form>
+                                            @endif
                                             <form
                                                 method="POST"
                                                 action="{{ route('admin.participants.destroy', $peserta) }}"

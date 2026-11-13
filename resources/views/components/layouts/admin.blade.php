@@ -152,6 +152,14 @@
                         <span>Masukan</span>
                     </a>
                     <a
+                        href="{{ route('master.participants.index') }}"
+                        class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.participants.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        @if (request()->routeIs('master.participants.*')) aria-current="page" @endif
+                    >
+                        <x-icon name="user" :size="20" class="{{ request()->routeIs('master.participants.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span>Peserta</span>
+                    </a>
+                    <a
                         href="{{ route('master.mail.edit') }}"
                         class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('master.mail.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
                         @if (request()->routeIs('master.mail.*')) aria-current="page" @endif

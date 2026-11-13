@@ -102,6 +102,12 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->role === 'peserta';
     }
 
+    public function isSharedParticipant(): bool
+    {
+        return $this->isPeserta()
+            && ($this->active_workspace_count ?? $this->organizations()->wherePivot('status', 'active')->count()) > 1;
+    }
+
     public function wajibGantiPassword(): bool
     {
         return (bool) $this->must_change_password;

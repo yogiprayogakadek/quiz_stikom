@@ -21,9 +21,10 @@ use App\Http\Controllers\DisplayController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Master\MailSettingController;
-use App\Http\Controllers\Master\ParticipantFeedbackController as MasterParticipantFeedbackController;
 use App\Http\Controllers\Master\OrganizationController;
 use App\Http\Controllers\Master\OwnerController;
+use App\Http\Controllers\Master\ParticipantController as MasterParticipantController;
+use App\Http\Controllers\Master\ParticipantFeedbackController as MasterParticipantFeedbackController;
 use App\Http\Controllers\Master\SystemController;
 use App\Http\Controllers\Master\SystemHealthController;
 use App\Http\Controllers\Master\WorkspaceRequestController;
@@ -91,6 +92,9 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::get('owners', [OwnerController::class, 'index'])->name('owners.index');
     Route::delete('owners/{owner}', [OwnerController::class, 'destroy'])->name('owners.destroy');
+    Route::get('participants', [MasterParticipantController::class, 'index'])->name('participants.index');
+    Route::post('participants/link', [MasterParticipantController::class, 'link'])->name('participants.link');
+    Route::post('participants/verify', [MasterParticipantController::class, 'verify'])->name('participants.verify');
     Route::get('feedback', [MasterParticipantFeedbackController::class, 'index'])->name('feedback.index');
     Route::post('organizations', [OrganizationController::class, 'store'])->name('organizations.store');
     Route::get('organizations/{organization}/owner', [OwnerController::class, 'editTransfer'])->name('organizations.owner.edit');
@@ -153,9 +157,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import.store');
     Route::get('participants/import/result', [ParticipantController::class, 'importResult'])->name('participants.import.result');
     Route::get('participants/template', [ParticipantController::class, 'template'])->name('participants.template');
+    Route::post('participants/link', [ParticipantController::class, 'link'])->name('participants.link');
     Route::resource('participants', ParticipantController::class)->except(['show']);
     Route::post('participants/{participant}/reset-password', [ParticipantController::class, 'resetPassword'])
         ->name('participants.reset-password');
+    Route::post('participants/{participant}/verify', [ParticipantController::class, 'verify'])
+        ->name('participants.verify');
 
     Route::get('quizzes/{quiz}/questions/template', [QuestionController::class, 'template'])->name('quizzes.questions.template');
     Route::get('quizzes/{quiz}/questions/export', [QuestionController::class, 'export'])->name('quizzes.questions.export');

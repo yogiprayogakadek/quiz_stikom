@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateParticipantRequest;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\OrganizationUsage;
+use App\Services\ParticipantLinking;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class ParticipantController extends Controller
 
     public function index(Request $request): View
     {
+        $request->session()->forget('participant_link_candidate');
         $cari = trim((string) $request->query('q'));
 
         // shortcut: client-side pagination up to 2000 rows for real-time responsiveness, upgrade to AJAX datatable if huge
@@ -33,22 +35,87 @@ class ParticipantController extends Controller
                     ->where('nama', 'like', "%{$cari}%")
                     ->orWhere('username', 'like', "%{$cari}%"));
             })
-            ->withCount('attempts')
+            ->withCount([
+                'attempts',
+                'organizations as active_workspace_count' => fn ($query) => $query->where('organization_memberships.status', 'active'),
+            ])
             ->orderBy('nama')
             ->get();
 
         return view('admin.participants.index', compact('participants', 'cari'));
     }
 
-    public function create(): View
+    public function create(Request $request): View|RedirectResponse
     {
-        return view('admin.participants.create');
+        if ($request->boolean('batal')) {
+            $request->session()->forget('participant_link_candidate');
+
+            return redirect()->route('admin.participants.create');
+        }
+
+        $linkCandidate = $request->session()->get('participant_link_candidate');
+
+        return view('admin.participants.create', compact('linkCandidate'));
     }
 
-    public function store(StoreParticipantRequest $request, OrganizationUsage $usage): RedirectResponse
-    {
+    public function store(
+        StoreParticipantRequest $request,
+        OrganizationUsage $usage,
+        ParticipantLinking $linking,
+    ): RedirectResponse {
         $data = $request->validated();
         $organizationId = app(OrganizationContext::class)->id();
+        $request->session()->forget('participant_link_candidate');
+
+        $existing = $linking->findExisting($data['username']);
+
+        if ($existing !== null) {
+            if ($existing->trashed() || ! $existing->isPeserta()) {
+                throw ValidationException::withMessages([
+                    'username' => 'Username sudah dipakai akun lain.',
+                ]);
+            }
+
+            if (! $linking->namesMatch($existing, $data['nama'])) {
+                throw ValidationException::withMessages([
+                    'username' => 'NIM sudah dipakai dengan nama berbeda. Periksa kembali atau hubungi master platform.',
+                ]);
+            }
+
+            if ($linking->isActiveMember($existing, $organizationId)) {
+                return redirect()
+                    ->route('admin.participants.index')
+                    ->with('sukses', 'Peserta '.$existing->nama.' sudah ada di workspace ini.');
+            }
+
+            if (! $usage->canAddParticipant($organizationId)) {
+                throw ValidationException::withMessages([
+                    'nama' => 'Kuota peserta workspace penuh ('.$usage->participantLimit($organizationId).'). Hubungi master platform untuk menaikkan batas.',
+                ]);
+            }
+
+            $request->session()->put('participant_link_candidate', [
+                'id' => $existing->id,
+                'nama' => $existing->nama,
+                'username' => $existing->username,
+                'email_masked' => $linking->maskedEmail($existing->email),
+                'email_verified' => $existing->hasVerifiedEmail(),
+            ]);
+
+            return redirect()->route('admin.participants.create')->withInput();
+        }
+
+        if (blank($data['email'] ?? null)) {
+            throw ValidationException::withMessages([
+                'email' => 'Email wajib diisi untuk akun baru.',
+            ]);
+        }
+
+        if (User::withTrashed()->where('email', $data['email'])->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'Email sudah dipakai akun lain.',
+            ]);
+        }
 
         if (! $usage->canAddParticipant($organizationId)) {
             throw ValidationException::withMessages([
@@ -72,8 +139,9 @@ class ParticipantController extends Controller
             'role' => 'peserta',
             'must_change_password' => true,
         ]);
+        $participant->forceFill(['email_verified_at' => now()])->save();
         $participant->organizations()->syncWithoutDetaching([
-            app(OrganizationContext::class)->id() => [
+            $organizationId => [
                 'role' => 'participant',
                 'status' => 'active',
             ],
@@ -89,16 +157,68 @@ class ParticipantController extends Controller
             ->with('password_baru', $dibuat !== null ? ['username' => $data['username'], 'password' => $dibuat] : null);
     }
 
+    public function link(Request $request, OrganizationUsage $usage, ParticipantLinking $linking): RedirectResponse
+    {
+        $candidate = $request->session()->pull('participant_link_candidate');
+
+        if (! is_array($candidate) || ! isset($candidate['id'], $candidate['username'], $candidate['nama'])) {
+            return redirect()
+                ->route('admin.participants.create')
+                ->withErrors(['username' => 'Sesi tautan sudah berakhir. Masukkan NIM lagi.']);
+        }
+
+        $participant = User::query()->find($candidate['id']);
+        $organization = app(OrganizationContext::class)->current();
+        $organizationId = $organization?->id;
+
+        if (! $participant
+            || ! $participant->isPeserta()
+            || $organizationId === null
+            || $participant->username !== $candidate['username']
+            || ! $linking->namesMatch($participant, $candidate['nama'])) {
+            return redirect()
+                ->route('admin.participants.create')
+                ->withErrors(['username' => 'Akun tidak lagi tersedia. Masukkan NIM lagi.']);
+        }
+
+        if ($linking->isActiveMember($participant, $organizationId)) {
+            return redirect()
+                ->route('admin.participants.index')
+                ->with('sukses', 'Peserta '.$participant->nama.' sudah ada di workspace ini.');
+        }
+
+        if (! $usage->canAddParticipant($organizationId)) {
+            throw ValidationException::withMessages([
+                'nama' => 'Kuota peserta workspace penuh ('.$usage->participantLimit($organizationId).'). Hubungi master platform untuk menaikkan batas.',
+            ]);
+        }
+
+        $linking->link($participant, $organization, 'admin_link');
+
+        $pesan = 'Peserta '.$participant->nama.' ditambahkan ke workspace ini menggunakan akun yang sama.';
+        if (blank($participant->email)) {
+            $pesan .= ' Akun ini belum punya email, jadi belum bisa memakai reset password mandiri.';
+        } elseif (! $participant->hasVerifiedEmail()) {
+            $pesan .= $participant->isSharedParticipant()
+                ? ' Email akun ini belum terverifikasi; minta master platform memverifikasi.'
+                : ' Email akun ini belum terverifikasi. Anda dapat memverifikasinya dari daftar peserta.';
+        }
+
+        return redirect()->route('admin.participants.index')->with('sukses', $pesan);
+    }
+
     public function edit(User $participant): View
     {
         $this->authorizeParticipant($participant);
+        $shared = $participant->isSharedParticipant();
 
-        return view('admin.participants.edit', compact('participant'));
+        return view('admin.participants.edit', compact('participant', 'shared'));
     }
 
     public function update(UpdateParticipantRequest $request, User $participant): RedirectResponse
     {
         $this->authorizeParticipant($participant);
+        $this->guardSharedParticipant($participant);
 
         $data = $request->validated();
 
@@ -123,6 +243,7 @@ class ParticipantController extends Controller
     public function resetPassword(User $participant): RedirectResponse
     {
         $this->authorizeParticipant($participant);
+        $this->guardSharedParticipant($participant);
 
         $password = $this->buatPassword();
         $participant->password = $password;
@@ -132,6 +253,31 @@ class ParticipantController extends Controller
 
         return back()->with('sukses', 'Password peserta direset.')
             ->with('password_baru', ['username' => $participant->username, 'password' => $password]);
+    }
+
+    public function verify(User $participant): RedirectResponse
+    {
+        $this->authorizeParticipant($participant);
+        $this->guardSharedParticipant($participant);
+
+        if (blank($participant->email)) {
+            return back()->withErrors([
+                'email' => 'Peserta belum punya email. Tambahkan email terlebih dahulu sebelum verifikasi.',
+            ]);
+        }
+
+        if ($participant->hasVerifiedEmail()) {
+            return back()->with('sukses', 'Email peserta sudah terverifikasi.');
+        }
+
+        $participant->forceFill(['email_verified_at' => now()])->save();
+        AuditLog::record('participant_email_verified', 'user', $participant->id, [
+            'name' => $participant->nama,
+            'username' => $participant->username,
+            'source' => 'admin',
+        ]);
+
+        return back()->with('sukses', 'Email peserta ditandai terverifikasi.');
     }
 
     public function destroy(User $participant): RedirectResponse
@@ -155,7 +301,7 @@ class ParticipantController extends Controller
         return view('admin.participants.import');
     }
 
-    public function import(Request $request, OrganizationUsage $usage): RedirectResponse
+    public function import(Request $request, OrganizationUsage $usage, ParticipantLinking $linking): RedirectResponse
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:2048'],
@@ -198,7 +344,8 @@ class ParticipantController extends Controller
         $hasil = [];
         $usernameTerpakai = [];
         $baris = 1;
-        $organizationId = app(OrganizationContext::class)->id();
+        $organization = app(OrganizationContext::class)->current();
+        $organizationId = $organization?->id;
         $sisaKuota = $usage->participantRemaining($organizationId);
 
         while (($row = fgetcsv($handle)) !== false) {
@@ -211,6 +358,7 @@ class ParticipantController extends Controller
             $nama = trim((string) ($row[$kolomNama] ?? ''));
             $username = trim((string) ($row[$kolomUsername] ?? ''));
             $password = $kolomPassword !== false ? trim((string) ($row[$kolomPassword] ?? '')) : '';
+            $existing = null;
 
             $alasan = null;
 
@@ -220,12 +368,26 @@ class ParticipantController extends Controller
                 $alasan = 'Username kosong atau memakai karakter yang tidak diizinkan.';
             } elseif (isset($usernameTerpakai[Str::lower($username)])) {
                 $alasan = 'Username duplikat di dalam file.';
-            } elseif (User::withTrashed()->where('username', $username)->exists()) {
-                $alasan = 'Username sudah dipakai.';
-            } elseif ($password !== '' && mb_strlen($password) < 8) {
-                $alasan = 'Password minimal 8 karakter.';
-            } elseif ($sisaKuota <= 0) {
-                $alasan = 'Kuota peserta workspace penuh.';
+            } else {
+                $existing = $linking->findExisting($username);
+
+                if ($existing !== null) {
+                    if ($existing->trashed()) {
+                        $alasan = 'NIM sudah dipakai akun yang dinonaktifkan. Hubungi master platform.';
+                    } elseif (! $existing->isPeserta()) {
+                        $alasan = 'Username sudah dipakai akun lain.';
+                    } elseif (! $linking->namesMatch($existing, $nama)) {
+                        $alasan = 'NIM sudah dipakai dengan nama berbeda. Periksa kembali atau hubungi master platform.';
+                    } elseif ($linking->isActiveMember($existing, $organizationId)) {
+                        $alasan = 'Peserta sudah menjadi anggota workspace ini.';
+                    } elseif ($sisaKuota <= 0) {
+                        $alasan = 'Kuota peserta workspace penuh.';
+                    }
+                } elseif ($password !== '' && mb_strlen($password) < 8) {
+                    $alasan = 'Password minimal 8 karakter.';
+                } elseif ($sisaKuota <= 0) {
+                    $alasan = 'Kuota peserta workspace penuh.';
+                }
             }
 
             if ($alasan !== null) {
@@ -242,6 +404,32 @@ class ParticipantController extends Controller
             }
 
             $usernameTerpakai[Str::lower($username)] = true;
+
+            if ($existing !== null) {
+                $linking->link($existing, $organization, 'csv_import');
+                $sisaKuota--;
+
+                $alasanTautan = 'Akun existing ditautkan ke workspace ini. Password dan email tidak diubah.';
+                if (blank($existing->email)) {
+                    $alasanTautan .= ' Akun belum punya email.';
+                } elseif (! $existing->hasVerifiedEmail()) {
+                    $alasanTautan .= $existing->isSharedParticipant()
+                        ? ' Email belum terverifikasi; minta master platform.'
+                        : ' Email belum terverifikasi; verifikasi dari daftar peserta.';
+                }
+
+                $hasil[] = [
+                    'baris' => $baris,
+                    'nama' => $nama,
+                    'username' => $username,
+                    'status' => 'berhasil',
+                    'alasan' => $alasanTautan,
+                    'password' => null,
+                ];
+
+                continue;
+            }
+
             $dibuat = null;
 
             if ($password === '') {
@@ -355,6 +543,15 @@ class ParticipantController extends Controller
             && $organizationId !== null
             && $participant->organizations()->whereKey($organizationId)->wherePivot('status', 'active')->exists(),
             404,
+        );
+    }
+
+    private function guardSharedParticipant(User $participant): void
+    {
+        abort_if(
+            $participant->isSharedParticipant(),
+            403,
+            'Akun ini terhubung ke beberapa workspace. Perubahan identitas dan reset password tidak dapat dilakukan dari workspace. Hubungi master platform.',
         );
     }
 }
