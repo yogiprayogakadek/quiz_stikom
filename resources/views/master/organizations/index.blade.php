@@ -1,46 +1,88 @@
-<x-layouts.admin judul="Organisasi" keterangan="Buat workspace baru dan serahkan pengelolaannya kepada owner pertama.">
-    <section @class([
-        'mb-6 rounded-2xl border p-5 sm:p-6',
-        'border-sun-deep/30 bg-sun-soft' => $platformSettings->maintenance_enabled,
-        'border-outline bg-page' => ! $platformSettings->maintenance_enabled,
-    ]) aria-labelledby="system-status-heading">
-        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div class="max-w-2xl">
-                <div class="flex items-center gap-2">
-                    <span @class([
-                        'h-2.5 w-2.5 rounded-full',
-                        'bg-sun-deep' => $platformSettings->maintenance_enabled,
-                        'bg-leaf' => ! $platformSettings->maintenance_enabled,
-                    ])></span>
-                    <h2 id="system-status-heading" class="text-xl">
-                        {{ $platformSettings->maintenance_enabled ? 'Maintenance aktif' : 'Sistem tersedia' }}
-                    </h2>
-                </div>
-                <p class="mt-2 text-sm leading-6 text-ink-muted">
-                    {{ $platformSettings->maintenance_enabled
-                        ? 'Peserta dan admin organisasi sedang melihat halaman maintenance. Master tetap dapat masuk untuk membuka sistem kembali.'
-                        : 'Peserta dan admin organisasi dapat mengakses layanan seperti biasa.' }}
+<x-layouts.admin judul="Organisasi" keterangan="Pantau workspace, antrean permintaan, dan status layanan platform.">
+    <section class="mb-6 rounded-2xl border border-outline bg-page p-5 sm:p-6" aria-labelledby="ringkasan-platform-heading">
+        <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div class="min-w-0 flex-1">
+                <h2 id="ringkasan-platform-heading" class="text-xl">Ringkasan platform</h2>
+                <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
+                    Gambaran cepat workspace dan antrean yang perlu ditangani master.
                 </p>
-                @if ($platformSettings->maintenance_started_at)
-                    <p class="mt-2 text-xs font-semibold text-ink-subtle">
-                        Dimulai {{ $platformSettings->maintenance_started_at->timezone(config('app.timezone'))->format('d M Y, H:i') }}
-                    </p>
-                @endif
+
+                <dl class="mt-5 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+                    <div>
+                        <dt class="flex items-center gap-2 text-xs font-bold text-ink-subtle">
+                            <x-icon name="briefcase" :size="15" class="text-ink-subtle" />
+                            Workspace
+                        </dt>
+                        <dd class="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-ink">{{ number_format($workspaceSummary['total'], 0, ',', '.') }}</dd>
+                        <p class="mt-0.5 text-xs font-semibold text-ink-muted">{{ $workspaceSummary['active'] }} aktif, {{ $workspaceSummary['suspended'] }} ditangguhkan</p>
+                    </div>
+                    <div>
+                        <dt class="flex items-center gap-2 text-xs font-bold text-ink-subtle">
+                            <x-icon name="users" :size="15" class="text-ink-subtle" />
+                            Peserta
+                        </dt>
+                        <dd class="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-ink">{{ number_format($workspaceSummary['participants'], 0, ',', '.') }}</dd>
+                        <p class="mt-0.5 text-xs text-ink-muted">anggota aktif</p>
+                    </div>
+                    <div>
+                        <dt class="flex items-center gap-2 text-xs font-bold text-ink-subtle">
+                            <x-icon name="shield-check" :size="15" class="text-ink-subtle" />
+                            Admin
+                        </dt>
+                        <dd class="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-ink">{{ number_format($workspaceSummary['admins'], 0, ',', '.') }}</dd>
+                        <p class="mt-0.5 text-xs text-ink-muted">owner dan admin aktif</p>
+                    </div>
+                    <div>
+                        <dt class="flex items-center gap-2 text-xs font-bold text-ink-subtle">
+                            <x-icon name="kelas" :size="15" class="text-ink-subtle" />
+                            Kelas
+                        </dt>
+                        <dd class="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-ink">{{ number_format($workspaceSummary['classes'], 0, ',', '.') }}</dd>
+                        <p class="mt-0.5 text-xs text-ink-muted">kelas dibuat</p>
+                    </div>
+                </dl>
             </div>
 
-            <form method="POST" action="{{ route('master.maintenance.update') }}" class="w-full max-w-xl space-y-3" data-progress-message="Memperbarui status sistem...">
-                @csrf
-                @method('PUT')
-                <input type="hidden" name="maintenance_enabled" value="{{ $platformSettings->maintenance_enabled ? 0 : 1 }}">
-                <div>
-                    <label for="maintenance_message" class="label">Pesan untuk pengguna</label>
-                    <textarea id="maintenance_message" name="maintenance_message" class="input min-h-24 resize-y" maxlength="500">{{ old('maintenance_message', $platformSettings->maintenance_message) }}</textarea>
-                    <p class="help mt-1">Pesan ini tampil selama layanan ditutup.</p>
+            <div class="w-full shrink-0 rounded-xl border border-outline bg-surface p-4 xl:w-80">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-extrabold text-ink">Perlu perhatian</h3>
+                    @if ($attentionCount > 0)
+                        <span class="rounded-full bg-sun-soft px-2 py-0.5 text-[11px] font-extrabold tabular-nums text-sun-deep">{{ $attentionCount }}</span>
+                    @endif
                 </div>
-                <button type="submit" class="btn {{ $platformSettings->maintenance_enabled ? 'btn-primary' : 'btn-soft-danger' }} w-full sm:w-auto">
-                    {{ $platformSettings->maintenance_enabled ? 'Buka kembali sistem' : 'Aktifkan maintenance' }}
-                </button>
-            </form>
+                <ul class="mt-3 space-y-2.5 text-sm">
+                    @if ($pendingWorkspaceRequestCount > 0)
+                        <li class="flex items-start gap-2">
+                            <x-icon name="clock" :size="16" class="mt-0.5 shrink-0 text-sun-deep" />
+                            <a href="{{ route('master.owners.index') }}" class="font-bold text-ink underline-offset-2 hover:text-brand-deep hover:underline">{{ number_format($pendingWorkspaceRequestCount, 0, ',', '.') }} permintaan workspace menunggu</a>
+                        </li>
+                    @endif
+                    @if ($workspaceSummary['suspended'] > 0)
+                        <li class="flex items-start gap-2">
+                            <x-icon name="alert" :size="16" class="mt-0.5 shrink-0 text-coral-deep" />
+                            <a href="#organization-list-heading" class="font-bold text-ink underline-offset-2 hover:text-brand-deep hover:underline">{{ number_format($workspaceSummary['suspended'], 0, ',', '.') }} workspace ditangguhkan</a>
+                        </li>
+                    @endif
+                    @if ($failedJobCount > 0)
+                        <li class="flex items-start gap-2">
+                            <x-icon name="server" :size="16" class="mt-0.5 shrink-0 text-coral-deep" />
+                            <a href="{{ route('master.system.index') }}" class="font-bold text-ink underline-offset-2 hover:text-brand-deep hover:underline">{{ number_format($failedJobCount, 0, ',', '.') }} job gagal</a>
+                        </li>
+                    @endif
+                    @if ($platformSettings->maintenance_enabled)
+                        <li class="flex items-start gap-2">
+                            <x-icon name="alert" :size="16" class="mt-0.5 shrink-0 text-sun-deep" />
+                            <a href="#system-status-heading" class="font-bold text-ink underline-offset-2 hover:text-brand-deep hover:underline">Maintenance sedang aktif</a>
+                        </li>
+                    @endif
+                    @if ($attentionCount === 0)
+                        <li class="flex items-start gap-2 text-ink-muted">
+                            <x-icon name="check" :size="16" class="mt-0.5 shrink-0 text-leaf-deep" />
+                            <span>Tidak ada antrean yang perlu ditangani.</span>
+                        </li>
+                    @endif
+                </ul>
+            </div>
         </div>
     </section>
 
@@ -48,7 +90,7 @@
         <section class="card min-w-0" aria-labelledby="organization-list-heading">
             <div class="flex flex-wrap items-end justify-between gap-3 border-b border-outline pb-4">
                 <div>
-                    <h2 id="organization-list-heading" class="text-2xl">Workspace aktif</h2>
+                    <h2 id="organization-list-heading" class="text-2xl">Daftar workspace</h2>
                     <p class="mt-1 text-sm text-ink-muted">Setiap workspace memiliki admin, peserta, kelas, dan pengaturan sendiri.</p>
                 </div>
                 <span class="text-sm font-bold text-ink-muted">{{ $organizations->count() }} organisasi</span>
@@ -193,7 +235,7 @@
                                     x-show="ownerSearch === '' || $el.dataset.search.includes(ownerSearch.toLowerCase())"
                                     @selected((string) old('owner_user_id') === (string) $candidate->id)
                                 >
-                                    {{ $candidate->nama }} ({{ '@'.$candidate->username }}) — {{ $candidate->owned_organizations_count }} workspace
+                                    {{ $candidate->nama }} ({{ '@'.$candidate->username }}) · {{ $candidate->owned_organizations_count }} workspace
                                 </option>
                             @endforeach
                         </select>
@@ -227,4 +269,49 @@
             </form>
         </section>
     </div>
+
+    <section @class([
+        'mt-6 rounded-2xl border p-5 sm:p-6',
+        'border-sun-deep/30 bg-sun-soft' => $platformSettings->maintenance_enabled,
+        'border-outline bg-page' => ! $platformSettings->maintenance_enabled,
+    ]) aria-labelledby="system-status-heading">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-2xl">
+                <div class="flex items-center gap-2">
+                    <span @class([
+                        'h-2.5 w-2.5 rounded-full',
+                        'bg-sun-deep' => $platformSettings->maintenance_enabled,
+                        'bg-leaf' => ! $platformSettings->maintenance_enabled,
+                    ])></span>
+                    <h2 id="system-status-heading" class="text-xl">
+                        {{ $platformSettings->maintenance_enabled ? 'Maintenance aktif' : 'Sistem tersedia' }}
+                    </h2>
+                </div>
+                <p class="mt-2 text-sm leading-6 text-ink-muted">
+                    {{ $platformSettings->maintenance_enabled
+                        ? 'Peserta dan admin organisasi sedang melihat halaman maintenance. Master tetap dapat masuk untuk membuka sistem kembali.'
+                        : 'Peserta dan admin organisasi dapat mengakses layanan seperti biasa.' }}
+                </p>
+                @if ($platformSettings->maintenance_started_at)
+                    <p class="mt-2 text-xs font-semibold text-ink-subtle">
+                        Dimulai {{ $platformSettings->maintenance_started_at->timezone(config('app.timezone'))->format('d M Y, H:i') }}
+                    </p>
+                @endif
+            </div>
+
+            <form method="POST" action="{{ route('master.maintenance.update') }}" class="w-full max-w-xl space-y-3" data-progress-message="Memperbarui status sistem...">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="maintenance_enabled" value="{{ $platformSettings->maintenance_enabled ? 0 : 1 }}">
+                <div>
+                    <label for="maintenance_message" class="label">Pesan untuk pengguna</label>
+                    <textarea id="maintenance_message" name="maintenance_message" class="input min-h-24 resize-y" maxlength="500">{{ old('maintenance_message', $platformSettings->maintenance_message) }}</textarea>
+                    <p class="help mt-1">Pesan ini tampil selama layanan ditutup.</p>
+                </div>
+                <button type="submit" class="btn {{ $platformSettings->maintenance_enabled ? 'btn-primary' : 'btn-soft-danger' }} w-full sm:w-auto">
+                    {{ $platformSettings->maintenance_enabled ? 'Buka kembali sistem' : 'Aktifkan maintenance' }}
+                </button>
+            </form>
+        </div>
+    </section>
 </x-layouts.admin>

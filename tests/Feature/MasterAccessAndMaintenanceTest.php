@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AppSetting;
 use App\Models\Organization;
 use App\Models\User;
+use App\Models\WorkspaceRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -182,6 +183,31 @@ class MasterAccessAndMaintenanceTest extends TestCase
             ->assertDontSee(route('admin.participants.index'))
             ->assertDontSee(route('admin.quizzes.index'))
             ->assertDontSee(route('admin.classes.index'));
+    }
+
+    public function test_master_melihat_ringkasan_platform_dan_antrean_perhatian(): void
+    {
+        $master = $this->master();
+        $organization = Organization::query()->firstOrFail();
+        $organization->update(['is_active' => false]);
+
+        WorkspaceRequest::create([
+            'requester_id' => $master->id,
+            'name' => 'Workspace Antrean',
+            'type' => 'education',
+            'timezone' => 'Asia/Singapore',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.organizations.index'))
+            ->assertOk()
+            ->assertSee('Ringkasan platform')
+            ->assertSee('Perlu perhatian')
+            ->assertSee('1 permintaan workspace menunggu')
+            ->assertSee('1 workspace ditangguhkan')
+            ->assertSeeInOrder(['Ringkasan platform', 'Daftar workspace', 'Sistem tersedia']);
     }
 
     private function master(): User

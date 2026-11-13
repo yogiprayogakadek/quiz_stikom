@@ -7,8 +7,10 @@ use App\Models\AppSetting;
 use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
+use App\Models\WorkspaceRequest;
 use App\Services\OrganizationProvisioning;
 use App\Services\OrganizationUsage;
+use App\Services\SystemHealth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +24,7 @@ use Illuminate\View\View;
 
 class OrganizationController extends Controller
 {
-    public function index(): View
+    public function index(SystemHealth $health): View
     {
         $organizations = Organization::with('owners')->withCount([
             'memberships as admin_count' => fn ($query) => $query->whereIn('role', ['owner', 'admin'])->where('status', 'active'),
@@ -39,7 +41,35 @@ class OrganizationController extends Controller
 
         $platformSettings = AppSetting::current();
 
-        return view('master.organizations.index', compact('organizations', 'ownerCandidates', 'platformSettings'));
+        $workspaceSummary = [
+            'total' => $organizations->count(),
+            'active' => $organizations->where('is_active', true)->count(),
+            'suspended' => $organizations->where('is_active', false)->count(),
+            'participants' => $organizations->sum('participant_count'),
+            'admins' => $organizations->sum('admin_count'),
+            'classes' => $organizations->sum('kelas_count'),
+        ];
+
+        $pendingWorkspaceRequestCount = WorkspaceRequest::query()
+            ->where('status', WorkspaceRequest::STATUS_PENDING)
+            ->count();
+
+        $failedJobCount = $health->failedJobsCount();
+
+        $attentionCount = $pendingWorkspaceRequestCount
+            + $workspaceSummary['suspended']
+            + $failedJobCount
+            + ($platformSettings->maintenance_enabled ? 1 : 0);
+
+        return view('master.organizations.index', compact(
+            'organizations',
+            'ownerCandidates',
+            'platformSettings',
+            'workspaceSummary',
+            'pendingWorkspaceRequestCount',
+            'failedJobCount',
+            'attentionCount',
+        ));
     }
 
     public function store(Request $request, OrganizationProvisioning $provisioning): RedirectResponse

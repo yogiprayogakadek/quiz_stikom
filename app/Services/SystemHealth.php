@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AppSetting;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -27,7 +28,7 @@ class SystemHealth
      */
     public function snapshot(): array
     {
-        $failedJobs = $this->failedJobs()->count();
+        $failedJobs = $this->failedJobsCount();
         $failedJobList = $this->failedJobs()
             ->orderByDesc('failed_at')
             ->limit(10)
@@ -64,7 +65,12 @@ class SystemHealth
         ];
     }
 
-    private function failedJobs(): \Illuminate\Database\Query\Builder
+    public function failedJobsCount(): int
+    {
+        return $this->failedJobs()->count();
+    }
+
+    private function failedJobs(): Builder
     {
         return DB::connection(config('queue.failed.database') ?: config('database.default'))
             ->table(config('queue.failed.table', 'failed_jobs'));
