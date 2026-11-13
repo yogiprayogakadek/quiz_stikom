@@ -28,12 +28,19 @@ class LandingPageTest extends TestCase
             'is_active' => false,
         ]);
 
-        $this->get(route('home', ['q' => 'kampus']))
+        $response = $this->get(route('home', ['q' => 'kampus']));
+
+        $response
             ->assertOk()
             ->assertSee('Kampus Alpha')
             ->assertSee(route('organizations.login', $alpha))
             ->assertSee('Dibuat oleh Yogi Prayoga')
             ->assertDontSee('Kampus Beta');
+
+        $this->assertStringContainsString(
+            '<script type="application/json" id="kuis-initial">{"q":"kampus"',
+            $response->getContent(),
+        );
     }
 
     public function test_pencarian_tanpa_hasil_memberi_langkah_berikutnya(): void

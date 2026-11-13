@@ -10,7 +10,8 @@ class ExampleTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('Masuk ke organisasi')
+            ->assertSee('Kuis kelas.')
+            ->assertSee('Nama atau alamat')
             ->assertSee(route('register.organization'));
     }
 

@@ -3,6 +3,8 @@
 @import '@fontsource/atkinson-hyperlegible/400.css';
 @import '@fontsource/atkinson-hyperlegible/700.css';
 @import '@fontsource-variable/jetbrains-mono';
+@import './quiz-machine.css';
+@import './landing.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -28,6 +30,18 @@
     --color-brand-bright: #60a5fa;
     --color-brand-deep: #1d4ed8;
     --color-brand-soft: #dbeafe;
+
+    --color-landing-page: #f4faff;
+    --color-landing-panel: #eaf6ff;
+    --color-landing-ink: #0b1b2b;
+    --color-landing-muted: #40566b;
+    --color-landing-subtle: #64748b;
+    --color-landing-line: #d3eafb;
+    --color-landing-line-strong: #a6d4f0;
+    --color-landing-sky: #0284c7;
+    --color-landing-deep: #0369a1;
+    --color-landing-bright: #38bdf8;
+    --color-landing-soft: #bae6fd;
 
     --color-sun: #fbbf24;
     --color-sun-bright: #fcd34d;

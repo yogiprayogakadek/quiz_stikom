@@ -14,5 +14,6 @@
 <body class="min-h-screen bg-page">
     {{ $slot }}
     <x-global-progress />
+    @stack('scripts')
 </body>
 </html>

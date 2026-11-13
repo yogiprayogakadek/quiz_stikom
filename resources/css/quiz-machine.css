@@ -1,0 +1,232 @@
+.quiz-machine {
+    --anatomy-page: transparent;
+    --anatomy-card: #f4faff;
+    --anatomy-text: #40566b;
+    --anatomy-strong: #0b1b2b;
+    --anatomy-muted: #64748b;
+    --anatomy-paper: #a9d4f0;
+    --anatomy-face: #ffffff;
+    --anatomy-top: #ffffff;
+    --anatomy-shade-0: #7fb8dc;
+    --anatomy-shade-1: #97c9e8;
+    --anatomy-shade-2: #b3d9f1;
+    --anatomy-shade-3: #cde8f8;
+    --anatomy-lit-top: #e0f3ff;
+    --anatomy-lit-shade: #7dd3fc;
+    --anatomy-hi: #0b1b2b;
+    --anatomy-mid: #4b657b;
+    --anatomy-lo: #8aa5ba;
+    --anatomy-faint: #c2dcec;
+    --anatomy-lit: #0284c7;
+    --anatomy-halo: #7dd3fc;
+    --anatomy-halo-opacity: .22;
+    --anatomy-dot: #0b1b2b;
+    --anatomy-weight: .6px;
+    --anatomy-ease: cubic-bezier(.32, .72, 0, 1);
+    --anatomy-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+    position: relative;
+    color: var(--anatomy-strong);
+}
+
+.quiz-machine .iso-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.quiz-machine .iso-svg path,
+.quiz-machine .iso-svg circle {
+    vector-effect: non-scaling-stroke;
+}
+
+.quiz-machine .iso-fill { fill: var(--anatomy-paper); stroke: none; }
+.quiz-machine .iso-solid[data-lit] > .iso-fill { fill: var(--anatomy-face); }
+.quiz-machine .iso-shade,
+.quiz-machine .iso-top { stroke: none; }
+.quiz-machine .iso-shade[data-shade="0"] { fill: var(--anatomy-shade-0); }
+.quiz-machine .iso-shade[data-shade="1"] { fill: var(--anatomy-shade-1); }
+.quiz-machine .iso-shade[data-shade="2"] { fill: var(--anatomy-shade-2); }
+.quiz-machine .iso-shade[data-shade="3"] { fill: var(--anatomy-shade-3); }
+.quiz-machine .iso-top { fill: var(--anatomy-top); }
+.quiz-machine .iso-solid[data-lit] > .iso-top { fill: var(--anatomy-lit-top); }
+.quiz-machine .iso-solid[data-lit] > .iso-shade { fill: var(--anatomy-lit-shade); }
+.quiz-machine .iso-solid[data-lit] > .iso-edge { stroke: var(--anatomy-lit); }
+.quiz-machine .iso-halo { fill: var(--anatomy-halo); stroke: none; filter: blur(9px); opacity: var(--anatomy-halo-opacity); transform: translateY(3px); }
+.quiz-machine .iso-line { fill: none; stroke: var(--anatomy-lo); stroke-width: var(--anatomy-weight); stroke-linecap: round; stroke-linejoin: round; }
+.quiz-machine .iso-line[data-tone="hi"] { stroke: var(--anatomy-hi); }
+.quiz-machine .iso-line[data-tone="mid"] { stroke: var(--anatomy-mid); }
+.quiz-machine .iso-line[data-tone="lo"] { stroke: var(--anatomy-lo); }
+.quiz-machine .iso-line[data-tone="faint"] { stroke: var(--anatomy-faint); }
+.quiz-machine .iso-line[data-tone="lit"] { stroke: var(--anatomy-lit); }
+.quiz-machine .iso-dots circle { fill: var(--anatomy-dot); stroke: none; opacity: .32; }
+.quiz-machine .iso-dots[data-tone="hi"] circle { opacity: .85; }
+.quiz-machine .iso-dots[data-tone="mid"] circle { opacity: .45; }
+.quiz-machine .iso-dots[data-tone="lo"] circle { opacity: .22; }
+.quiz-machine .iso-dots[data-tone="faint"] circle { opacity: .12; }
+.quiz-machine .iso-face-text { fill: var(--anatomy-mid); font-family: var(--anatomy-mono); letter-spacing: .04em; }
+.quiz-machine .iso-face-text[data-tone="hi"] { fill: var(--anatomy-hi); }
+.quiz-machine .iso-face-text[data-tone="lo"] { fill: var(--anatomy-lo); }
+.quiz-machine .iso-face-text[data-tone="faint"] { fill: var(--anatomy-faint); }
+
+.quiz-machine [data-carriage],
+.quiz-machine .quiz-key,
+.quiz-machine .quiz-label-plate,
+.quiz-machine .quiz-cards,
+.quiz-machine [data-card] {
+    --anatomy-paper: #ffffff;
+    --anatomy-top: #ffffff;
+}
+
+.quiz-machine [data-carriage] {
+    --anatomy-shade-0: #b9daef;
+    --anatomy-shade-1: #cde7f7;
+    --anatomy-shade-2: #e0f1fb;
+    --anatomy-shade-3: #f0f9ff;
+}
+
+.quiz-machine .quiz-bezel { fill: var(--anatomy-face); stroke: none; }
+.quiz-machine .quiz-screen-back { fill: #061a2a; stroke: none; }
+.quiz-machine .quiz-scanlines { fill: none; stroke: #38bdf8; stroke-width: .7; opacity: .13; }
+.quiz-machine .quiz-screen-text {
+    fill: #bae6fd;
+    font-family: var(--anatomy-mono);
+    font-size: 7.6px;
+    font-weight: 500;
+    letter-spacing: .075em;
+}
+.quiz-machine .quiz-screen-text[data-screen-line="1"] { fill: #38bdf8; }
+.quiz-machine .quiz-screen-text[data-screen-line="2"] { fill: #e0f2fe; }
+.quiz-machine .quiz-scanline {
+    fill: #38bdf8;
+    opacity: 0;
+}
+.quiz-machine[data-state="loading"] .quiz-scanline {
+    opacity: .55;
+    animation: quiz-scan 1.35s linear infinite;
+}
+@keyframes quiz-scan {
+    from { transform: translateY(0); }
+    to { transform: translateY(-34px); }
+}
+
+.quiz-machine .quiz-vent { fill: var(--anatomy-shade-0); stroke: none; }
+.quiz-machine .quiz-slot { fill: #0b2438; stroke: none; }
+.quiz-machine .quiz-notc { fill: #173a52; stroke: none; }
+.quiz-machine .quiz-paper { fill: #ffffff; stroke: none; }
+.quiz-machine .quiz-card-rule { fill: none; stroke: #7dd3fc; stroke-width: .5; }
+.quiz-machine .quiz-tickline { fill: none; stroke: var(--anatomy-lo); stroke-width: .6; }
+
+.quiz-machine .quiz-lamp .lamp-glow {
+    fill: var(--anatomy-lit);
+    opacity: 0;
+    transition: opacity .35s var(--anatomy-ease);
+}
+.quiz-machine .quiz-lamp .lamp-ring {
+    fill: none;
+    stroke: var(--anatomy-lo);
+    stroke-width: .7;
+    transition: stroke .35s var(--anatomy-ease);
+}
+.quiz-machine .quiz-lamp .lamp-glass {
+    fill: var(--anatomy-shade-0);
+    transition: fill .35s var(--anatomy-ease);
+}
+.quiz-machine .quiz-lamp[data-on] .lamp-glow { opacity: .26; }
+.quiz-machine .quiz-lamp[data-on] .lamp-ring { stroke: var(--anatomy-lit); }
+.quiz-machine .quiz-lamp[data-on] .lamp-glass { fill: var(--anatomy-lit); }
+
+.quiz-machine .quiz-socket .socket-body {
+    fill: #0b2438;
+    stroke: none;
+}
+.quiz-machine .quiz-socket .socket-ring {
+    fill: none;
+    stroke: var(--anatomy-lo);
+    stroke-width: .7;
+    transition: stroke .35s var(--anatomy-ease);
+}
+.quiz-machine .quiz-socket[data-on] .socket-ring { stroke: var(--anatomy-lit); }
+
+.quiz-machine .quiz-key[data-on] .iso-top { fill: var(--anatomy-lit-top); }
+.quiz-machine .quiz-key[data-on] .iso-edge { stroke: var(--anatomy-lit); }
+.quiz-machine .quiz-key[data-on] .iso-shade { fill: var(--anatomy-lit-shade); }
+
+.quiz-machine .quiz-gauge-fill {
+    fill: var(--anatomy-lit);
+    stroke: none;
+}
+.quiz-machine .quiz-participants circle {
+    fill: var(--anatomy-shade-0);
+    stroke: none;
+    transition: fill .3s var(--anatomy-ease);
+}
+.quiz-machine[data-participants="on"] .quiz-participants circle {
+    fill: var(--anatomy-lit);
+}
+.quiz-machine[data-state="loading"] .quiz-participants circle,
+.quiz-machine[data-state="empty"] .quiz-participants circle,
+.quiz-machine[data-state="error"] .quiz-participants circle {
+    fill: var(--anatomy-faint);
+}
+
+.quiz-machine .quiz-needle {
+    fill: none;
+    stroke: var(--anatomy-lit);
+    stroke-width: 1.25;
+    stroke-linecap: round;
+}
+
+.quiz-machine .quiz-cable-shadow {
+    fill: none;
+    stroke: var(--anatomy-shade-0);
+    stroke-width: 3.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.quiz-machine .quiz-cable {
+    fill: none;
+    stroke: var(--anatomy-mid);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.quiz-machine .quiz-cable-end {
+    fill: var(--anatomy-face);
+    stroke: var(--anatomy-lo);
+    stroke-width: .7;
+}
+
+.quiz-machine [data-plug],
+.quiz-machine [data-card],
+.quiz-machine [data-gauge],
+.quiz-machine [data-print],
+.quiz-machine [data-plunger],
+.quiz-machine [data-carriage],
+.quiz-machine [data-bell-striker],
+.quiz-machine [data-live-cable] {
+    will-change: transform;
+}
+
+.quiz-machine-svg {
+    max-height: 760px;
+}
+
+.quiz-standalone-readout {
+    margin-top: 18px;
+    color: var(--anatomy-text);
+    font-family: var(--anatomy-mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .quiz-machine *,
+    .quiz-machine *::before,
+    .quiz-machine *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
+}
