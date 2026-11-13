@@ -120,16 +120,16 @@
                                             <form
                                                 method="POST"
                                                 action="{{ route('admin.participants.destroy', $peserta) }}"
-                                                onsubmit="return confirm('Hapus peserta {{ $peserta->username }}? Tindakan ini tidak bisa dibatalkan.')"
+                                                onsubmit="return confirm('Keluarkan {{ $peserta->username }} dari workspace ini? Akun, NIM, dan riwayat kuis tetap tersimpan. NIM masih terikat ke akun tersebut.')"
                                             >
                                                 @csrf
                                                 @method('DELETE')
                                                 <button
                                                     type="submit"
                                                     class="btn btn-ghost !py-1.5 !px-2.5 text-xs text-rose-600 hover:bg-rose-50"
-                                                    title="Hapus peserta"
+                                                    title="Keluarkan dari workspace"
                                                 >
-                                                    Hapus
+                                                    Keluarkan
                                                 </button>
                                             </form>
                                         </div>

@@ -78,7 +78,7 @@ class ParticipantController extends Controller
 
             if (! $linking->namesMatch($existing, $data['nama'])) {
                 throw ValidationException::withMessages([
-                    'username' => 'NIM sudah dipakai dengan nama berbeda. Periksa kembali atau hubungi master platform.',
+                    'username' => 'NIM/username ini sudah terdaftar dengan nama berbeda. Periksa ejaan nama, gunakan nama sesuai akun, atau minta master platform menautkan dengan konfirmasi nama berbeda.',
                 ]);
             }
 
@@ -291,7 +291,7 @@ class ParticipantController extends Controller
             'name' => $participant->nama,
             'username' => $participant->username,
         ]);
-        $pesan = 'Peserta dikeluarkan dari organisasi. Riwayat kuis tetap tersimpan.';
+        $pesan = 'Peserta dikeluarkan dari workspace. Akun, NIM, dan riwayat kuis tetap tersimpan. Hubungi master platform jika akun ini perlu ditautkan lagi atau namanya dikoreksi.';
 
         return redirect()->route('admin.participants.index')->with('sukses', $pesan);
     }
@@ -377,7 +377,7 @@ class ParticipantController extends Controller
                     } elseif (! $existing->isPeserta()) {
                         $alasan = 'Username sudah dipakai akun lain.';
                     } elseif (! $linking->namesMatch($existing, $nama)) {
-                        $alasan = 'NIM sudah dipakai dengan nama berbeda. Periksa kembali atau hubungi master platform.';
+                        $alasan = 'NIM/username sudah terdaftar dengan nama berbeda. Periksa ejaan nama atau minta master platform menautkan dengan konfirmasi nama berbeda.';
                     } elseif ($linking->isActiveMember($existing, $organizationId)) {
                         $alasan = 'Peserta sudah menjadi anggota workspace ini.';
                     } elseif ($sisaKuota <= 0) {

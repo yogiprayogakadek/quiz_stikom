@@ -109,7 +109,7 @@ class ParticipantLinkingTest extends TestCase
             ])
             ->assertRedirect(route('admin.participants.create'))
             ->assertSessionHasErrors([
-                'username' => 'NIM sudah dipakai dengan nama berbeda. Periksa kembali atau hubungi master platform.',
+                'username' => 'NIM/username ini sudah terdaftar dengan nama berbeda. Periksa ejaan nama, gunakan nama sesuai akun, atau minta master platform menautkan dengan konfirmasi nama berbeda.',
             ]);
 
         $this->assertDatabaseMissing('organization_memberships', [
