@@ -58,7 +58,7 @@ class LoginController extends Controller
             $detik = RateLimiter::availableIn($key);
 
             return back()
-                ->withInput($request->only('username'))
+                ->withInput($request->only('username', 'remember'))
                 ->withErrors(['username' => "Terlalu banyak percobaan masuk. Coba lagi dalam {$detik} detik."]);
         }
 
@@ -68,7 +68,7 @@ class LoginController extends Controller
             RateLimiter::hit($key, 60);
 
             return back()
-                ->withInput($request->only('username'))
+                ->withInput($request->only('username', 'remember'))
                 ->withErrors(['username' => 'Username atau password tidak cocok.']);
         }
 

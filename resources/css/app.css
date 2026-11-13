@@ -30,6 +30,7 @@
     --color-brand: #3b82f6;
     --color-brand-bright: #60a5fa;
     --color-brand-deep: #1d4ed8;
+    --color-brand-deeper: #1e3a8a;
     --color-brand-soft: #dbeafe;
 
     --color-landing-page: #f4faff;
@@ -159,13 +160,13 @@
     }
 
     .btn-primary {
-        background-color: var(--color-brand);
+        background-color: var(--color-brand-deep);
         color: #ffffff;
-        box-shadow: inset 0 -2px 0 rgba(29, 78, 216, 0.45);
+        box-shadow: inset 0 -2px 0 rgba(15, 23, 42, 0.28);
     }
 
     .btn-primary:hover {
-        background-color: var(--color-brand-deep);
+        background-color: var(--color-brand-deeper);
     }
 
     .btn-secondary {
@@ -225,6 +226,24 @@
         transform: translateY(-3px);
         box-shadow: var(--shadow-lift);
         border-color: var(--color-brand-bright);
+    }
+
+    .login-illustration {
+        aspect-ratio: 540 / 650;
+        background-image: url('/images/login-illustration.png');
+        background-image: image-set(
+            url('/images/login-illustration.webp') type('image/webp'),
+            url('/images/login-illustration.png') type('image/png')
+        );
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+    }
+
+    @media (max-height: 820px) and (min-width: 1024px) {
+        .login-illustration-frame {
+            max-width: 20rem;
+        }
     }
 
     .question-text {

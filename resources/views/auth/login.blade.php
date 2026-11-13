@@ -1,16 +1,16 @@
 @props(['judul' => null, 'masterLogin' => false])
 
-@php($judul ??= $masterLogin ? 'Login Master' : 'Masuk')
-@php($loginOrganization = $organization ?? null)
+@php
+    $judul ??= $masterLogin ? 'Masuk master' : 'Masuk';
+    $loginOrganization = $organization ?? null;
+    $splitLayout = $appSettings->login_layout !== 'centered' && ! $masterLogin;
+@endphp
 
 <x-layouts.guest :judul="$judul">
     <div class="min-h-screen w-full grid grid-cols-1 lg:grid-cols-12 bg-surface font-sans">
         {{-- Left Side: Visual & Contextual Storytelling --}}
-        <div @class([
-            'relative flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-soft via-surface-sunken to-brand-soft/40 p-10 xl:p-14 border-r border-outline',
-            'hidden lg:col-span-6 lg:flex' => $appSettings->login_layout !== 'centered',
-            'hidden' => $appSettings->login_layout === 'centered',
-        ])>
+        @if ($splitLayout)
+        <div class="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-soft via-surface-sunken to-brand-soft/40 p-10 xl:p-14 border-r border-outline lg:col-span-6 lg:flex">
             {{-- Top Branding & Status --}}
             <div class="relative z-10 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
@@ -19,24 +19,20 @@
                     </div>
                     <div>
                         <p class="font-display text-lg font-bold text-ink leading-tight">{{ $appSettings->site_name }}</p>
-                        <p class="text-xs text-ink-subtle">{{ $appSettings->site_tagline }}</p>
+                        <p class="text-xs text-ink-muted">{{ $appSettings->site_tagline }}</p>
                     </div>
                 </div>
 
                 <div class="inline-flex items-center gap-2 rounded-full bg-page/90 px-3.5 py-1.5 border border-outline shadow-xs backdrop-blur-sm">
-                    <span @class(['h-2 w-2 rounded-full', 'bg-sun-deep' => $appSettings->maintenance_enabled, 'bg-leaf animate-pulse' => ! $appSettings->maintenance_enabled])></span>
-                    <span class="text-xs font-bold text-ink-muted">{{ $appSettings->maintenance_enabled ? 'Maintenance aktif' : 'Layanan siap' }}</span>
+                    <span @class(['h-2 w-2 rounded-full', 'bg-sun-deep' => $appSettings->maintenance_enabled, 'bg-leaf' => ! $appSettings->maintenance_enabled])></span>
+                    <span class="text-xs font-bold text-ink-muted">{{ $appSettings->maintenance_enabled ? 'Maintenance aktif' : 'Tidak dalam maintenance' }}</span>
                 </div>
             </div>
 
             {{-- Center: Clean Illustration Frame --}}
             <div class="relative z-10 my-auto flex flex-col items-center justify-center py-6">
-                <div class="w-full max-w-md overflow-hidden rounded-2xl border border-outline bg-page/60 p-3 shadow-lift backdrop-blur-xs">
-                    <img
-                        src="{{ asset('images/login-illustration.png') }}"
-                        alt="Ilustrasi peserta mengerjakan kuis"
-                        class="w-full h-auto rounded-xl object-cover select-none pointer-events-none"
-                    >
+                <div class="login-illustration-frame w-full max-w-md overflow-hidden rounded-2xl border border-outline bg-page/60 p-3 shadow-lift backdrop-blur-xs">
+                    <div class="login-illustration w-full rounded-xl select-none pointer-events-none" role="img" aria-label="Ilustrasi peserta mengerjakan kuis"></div>
                 </div>
             </div>
 
@@ -48,7 +44,7 @@
                     </span>
                     <div>
                         <p class="text-xs font-bold text-ink">Mode Layar Penuh</p>
-                        <p class="text-[11px] text-ink-subtle leading-normal">Pengawasan integritas sesi otomatis.</p>
+                        <p class="text-xs text-ink-muted leading-normal">Pengawasan integritas sesi otomatis.</p>
                     </div>
                 </div>
                 <div class="flex items-start gap-3">
@@ -57,17 +53,18 @@
                     </span>
                     <div>
                         <p class="text-xs font-bold text-ink">Sinkron Realtime</p>
-                        <p class="text-[11px] text-ink-subtle leading-normal">Jawaban tersimpan instan ke server.</p>
+                        <p class="text-xs text-ink-muted leading-normal">Jawaban tersimpan instan ke server.</p>
                     </div>
                 </div>
             </div>
         </div>
+        @endif
 
         {{-- Right Side: Login Form --}}
         <main @class([
             'flex min-h-screen w-full flex-col justify-center p-6 sm:p-12 lg:p-14 xl:p-18',
-            'bg-surface lg:col-span-6' => $appSettings->login_layout !== 'centered',
-            'bg-gradient-to-br from-brand-soft via-surface to-surface-sunken lg:col-span-12' => $appSettings->login_layout === 'centered',
+            'bg-surface lg:col-span-6' => $splitLayout,
+            'bg-gradient-to-br from-brand-soft via-surface to-surface-sunken lg:col-span-12' => ! $splitLayout,
         ])>
             <div
                 x-data="{ showPassword: false, submitting: false }"
@@ -76,8 +73,8 @@
                 {{-- Mobile Brand Header --}}
                 <div @class([
                     'items-center justify-center gap-3 mb-8',
-                    'flex lg:hidden' => $appSettings->login_layout !== 'centered',
-                    'flex' => $appSettings->login_layout === 'centered',
+                    'flex lg:hidden' => $splitLayout,
+                    'flex' => ! $splitLayout,
                 ])>
                     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-page p-2 shadow-xs border border-outline">
                         <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
@@ -97,6 +94,13 @@
                         <p class="mt-2 text-sm text-ink-muted">
                             {{ $masterLogin ? 'Kelola organisasi dan status layanan dengan akun master.' : $appSettings->login_description }}
                         </p>
+
+                        @if (! $splitLayout)
+                            <div class="mt-4 inline-flex items-center gap-2 rounded-full bg-surface-sunken px-3.5 py-1.5 border border-outline shadow-xs">
+                                <span @class(['h-2 w-2 rounded-full', 'bg-sun-deep' => $appSettings->maintenance_enabled, 'bg-leaf' => ! $appSettings->maintenance_enabled])></span>
+                                <span class="text-xs font-bold text-ink-muted">{{ $appSettings->maintenance_enabled ? 'Maintenance aktif' : 'Tidak dalam maintenance' }}</span>
+                            </div>
+                        @endif
                     </div>
 
                     {{-- Alert Notifications --}}
@@ -143,7 +147,7 @@
                                 Username
                             </label>
                             <div class="relative mt-1.5">
-                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
+                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-subtle">
                                     <x-icon name="user" :size="18" />
                                 </span>
                                 <input
@@ -156,11 +160,13 @@
                                     autofocus
                                     value="{{ old('username') }}"
                                     placeholder="{{ $masterLogin ? 'Username master' : 'NIM / Username' }}"
-                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-4 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('username') border-coral-deep @enderror"
+                                    aria-invalid="{{ $errors->has('username') ? 'true' : 'false' }}"
+                                    @if ($errors->has('username')) aria-describedby="username-error" @endif
+                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-4 text-base text-ink placeholder:text-ink-subtle focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('username') border-coral-deep @enderror"
                                 >
                             </div>
                             @error('username')
-                                <p class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
+                                <p id="username-error" class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
                             @enderror
                         </div>
 
@@ -170,49 +176,53 @@
                                 Password
                             </label>
                             <div class="relative mt-1.5">
-                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
+                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-subtle">
                                     <x-icon name="lock" :size="18" />
                                 </span>
                                 <input
                                     id="password"
                                     name="password"
+                                    type="password"
                                     :type="showPassword ? 'text' : 'password'"
                                     autocomplete="current-password"
                                     required
                                     placeholder="Kata sandi"
-                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-10 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('password') border-coral-deep @enderror"
+                                    aria-invalid="{{ $errors->has('password') ? 'true' : 'false' }}"
+                                    @if ($errors->has('password')) aria-describedby="password-error" @endif
+                                    class="block w-full rounded-xl border border-outline bg-page py-2.5 pl-10 pr-10 text-base text-ink placeholder:text-ink-subtle focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand-soft transition @error('password') border-coral-deep @enderror"
                                 >
                                 <button
                                     type="button"
                                     @click="showPassword = !showPassword"
-                                    class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-ink-faint hover:text-ink focus:outline-none transition-colors"
+                                    class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-ink-subtle hover:text-ink transition-colors"
+                                    aria-label="Lihat password"
                                     :aria-label="showPassword ? 'Sembunyikan password' : 'Lihat password'"
+                                    aria-controls="password"
+                                    aria-pressed="false"
+                                    :aria-pressed="showPassword"
                                 >
-                                    <template x-if="!showPassword">
-                                        <x-icon name="eye" :size="18" />
-                                    </template>
-                                    <template x-if="showPassword">
-                                        <x-icon name="eye-off" :size="18" />
-                                    </template>
+                                    <x-icon name="eye" :size="18" x-show="!showPassword" />
+                                    <x-icon name="eye-off" :size="18" x-show="showPassword" x-cloak />
                                 </button>
                             </div>
                             @error('password')
-                                <p class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
+                                <p id="password-error" class="mt-1 text-xs font-semibold text-coral-deep">{{ $message }}</p>
                             @enderror
                         </div>
 
                         {{-- Remember Me --}}
                         <div class="flex items-center justify-between gap-3 pt-1">
-                            <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-ink-muted select-none">
+                            <label class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-xs font-medium text-ink-muted select-none">
                                 <input
                                     type="checkbox"
                                     name="remember"
                                     value="1"
+                                    @checked(old('remember'))
                                     class="h-4 w-4 rounded border-outline text-brand focus:ring-brand-soft"
                                 >
                                 <span>Ingat saya di perangkat ini</span>
                             </label>
-                            <a href="{{ route('password.request') }}" class="text-xs font-semibold text-brand-deep underline-offset-2 hover:underline">
+                            <a href="{{ route('password.request') }}" class="inline-flex min-h-11 items-center text-xs font-semibold text-brand-deep underline-offset-2 hover:underline">
                                 Lupa password?
                             </a>
                         </div>
@@ -223,9 +233,9 @@
                             :disabled="submitting"
                             class="btn btn-primary w-full mt-3 font-extrabold"
                         >
-                            <span x-show="!submitting">{{ $masterLogin ? 'Masuk sebagai master' : 'Masuk akun' }}</span>
+                            <span x-show="!submitting">{{ $masterLogin ? 'Masuk sebagai master' : 'Masuk' }}</span>
                             <span x-show="submitting" x-cloak class="flex items-center gap-2">
-                                <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <svg class="h-5 w-5 animate-spin motion-reduce:hidden" viewBox="0 0 24 24" fill="none">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                                 </svg>
@@ -246,7 +256,7 @@
                             @if ($masterLogin)
                                 Bukan master? <a href="{{ route('home') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Kembali ke halaman utama</a>.
                             @else
-                                Kendala akun? Hubungi admin kelas.
+                                Kendala akun? Hubungi pengelola workspace.
                             @endif
                         </p>
                         <p class="mt-3 text-xs text-ink-subtle">
