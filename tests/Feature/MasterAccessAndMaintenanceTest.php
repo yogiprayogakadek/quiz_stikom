@@ -150,6 +150,40 @@ class MasterAccessAndMaintenanceTest extends TestCase
         $this->assertTrue($organization->fresh()->is_active);
     }
 
+    public function test_master_tanpa_workspace_diarahkan_ke_halaman_organisasi_dari_menu_workspace(): void
+    {
+        $master = $this->master();
+        $master->organizations()->detach();
+
+        foreach ([
+            'admin.participants.index',
+            'admin.quizzes.index',
+            'admin.classes.index',
+        ] as $route) {
+            $this->actingAs($master)
+                ->withSession(['auth_token' => $master->current_session_token])
+                ->get(route($route))
+                ->assertRedirect(route('master.organizations.index'))
+                ->assertSessionHasErrors('workspace');
+        }
+    }
+
+    public function test_master_tanpa_workspace_melihat_menu_tautkan_peserta_tanpa_menu_workspace(): void
+    {
+        $master = $this->master();
+        $master->organizations()->detach();
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->get(route('master.organizations.index'))
+            ->assertOk()
+            ->assertSee('Tautkan peserta')
+            ->assertSee(route('master.participants.index'))
+            ->assertDontSee(route('admin.participants.index'))
+            ->assertDontSee(route('admin.quizzes.index'))
+            ->assertDontSee(route('admin.classes.index'));
+    }
+
     private function master(): User
     {
         return User::create([

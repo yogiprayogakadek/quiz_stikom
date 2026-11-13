@@ -47,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with([
                 'hasOwnedWorkspace' => $user?->ownedOrganizations()->exists() ?? false,
+                'hasWorkspace' => app(OrganizationContext::class)->current() !== null,
                 'pendingWorkspaceRequestCount' => $user && $user->isPlatformAdmin()
                     ? WorkspaceRequest::query()->where('status', WorkspaceRequest::STATUS_PENDING)->count()
                     : 0,

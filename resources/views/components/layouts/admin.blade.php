@@ -1,5 +1,11 @@
 @props(['judul' => 'Dashboard', 'keterangan' => null, 'canvas' => false])
 
+@php
+    $homeUrl = auth()->user()->isPlatformAdmin() && ! $hasWorkspace
+        ? route('master.organizations.index')
+        : route('admin.dashboard');
+@endphp
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -53,7 +59,7 @@
     >
         <div class="flex flex-1 flex-col" style="min-height: 0;">
             <div class="flex shrink-0 items-center justify-between pb-4 border-b border-slate-100">
-                <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
+                <a href="{{ $homeUrl }}" class="flex items-center gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
                         <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                     </div>
@@ -73,6 +79,7 @@
             </div>
 
             <nav class="mt-6 flex-1 space-y-1.5 overflow-y-auto" style="min-height: 0; overscroll-behavior: contain; scrollbar-width: thin;" aria-label="Navigasi mobile administrator">
+                @if ($hasWorkspace)
                 <a
                     href="{{ route('admin.dashboard') }}"
                     class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.dashboard') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
@@ -123,6 +130,13 @@
                     <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                     <span>Pengaturan</span>
                 </a>
+                @endif
+                @if (auth()->user()->isPlatformAdmin() && ! $hasWorkspace)
+                    <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                        <p class="font-extrabold">Belum ada workspace aktif</p>
+                        <p class="mt-1">Menu peserta, kelas, dan kuis workspace muncul setelah akun master terhubung ke workspace.</p>
+                    </div>
+                @endif
                 @if (auth()->user()->isPlatformAdmin())
                     <a
                         href="{{ route('master.owners.index') }}"
@@ -157,7 +171,7 @@
                         @if (request()->routeIs('master.participants.*')) aria-current="page" @endif
                     >
                         <x-icon name="user" :size="20" class="{{ request()->routeIs('master.participants.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
-                        <span>Peserta</span>
+                        <span>Tautkan peserta</span>
                     </a>
                     <a
                         href="{{ route('master.mail.edit') }}"
@@ -239,7 +253,7 @@
             <div class="flex-1 overflow-y-auto" style="min-height: 0; overscroll-behavior: contain; scrollbar-width: thin;">
                 {{-- Logo & App Title (No toggle here - toggle is in the top bar) --}}
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                    <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? @js($appSettings->site_name) : ''">
+                    <a href="{{ $homeUrl }}" class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''" :title="sidebarCollapsed ? @js($appSettings->site_name) : ''">
                         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 p-2 shadow-xs ring-1 ring-slate-200/70">
                             <img src="{{ $appSettings->logoUrl() }}" alt="Logo {{ $appSettings->site_name }}" class="h-full w-full object-contain">
                         </div>
@@ -252,6 +266,7 @@
 
                 {{-- Navigation Links --}}
                 <nav class="mt-8 space-y-1.5">
+                    @if ($hasWorkspace)
                     <a
                         href="{{ route('admin.dashboard') }}"
                         class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.dashboard') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
@@ -316,6 +331,13 @@
                         <x-icon name="settings" :size="20" class="{{ request()->routeIs('admin.settings.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Pengaturan</span>
                     </a>
+                    @endif
+                    @if (auth()->user()->isPlatformAdmin() && ! $hasWorkspace)
+                        <div x-show="!sidebarCollapsed" x-cloak class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                            <p class="font-extrabold">Belum ada workspace aktif</p>
+                            <p class="mt-1">Menu peserta, kelas, dan kuis workspace muncul setelah akun master terhubung ke workspace.</p>
+                        </div>
+                    @endif
                     @if (auth()->user()->isPlatformAdmin())
                         <a
                             href="{{ route('master.owners.index') }}"
@@ -349,6 +371,16 @@
                         >
                             <x-icon name="star" :size="20" class="{{ request()->routeIs('master.feedback.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                             <span x-show="!sidebarCollapsed" x-cloak>Masukan</span>
+                        </a>
+                        <a
+                            href="{{ route('master.participants.index') }}"
+                            class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('master.participants.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                            :title="sidebarCollapsed ? 'Tautkan peserta' : ''"
+                            @if (request()->routeIs('master.participants.*')) aria-current="page" @endif
+                        >
+                            <x-icon name="user" :size="20" class="{{ request()->routeIs('master.participants.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                            <span x-show="!sidebarCollapsed" x-cloak>Tautkan peserta</span>
                         </a>
                         <a
                             href="{{ route('master.mail.edit') }}"
@@ -399,6 +431,7 @@
                 <x-organization-switcher id="admin-desktop" class="mt-5" x-show="!sidebarCollapsed" x-cloak />
 
                 {{-- Server Status Card --}}
+                @if ($hasWorkspace)
                 <div x-show="!sidebarCollapsed" x-cloak class="mt-8 hidden lg:block rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/60 border border-slate-200/80 p-4 shadow-xs">
                     <div class="flex items-center gap-2.5">
                         <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
@@ -413,6 +446,7 @@
                         + Buka Sesi Ujian
                     </a>
                 </div>
+                @endif
             </div>
 
             {{-- User Profile Footer --}}

@@ -11,12 +11,16 @@ class EnsureOrganizationMember
 {
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless(
-            app(OrganizationContext::class)->current(),
-            403,
-            'Akun ini belum terdaftar pada organisasi aktif.',
-        );
+        if (app(OrganizationContext::class)->current()) {
+            return $next($request);
+        }
 
-        return $next($request);
+        if ($request->user()?->isPlatformAdmin()) {
+            return redirect()
+                ->route('master.organizations.index')
+                ->withErrors(['workspace' => 'Akun master belum terhubung ke workspace. Pilih workspace lewat menu Organisasi.']);
+        }
+
+        abort(403, 'Akun ini belum terdaftar pada organisasi aktif.');
     }
 }
