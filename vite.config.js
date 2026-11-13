@@ -9,6 +9,7 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/js/app.js',
                 'resources/js/landing-machine.js',
+                'resources/js/registration.js',
             ],
             refresh: true,
         }),
