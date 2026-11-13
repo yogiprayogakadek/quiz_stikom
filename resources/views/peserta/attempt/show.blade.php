@@ -190,7 +190,7 @@
                     this.peringatan = 'Koneksi internet terputus. Jawaban akan disimpan di perangkat (offline) dan disinkronkan saat terhubung kembali.';
                 });
             },
-            async prosesAntrean() {
+            async prosesAntrean(denganProgress = false) {
                 if (this.sedangSinkron || this.antreanOffline.length === 0) {
                     return;
                 }
@@ -213,7 +213,9 @@
                     try {
                         const res = await window.kuisFetch(config.answerUrl, {
                             method: 'POST',
-                            body: body
+                            body: body,
+                            progress: denganProgress,
+                            progressMessage: 'Menyimpan jawaban...'
                         });
 
                         if (res.ok) {
@@ -316,7 +318,8 @@
                 try {
                     hasil = await window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, option_id: opsi.id }
+                        body: { question_id: soal.id, option_id: opsi.id },
+                        progress: false
                     });
                 } catch (e) {
                     // Jaringan bermasalah, simpan ke antrean lokal
@@ -359,7 +362,7 @@
                 clearTimeout(this.timerTeks[soal.id]);
                 this.timerTeks[soal.id] = setTimeout(() => this.simpanTeks(soal), 800);
             },
-            async simpanTeks(soal) {
+            async simpanTeks(soal, denganProgress = false) {
                 if (!soal || soal.tipe !== 'essay' || this.berhenti) {
                     return true;
                 }
@@ -396,7 +399,9 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, jawaban_teks: nilai }
+                        body: { question_id: soal.id, jawaban_teks: nilai },
+                        progress: denganProgress,
+                        progressMessage: 'Menyimpan jawaban...'
                     });
                     this.janjiTeks[soal.id] = janji;
                     hasil = await janji;
@@ -447,7 +452,7 @@
                 for (const soal of this.questions.filter((item) => item.tipe === 'essay')) {
                     clearTimeout(this.timerTeks[soal.id]);
 
-                    if (!(await this.simpanTeks(soal))) {
+                    if (!(await this.simpanTeks(soal, true))) {
                         return false;
                     }
                 }
@@ -461,7 +466,7 @@
                         return false;
                     }
                     this.pesan = 'Menyinkronkan ' + this.antreanOffline.length + ' jawaban ke server...';
-                    await this.prosesAntrean();
+                    await this.prosesAntrean(true);
                     if (this.antreanOffline.length > 0) {
                         this.pesan = 'Masih ada jawaban yang belum tersinkron ke server. Mohon tunggu beberapa saat.';
                         return false;
@@ -625,7 +630,8 @@
                     if (detik > 0 && ! this.berhenti && ! this.memprosesPelanggaran) {
                         window.kuisFetch(config.eventUrl, {
                             method: 'POST',
-                            body: { tipe: 'kembali', durasi_detik: detik }
+                            body: { tipe: 'kembali', durasi_detik: detik },
+                            progress: false
                         });
                     }
                 }
@@ -660,7 +666,8 @@
                 this.kejadianTerakhir[tipe] = sekarang;
                 window.kuisFetch(config.eventUrl, {
                     method: 'POST',
-                    body: { tipe }
+                    body: { tipe },
+                    progress: false
                 }).then((hasil) => {
                     if (hasil.ok) {
                         this.jumlahKejadian = hasil.data.jumlah;

@@ -184,7 +184,8 @@
                     try {
                         const res = await window.kuisFetch(config.answerUrl, {
                             method: 'POST',
-                            body: { question_id: item.question_id, option_id: item.option_id }
+                            body: { question_id: item.question_id, option_id: item.option_id },
+                            progress: false
                         });
                         if (!res.ok) {
                             sisa.push(item);
@@ -222,7 +223,8 @@
                 try {
                     const hasil = await window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: qId, option_id: opsi.id }
+                        body: { question_id: qId, option_id: opsi.id },
+                        progress: false
                     });
                     this.menyimpan = false;
                     if (hasil.ok) {
@@ -301,7 +303,8 @@
                     if (detik > 0 && ! this.berhenti && ! this.memprosesPelanggaran) {
                         window.kuisFetch(config.eventUrl, {
                             method: 'POST',
-                            body: { tipe: 'kembali', durasi_detik: detik }
+                            body: { tipe: 'kembali', durasi_detik: detik },
+                            progress: false
                         });
                     }
                 }
@@ -373,7 +376,8 @@
                 this.kejadianTerakhir[tipe] = sekarang;
                 window.kuisFetch(config.eventUrl, {
                     method: 'POST',
-                    body: { tipe }
+                    body: { tipe },
+                    progress: false
                 }).then((hasil) => {
                     if (hasil.ok) {
                         this.jumlahKejadian = hasil.data.jumlah;
