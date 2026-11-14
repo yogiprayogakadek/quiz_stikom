@@ -4,6 +4,20 @@
     $tipeAwal = old('tipe', $question?->tipe ?? 'pilihan_ganda');
     $bobotAwal = (int) old('bobot', $question?->bobot ?? ($tipeAwal === 'essay' ? 10 : 1));
     $rubrikAwal = array_values(old('rubrik_essay', $question?->rubrik_essay ?? []));
+    $petunjukAwal = old('petunjuk', implode("\n", (array) ($question?->petunjuk_json ?? [])));
+    $subSoalAwal = collect(old('sub_soal', $question?->sub_soal_json ?? []))
+        ->map(function ($bagian) {
+            $bagian = is_array($bagian) ? $bagian : [];
+            $petunjuk = $bagian['petunjuk'] ?? [];
+
+            return [
+                'label' => $bagian['label'] ?? '',
+                'teks' => $bagian['teks'] ?? '',
+                'petunjuk' => is_array($petunjuk) ? implode("\n", $petunjuk) : (string) $petunjuk,
+            ];
+        })
+        ->values()
+        ->all();
 @endphp
 
 <div
@@ -12,6 +26,8 @@
         bobot: {{ $bobotAwal }},
         opsi: {{ Illuminate\Support\Js::from(array_values($opsiAwal)) }},
         rubrik: {{ Illuminate\Support\Js::from($rubrikAwal) }},
+        petunjuk: {{ Illuminate\Support\Js::from($petunjukAwal) }},
+        subSoal: {{ Illuminate\Support\Js::from($subSoalAwal) }},
         correct: {{ $benarAwal }},
         tambah() {
             if (this.opsi.length < 6) {
@@ -35,6 +51,18 @@
         },
         hapusKriteria(index) {
             this.rubrik.splice(index, 1);
+        },
+        tambahSubSoal() {
+            if (this.subSoal.length < 10) {
+                let kode = 65;
+                while (this.subSoal.some((bagian) => bagian.label === String.fromCharCode(kode))) {
+                    kode++;
+                }
+                this.subSoal.push({ label: String.fromCharCode(kode), teks: '', petunjuk: '' });
+            }
+        },
+        hapusSubSoal(index) {
+            this.subSoal.splice(index, 1);
         }
     }"
     class="space-y-6"
@@ -160,6 +188,56 @@
         <p class="help mt-2">Contoh jawaban yang benar. Tidak ditampilkan ke peserta kecuali pembahasan sesi diaktifkan.</p>
         @error('kunci_essay') <p class="field-error">{{ $message }}</p> @enderror
         </div>
+
+        <div>
+            <label for="petunjuk" class="label">Poin yang harus dijawab (opsional)</label>
+            <textarea id="petunjuk" name="petunjuk" rows="4" class="input" maxlength="5000" x-model="petunjuk" x-bind:disabled="tipe !== 'essay'" @error('petunjuk') aria-invalid="true" @enderror></textarea>
+            <p class="help mt-2">Satu poin per baris. Tampil sebagai checklist untuk peserta.</p>
+            @error('petunjuk') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <fieldset class="border-t border-outline pt-5" aria-labelledby="sub-soal-label">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <p id="sub-soal-label" class="label">Sub-soal (opsional)</p>
+                    <p class="help">Isi kalau soal punya bagian A, B, C. Peserta mendapat satu kotak jawaban per sub-soal.</p>
+                </div>
+                <button type="button" class="btn btn-secondary" x-on:click="tambahSubSoal()" x-bind:disabled="tipe !== 'essay' || subSoal.length >= 10">
+                    <x-icon name="plus" :size="18" />
+                    Tambah sub-soal
+                </button>
+            </div>
+
+            <div class="mt-3 space-y-3">
+                <template x-for="(bagian, index) in subSoal" :key="index">
+                    <div class="space-y-3 rounded-xl border border-outline p-4">
+                        <div class="grid gap-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
+                            <div>
+                                <label class="label" x-bind:for="'sub-label-' + index">Label</label>
+                                <input type="text" x-bind:id="'sub-label-' + index" x-bind:name="'sub_soal[' + index + '][label]'" x-model="bagian.label" class="input" maxlength="10" placeholder="A" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'">
+                            </div>
+                            <div>
+                                <label class="label" x-bind:for="'sub-teks-' + index">Teks sub-soal</label>
+                                <textarea x-bind:id="'sub-teks-' + index" x-bind:name="'sub_soal[' + index + '][teks]'" x-model="bagian.teks" rows="3" class="input" maxlength="2000" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'"></textarea>
+                            </div>
+                            <button type="button" class="btn btn-ghost min-h-11 min-w-11 justify-self-start px-3 text-coral-deep" x-on:click="hapusSubSoal(index)" x-bind:disabled="tipe !== 'essay'" x-bind:aria-label="'Hapus sub-soal ' + (index + 1)">
+                                <x-icon name="x" :size="18" />
+                            </button>
+                        </div>
+                        <div>
+                            <label class="label" x-bind:for="'sub-petunjuk-' + index">Poin yang harus dijawab (opsional)</label>
+                            <textarea x-bind:id="'sub-petunjuk-' + index" x-bind:name="'sub_soal[' + index + '][petunjuk]'" x-model="bagian.petunjuk" rows="3" class="input" maxlength="5000" x-bind:disabled="tipe !== 'essay'"></textarea>
+                            <p class="help mt-1">Satu poin per baris.</p>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="subSoal.length === 0" class="text-sm text-ink-muted">Belum ada sub-soal. Soal essay biasa tetap memakai satu kotak jawaban.</p>
+            </div>
+            @error('sub_soal') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.label') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.teks') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.petunjuk') <p class="field-error">{{ $message }}</p> @enderror
+        </fieldset>
 
         <fieldset class="border-t border-outline pt-5">
             <div class="flex flex-wrap items-end justify-between gap-3">

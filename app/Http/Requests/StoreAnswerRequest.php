@@ -12,6 +12,7 @@ class StoreAnswerRequest extends FormRequest
             'question_id' => ['required', 'integer', 'exists:questions,id'],
             'option_id' => ['nullable', 'integer', 'exists:options,id'],
             'jawaban_teks' => ['nullable', 'string', 'max:5000'],
+            'part_key' => ['nullable', 'string', 'max:10'],
         ];
     }
 

@@ -25,6 +25,8 @@ class Question extends Model
         'pembahasan',
         'kunci_essay',
         'rubrik_essay',
+        'petunjuk_json',
+        'sub_soal_json',
     ];
 
     protected function casts(): array
@@ -34,12 +36,32 @@ class Question extends Model
             'durasi_detik' => 'integer',
             'bobot' => 'integer',
             'rubrik_essay' => 'array',
+            'petunjuk_json' => 'array',
+            'sub_soal_json' => 'array',
         ];
     }
 
     public function isEssay(): bool
     {
         return $this->tipe === 'essay';
+    }
+
+    public function teksUntukPenilaian(): string
+    {
+        $teks = (string) $this->teks;
+
+        foreach ($this->sub_soal_json ?? [] as $bagian) {
+            $label = trim((string) ($bagian['label'] ?? ''));
+            $isi = trim((string) ($bagian['teks'] ?? ''));
+
+            if ($isi === '') {
+                continue;
+            }
+
+            $teks .= "\n\n".($label !== '' ? $label.'. ' : '').$isi;
+        }
+
+        return $teks;
     }
 
     public function quiz(): BelongsTo

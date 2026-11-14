@@ -175,6 +175,71 @@ class QuizQuestionScopedTest extends TestCase
             ->assertSessionHasErrors('rubrik_essay');
     }
 
+    public function test_admin_dapat_menyimpan_petunjuk_dan_sub_soal_essay(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Sub Soal',
+            'username' => 'admin-sub-soal',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-sub-soal-token',
+        ]);
+        $quiz = Quiz::create(['judul' => 'Kuis Sub Soal', 'created_by' => $admin->id]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), [
+                'teks' => 'Topologi dan media transmisi jaringan.',
+                'tipe' => 'essay',
+                'bobot' => 20,
+                'durasi_detik' => 300,
+                'petunjuk' => "Topologi jaringan\nMedia transmisi",
+                'sub_soal' => [
+                    [
+                        'label' => 'A',
+                        'teks' => 'Jelaskan perbedaan topologi bus, star, dan ring.',
+                        'petunjuk' => "Kelebihan\nKekurangan",
+                    ],
+                    [
+                        'label' => 'B',
+                        'teks' => 'Pilih topologi dan media untuk kampus.',
+                        'petunjuk' => "Topologi\nMedia\nAlasan",
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $question = Question::where('teks', 'Topologi dan media transmisi jaringan.')->firstOrFail();
+
+        $this->assertSame(['Topologi jaringan', 'Media transmisi'], $question->petunjuk_json);
+        $this->assertSame([
+            [
+                'label' => 'A',
+                'teks' => 'Jelaskan perbedaan topologi bus, star, dan ring.',
+                'petunjuk' => ['Kelebihan', 'Kekurangan'],
+            ],
+            [
+                'label' => 'B',
+                'teks' => 'Pilih topologi dan media untuk kampus.',
+                'petunjuk' => ['Topologi', 'Media', 'Alasan'],
+            ],
+        ], $question->sub_soal_json);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), [
+                'teks' => 'Sub-soal duplikat.',
+                'tipe' => 'essay',
+                'bobot' => 10,
+                'durasi_detik' => 120,
+                'sub_soal' => [
+                    ['label' => 'A', 'teks' => 'Pertanyaan pertama.'],
+                    ['label' => 'A', 'teks' => 'Pertanyaan kedua.'],
+                ],
+            ])
+            ->assertSessionHasErrors('sub_soal.0.label');
+    }
+
     public function test_deleting_quiz_cascades_to_its_questions(): void
     {
         $admin = User::create([

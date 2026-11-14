@@ -141,7 +141,17 @@
                                     @endif
                                 </td>
                                 <td>
-                                    @if ($baris['tipe'] === 'essay')
+                                    @if ($baris['tipe'] === 'essay' && ! empty($baris['sub_soal']))
+                                        <div class="space-y-3">
+                                            @foreach ($baris['sub_soal'] as $bagian)
+                                                <div>
+                                                    <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['label'] }}</p>
+                                                    <p class="text-sm text-ink-muted">{{ $bagian['teks'] }}</p>
+                                                    <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['label']] ?? 'Tidak dijawab' }}</p>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @elseif ($baris['tipe'] === 'essay')
                                         <p class="whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
                                     @else
                                         {{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}

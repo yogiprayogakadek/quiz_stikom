@@ -38,7 +38,7 @@ class EssayGrader
         }
 
         $suggestion = $this->ai->evaluateEssay(
-            $question->teks,
+            $question->teksUntukPenilaian(),
             $question->kunci_essay,
             $question->rubrik_essay ?? [],
             (string) $answer->jawaban_teks,

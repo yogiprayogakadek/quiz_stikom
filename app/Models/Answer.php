@@ -14,6 +14,7 @@ class Answer extends Model
         'question_id',
         'option_id',
         'jawaban_teks',
+        'jawaban_parts_json',
         'waktu_jawab_ms',
         'skor',
         'ai_suggested_score',
@@ -29,6 +30,7 @@ class Answer extends Model
     protected function casts(): array
     {
         return [
+            'jawaban_parts_json' => 'array',
             'waktu_jawab_ms' => 'integer',
             'skor' => 'integer',
             'ai_suggested_score' => 'integer',

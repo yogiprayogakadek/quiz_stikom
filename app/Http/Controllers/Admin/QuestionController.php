@@ -56,6 +56,8 @@ class QuestionController extends Controller
                 'pembahasan' => $data['pembahasan'] ?? null,
                 'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
                 'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
+                'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
+                'sub_soal_json' => $data['tipe'] === 'essay' ? $this->normalisasiSubSoal($data['sub_soal'] ?? []) : null,
             ]);
 
             if ($data['tipe'] === 'pilihan_ganda') {
@@ -121,6 +123,8 @@ class QuestionController extends Controller
                 'pembahasan' => $data['pembahasan'] ?? null,
                 'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
                 'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
+                'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
+                'sub_soal_json' => $data['tipe'] === 'essay' ? $this->normalisasiSubSoal($data['sub_soal'] ?? []) : null,
             ]);
 
             $question->options()->delete();
@@ -203,6 +207,32 @@ class QuestionController extends Controller
                 'is_correct' => $index === $correct,
             ]);
         }
+    }
+
+    private function normalisasiPetunjuk(?string $teks): array
+    {
+        if ($teks === null || trim($teks) === '') {
+            return [];
+        }
+
+        return collect(preg_split('/\r\n|\r|\n/', $teks))
+            ->map(fn ($baris) => trim((string) $baris))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function normalisasiSubSoal(array $subSoal): array
+    {
+        return collect($subSoal)
+            ->map(fn (array $bagian) => [
+                'label' => trim((string) ($bagian['label'] ?? '')),
+                'teks' => trim((string) ($bagian['teks'] ?? '')),
+                'petunjuk' => $this->normalisasiPetunjuk($bagian['petunjuk'] ?? null),
+            ])
+            ->filter(fn (array $bagian) => $bagian['label'] !== '' && $bagian['teks'] !== '')
+            ->values()
+            ->all();
     }
 
     public function importForm(?Quiz $quiz = null): View

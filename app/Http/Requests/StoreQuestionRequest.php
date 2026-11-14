@@ -19,6 +19,11 @@ class StoreQuestionRequest extends FormRequest
             'rubrik_essay' => ['nullable', 'array', 'max:10'],
             'rubrik_essay.*.label' => ['required', 'string', 'max:200'],
             'rubrik_essay.*.points' => ['required', 'integer', 'min:1', 'max:1000'],
+            'petunjuk' => ['nullable', 'string', 'max:5000'],
+            'sub_soal' => ['nullable', 'array', 'max:10'],
+            'sub_soal.*.label' => ['required', 'string', 'max:10', 'distinct'],
+            'sub_soal.*.teks' => ['required', 'string', 'max:2000'],
+            'sub_soal.*.petunjuk' => ['nullable', 'string', 'max:5000'],
             'opsi' => ['required_if:tipe,pilihan_ganda', 'array', 'min:2', 'max:6'],
             'opsi.*.teks' => ['required_if:tipe,pilihan_ganda', 'string', 'max:500'],
             'correct' => ['required_if:tipe,pilihan_ganda', 'integer', 'min:0', 'max:5'],
@@ -68,6 +73,10 @@ class StoreQuestionRequest extends FormRequest
             'rubrik_essay.max' => 'Rubrik maksimal memiliki 10 kriteria.',
             'rubrik_essay.*.label.required' => 'Nama setiap kriteria wajib diisi.',
             'rubrik_essay.*.points.required' => 'Poin setiap kriteria wajib diisi.',
+            'sub_soal.max' => 'Sub-soal maksimal 10 bagian.',
+            'sub_soal.*.label.required' => 'Label setiap sub-soal wajib diisi.',
+            'sub_soal.*.label.distinct' => 'Label sub-soal tidak boleh sama.',
+            'sub_soal.*.teks.required' => 'Teks setiap sub-soal wajib diisi.',
         ];
     }
 }

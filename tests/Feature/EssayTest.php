@@ -17,6 +17,7 @@ use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\AiQuestionService;
+use App\Services\EssayGrader;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -101,6 +102,158 @@ class EssayTest extends TestCase
             'attempt_id' => $attempt->id,
             'question_id' => $essay->id,
         ]);
+    }
+
+    public function test_peserta_menyimpan_jawaban_essay_per_sub_soal_dan_menggabungkannya(): void
+    {
+        [$admin, $peserta, $session, $attempt, $pg, $essay] = $this->buatAcakBerjalan(false);
+
+        $essay->update([
+            'sub_soal_json' => [
+                ['label' => 'A', 'teks' => 'Jelaskan topologi jaringan.', 'petunjuk' => []],
+                ['label' => 'B', 'teks' => 'Pilih media transmisi.', 'petunjuk' => ['Antargedung', 'Dalam lab']],
+            ],
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'A',
+                'jawaban_teks' => 'Topologi star memakai switch.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('jawaban_parts.A', 'Topologi star memakai switch.')
+            ->assertJsonPath('jawaban_teks', "A:\nTopologi star memakai switch.");
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertSame(['A' => 'Topologi star memakai switch.'], $answer->jawaban_parts_json);
+        $this->assertSame("A:\nTopologi star memakai switch.", $answer->jawaban_teks);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'B',
+                'jawaban_teks' => 'Fiber optik untuk antargedung.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('jawaban_parts.B', 'Fiber optik untuk antargedung.');
+
+        $answer->refresh();
+        $this->assertSame([
+            'A' => 'Topologi star memakai switch.',
+            'B' => 'Fiber optik untuk antargedung.',
+        ], $answer->jawaban_parts_json);
+        $this->assertSame(
+            "A:\nTopologi star memakai switch.\n\nB:\nFiber optik untuk antargedung.",
+            $answer->jawaban_teks
+        );
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'Z',
+                'jawaban_teks' => 'Bagian tidak dikenal.',
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'B',
+                'jawaban_teks' => '   ',
+            ])
+            ->assertOk()
+            ->assertJsonPath('jawaban_parts.B', null);
+
+        $answer->refresh();
+        $this->assertSame(['A' => 'Topologi star memakai switch.'], $answer->jawaban_parts_json);
+        $this->assertSame("A:\nTopologi star memakai switch.", $answer->jawaban_teks);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'A',
+                'jawaban_teks' => '',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseMissing('answers', [
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay->id,
+        ]);
+    }
+
+    public function test_halaman_mengerjakan_menampilkan_sub_soal_dan_jawaban_tersimpan(): void
+    {
+        [$admin, $peserta, $session, $attempt, $pg, $essay] = $this->buatAcakBerjalan(false);
+
+        $essay->update([
+            'petunjuk_json' => ['Topologi jaringan', 'Media transmisi'],
+            'sub_soal_json' => [
+                ['label' => 'A', 'teks' => 'Jelaskan topologi jaringan.', 'petunjuk' => []],
+                ['label' => 'B', 'teks' => 'Pilih media transmisi.', 'petunjuk' => ['Antargedung', 'Dalam lab']],
+            ],
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay->id,
+            'jawaban_teks' => "A:\nTopologi star memakai switch.",
+            'jawaban_parts_json' => ['A' => 'Topologi star memakai switch.'],
+            'waktu_jawab_ms' => 2000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('Topologi jaringan')
+            ->assertSee('Jelaskan topologi jaringan.')
+            ->assertSee('Topologi star memakai switch.')
+            ->assertSee('Pilih media transmisi.');
+    }
+
+    public function test_laporan_admin_menampilkan_jawaban_essay_per_sub_soal(): void
+    {
+        [$admin, $peserta, $session, $attempt, $pg, $essay] = $this->buatAcakBerjalan(false);
+
+        $essay->update([
+            'sub_soal_json' => [
+                ['label' => 'A', 'teks' => 'Jelaskan topologi jaringan.', 'petunjuk' => []],
+                ['label' => 'B', 'teks' => 'Pilih media transmisi.', 'petunjuk' => ['Antargedung', 'Dalam lab']],
+            ],
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay->id,
+            'jawaban_teks' => "A:\nTopologi star.\n\nB:\nFiber optik.",
+            'jawaban_parts_json' => [
+                'A' => 'Topologi star.',
+                'B' => 'Fiber optik.',
+            ],
+            'waktu_jawab_ms' => 2000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('Jelaskan topologi jaringan.')
+            ->assertSee('Topologi star.')
+            ->assertSee('Pilih media transmisi.')
+            ->assertSee('Fiber optik.');
     }
 
     public function test_mode_serempak_menolak_soal_essay(): void
@@ -259,7 +412,7 @@ class EssayTest extends TestCase
         app(QuizEngine::class)->selesaikanAcak($attempt);
 
         $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
-        $grader = app(\App\Services\EssayGrader::class);
+        $grader = app(EssayGrader::class);
 
         $suggestion = $grader->suggest($answer);
         $this->assertTrue($grader->applyFinal($answer->fresh(), $suggestion['score'], $admin->id));

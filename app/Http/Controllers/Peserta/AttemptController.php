@@ -95,16 +95,33 @@ class AttemptController extends Controller
                 'opsi' => $opsi,
                 'jawaban_option_id' => $jawaban->get($question->id)?->option_id,
                 'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
+                'jawaban_parts' => $jawaban->get($question->id)?->jawaban_parts_json ?? [],
+                'petunjuk' => $question->petunjuk_json ?? [],
+                'sub_soal' => $question->sub_soal_json ?? [],
                 'ragu_ragu' => (bool) $aq->ragu_ragu,
                 'highlight_soal' => (bool) $aq->highlight_soal,
                 'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
             ];
         })->values()->all();
 
-        // Buka lagi di soal pertama yang belum dijawab setelah refresh atau koneksi putus.
+        // Buka lagi di soal pertama yang belum lengkap setelah refresh atau koneksi putus.
         $mulaiIndex = max(0, count($questions) - 1);
         foreach ($questions as $i => $question) {
-            if (! $jawaban->has($question['id'])) {
+            $answer = $jawaban->get($question['id']);
+            $lengkap = $answer !== null;
+
+            if ($lengkap && $question['tipe'] === 'essay' && $question['sub_soal'] !== []) {
+                $parts = $answer->jawaban_parts_json ?? [];
+
+                foreach ($question['sub_soal'] as $bagian) {
+                    if (trim((string) ($parts[$bagian['label']] ?? '')) === '') {
+                        $lengkap = false;
+                        break;
+                    }
+                }
+            }
+
+            if (! $lengkap) {
                 $mulaiIndex = $i;
                 break;
             }
@@ -168,18 +185,45 @@ class AttemptController extends Controller
                 return response()->json(['message' => 'Soal essay tidak memakai opsi jawaban.'], 422);
             }
 
+            $subSoal = $question->sub_soal_json ?? [];
+            $partKey = trim((string) $request->input('part_key', ''));
             $teks = trim((string) $request->input('jawaban_teks', ''));
 
+            if ($subSoal !== [] && $partKey === '') {
+                return response()->json(['message' => 'Jawaban soal ini harus dikirim per bagian.'], 422);
+            }
+
+            if ($partKey !== '' && ! collect($subSoal)->pluck('label')->contains($partKey)) {
+                return response()->json(['message' => 'Bagian soal tidak dikenali.'], 422);
+            }
+
+            $answer = Answer::where('attempt_id', $attempt->id)
+                ->where('question_id', $questionId)
+                ->first();
+            $parts = $answer?->jawaban_parts_json ?? [];
+
+            if ($partKey !== '') {
+                if ($teks === '') {
+                    unset($parts[$partKey]);
+                } else {
+                    $parts[$partKey] = $teks;
+                }
+
+                $labelValid = collect($subSoal)->pluck('label')->map(fn ($label) => (string) $label)->all();
+                $parts = array_intersect_key($parts, array_flip($labelValid));
+                $teks = $this->gabungkanJawabanParts($subSoal, $parts);
+            }
+
             if ($teks === '') {
-                Answer::where('attempt_id', $attempt->id)
-                    ->where('question_id', $questionId)
-                    ->delete();
+                $answer?->delete();
+                $parts = [];
             } else {
                 Answer::updateOrCreate(
                     ['attempt_id' => $attempt->id, 'question_id' => $questionId],
                     [
                         'option_id' => null,
                         'jawaban_teks' => $teks,
+                        'jawaban_parts_json' => $partKey !== '' ? $parts : null,
                         'waktu_jawab_ms' => $waktuJawab,
                         'skor' => 0,
                         'dinilai_at' => null,
@@ -194,7 +238,9 @@ class AttemptController extends Controller
             return response()->json([
                 'ok' => true,
                 'question_id' => $questionId,
+                'part_key' => $partKey !== '' ? $partKey : null,
                 'jawaban_teks' => $teks,
+                'jawaban_parts' => $parts,
                 'answered_count' => $attempt->answers()->count(),
             ]);
         }
@@ -344,6 +390,9 @@ class AttemptController extends Controller
                 'teks' => $question->teks,
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
+                'petunjuk' => $question->petunjuk_json ?? [],
+                'sub_soal' => $question->sub_soal_json ?? [],
+                'jawaban_parts' => $essay ? ($jawabanSaya?->jawaban_parts_json ?? []) : [],
                 'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $jawabanSaya?->option?->teks,
                 'jawaban_benar' => $essay
                     ? ($tampilkan ? $question->kunci_essay : null)
@@ -465,5 +514,21 @@ class AttemptController extends Controller
             'highlight_soal' => (bool) $attemptQuestion->highlight_soal,
             'highlight_opsi' => array_map('intval', $attemptQuestion->highlight_opsi_json ?? []),
         ]);
+    }
+
+    private function gabungkanJawabanParts(array $subSoal, array $parts): string
+    {
+        $bagian = [];
+
+        foreach ($subSoal as $soal) {
+            $label = (string) ($soal['label'] ?? '');
+            $teks = trim((string) ($parts[$label] ?? ''));
+
+            if ($teks !== '') {
+                $bagian[] = $label.":\n".$teks;
+            }
+        }
+
+        return implode("\n\n", $bagian);
     }
 }
