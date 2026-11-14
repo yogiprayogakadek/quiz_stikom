@@ -339,7 +339,24 @@
                         terakhir = kunci;
                         if (bagian.status) bagian.status.innerHTML = data.status;
                         if (bagian.pembahasan) bagian.pembahasan.innerHTML = data.pembahasan;
-                        if (bagian.peserta) bagian.peserta.innerHTML = data.peserta;
+                        if (bagian.peserta) {
+                            const menitLama = document.getElementById('minutes')?.value;
+                            const pilihan = new Set(
+                                Array.from(document.querySelectorAll('input[name="attempt_ids[]"]:checked')).map((el) => el.value)
+                            );
+
+                            bagian.peserta.innerHTML = data.peserta;
+
+                            if (menitLama !== undefined) {
+                                const inputMenit = document.getElementById('minutes');
+                                if (inputMenit) inputMenit.value = menitLama;
+                            }
+
+                            pilihan.forEach((id) => {
+                                const input = document.querySelector(`input[name="attempt_ids[]"][value="${id}"]`);
+                                if (input) input.checked = true;
+                            });
+                        }
                         if (bagian.proctoring) bagian.proctoring.innerHTML = data.proctoring;
                         if (proctoringCount) proctoringCount.textContent = data.proctoring_count;
                         if (onlineCount) onlineCount.textContent = data.online_count;

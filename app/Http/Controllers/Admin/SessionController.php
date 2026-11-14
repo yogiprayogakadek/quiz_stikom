@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Events\PesertaDikeluarkan;
 use App\Events\PesertaDipaksaKumpul;
+use App\Events\PesertaWaktuDitambah;
 use App\Events\SesiStatusUpdated;
 use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
@@ -68,6 +69,8 @@ class SessionController extends Controller
             'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
             'max_peserta' => $data['max_peserta'] ?? null,
+            'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
+            'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
             'jeda_detik' => $data['jeda_detik'],
             'status' => 'draft',
             'display_token' => Str::random(48),
@@ -132,7 +135,6 @@ class SessionController extends Controller
     {
         $attempts = $session->attempts()
             ->with('user')
-            ->withCount('events')
             ->orderByDesc('skor_total')
             ->orderBy('created_at')
             ->get();
@@ -204,6 +206,8 @@ class SessionController extends Controller
             'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
             'max_peserta' => $data['max_peserta'] ?? null,
+            'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
+            'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
             'jeda_detik' => $data['jeda_detik'],
         ]);
 
@@ -452,38 +456,96 @@ class SessionController extends Controller
             ]);
         }
 
-        $minutes = (int) $request->input('minutes', 10);
-        if ($minutes < 1 || $minutes > 180) {
-            $minutes = 10;
+        $data = $request->validate([
+            'minutes' => ['required', 'integer', 'min:1', 'max:180'],
+        ]);
+
+        $this->tambahWaktu($session, [$attempt->id], (int) $data['minutes']);
+
+        return back()->with('sukses', "Waktu ujian berhasil ditambah {$data['minutes']} menit.");
+    }
+
+    public function addTimeBulk(Request $request, QuizSession $session): RedirectResponse
+    {
+        if ($session->mode !== 'acak' || $session->status !== 'berjalan') {
+            throw ValidationException::withMessages([
+                'peserta' => 'Penambahan waktu hanya bisa dilakukan saat sesi Mode Acak sedang berjalan.',
+            ]);
         }
 
-        $attempt->loadMissing('user');
-        $nama = $attempt->user?->nama ?? 'Peserta';
-        $nowMs = (int) (microtime(true) * 1000);
-
-        $basis = ($attempt->batas_akhir_at && $attempt->batas_akhir_at > $nowMs)
-            ? (int) $attempt->batas_akhir_at
-            : $nowMs;
-
-        $attempt->batas_akhir_at = $basis + ($minutes * 60 * 1000);
-        $attempt->save();
-
-        Log::notice('Admin menambah waktu ujian peserta.', [
-            'admin_id' => $request->user()->id,
-            'attempt_id' => $attempt->id,
-            'peserta' => $nama,
-            'tambahan_menit' => $minutes,
-            'batas_baru' => $attempt->batas_akhir_at,
+        $data = $request->validate([
+            'attempt_ids' => ['required', 'array', 'min:1'],
+            'attempt_ids.*' => ['integer'],
+            'minutes' => ['required', 'integer', 'min:1', 'max:180'],
         ]);
+
+        $ids = array_values(array_unique(array_map('intval', $data['attempt_ids'])));
+        $jumlahBerjalan = $session->attempts()
+            ->whereIn('id', $ids)
+            ->where('status', 'berjalan')
+            ->count();
+
+        if ($jumlahBerjalan !== count($ids)) {
+            throw ValidationException::withMessages([
+                'attempt_ids' => 'Pilih peserta yang masih mengerjakan ujian di sesi ini.',
+            ]);
+        }
+
+        $this->tambahWaktu($session, $ids, (int) $data['minutes']);
+
+        return back()->with('sukses', "Waktu ujian {$jumlahBerjalan} peserta berhasil ditambah {$data['minutes']} menit.");
+    }
+
+    /**
+     * @param  array<int, int>  $attemptIds
+     */
+    private function tambahWaktu(QuizSession $session, array $attemptIds, int $minutes): void
+    {
+        $nowMs = now()->getTimestampMs();
+
+        $attempts = DB::transaction(function () use ($session, $attemptIds, $minutes, $nowMs) {
+            $attempts = $session->attempts()
+                ->whereIn('id', $attemptIds)
+                ->where('status', 'berjalan')
+                ->with('user')
+                ->lockForUpdate()
+                ->get();
+
+            if ($attempts->count() !== count($attemptIds)) {
+                throw ValidationException::withMessages([
+                    'peserta' => 'Sebagian peserta sudah tidak mengerjakan ujian. Muat ulang lalu coba lagi.',
+                ]);
+            }
+
+            foreach ($attempts as $attempt) {
+                $basis = ($attempt->batas_akhir_at && $attempt->batas_akhir_at > $nowMs)
+                    ? (int) $attempt->batas_akhir_at
+                    : $nowMs;
+
+                $attempt->batas_akhir_at = $basis + ($minutes * 60 * 1000);
+                $attempt->save();
+            }
+
+            return $attempts;
+        });
+
+        foreach ($attempts as $attempt) {
+            PesertaWaktuDitambah::safeDispatch(
+                $session->id,
+                $attempt->user_id,
+                $attempt->id,
+                (int) $attempt->batas_akhir_at,
+                $minutes,
+                $nowMs,
+            );
+        }
 
         SessionMonitorUpdated::safeDispatch($session->id, [
             'action' => 'add_time',
-            'user_id' => $attempt->user_id,
-            'attempt_id' => $attempt->id,
+            'user_ids' => $attempts->pluck('user_id')->all(),
+            'attempt_ids' => $attempts->pluck('id')->all(),
             'minutes' => $minutes,
         ]);
-
-        return back()->with('sukses', "Waktu ujian untuk {$nama} berhasil ditambah {$minutes} menit.");
     }
 
     /**

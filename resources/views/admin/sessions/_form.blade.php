@@ -7,6 +7,8 @@
         $session?->pembahasan_mode ?? ($session?->tampilkan_pembahasan ? 'terbuka' : 'tersembunyi')
     );
     $leaderboard = (bool) old('leaderboard_live', $session?->leaderboard_live ?? true);
+    $maxPelanggaran = old('max_pelanggaran', $session?->max_pelanggaran);
+    $durasiPeringatan = old('durasi_peringatan', $session?->durasi_peringatan ?? 30);
 @endphp
 
 <div x-data="{ mode: '{{ $modeAwal }}' }" class="space-y-6">
@@ -108,6 +110,25 @@
             @error('jeda_detik') <p class="field-error">{{ $message }}</p> @enderror
         </div>
     </div>
+
+    <fieldset class="rounded-2xl border border-outline bg-page p-4">
+        <legend class="label">Pengawasan</legend>
+        <div class="mt-3 grid gap-5 sm:grid-cols-2">
+            <div>
+                <label for="max_pelanggaran" class="label">Batas pelanggaran (opsional)</label>
+                <input id="max_pelanggaran" name="max_pelanggaran" type="number" min="1" max="100" value="{{ $maxPelanggaran }}" class="input" @error('max_pelanggaran') aria-invalid="true" @enderror>
+                <p class="help mt-2">Kosongkan untuk tanpa batas. Satu kali keluar layar penuh dihitung satu pelanggaran.</p>
+                @error('max_pelanggaran') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="durasi_peringatan" class="label">Durasi peringatan (detik)</label>
+                <input id="durasi_peringatan" name="durasi_peringatan" type="number" min="5" max="300" value="{{ $durasiPeringatan }}" class="input" required @error('durasi_peringatan') aria-invalid="true" @enderror>
+                <p class="help mt-2">Waktu untuk kembali ke ujian. Saat batas pelanggaran sudah tercapai dan waktu habis, ujian dikumpulkan otomatis. Isi 5 sampai 300 detik.</p>
+                @error('durasi_peringatan') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+        </div>
+    </fieldset>
 
     <div class="space-y-3">
         <label class="flex items-start gap-3 rounded-2xl border border-outline bg-page p-4">

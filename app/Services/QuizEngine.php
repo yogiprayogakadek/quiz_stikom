@@ -828,7 +828,7 @@ class QuizEngine
                     'pesan' => $label['pesan'],
                     'level' => $label['level'],
                     'waktu' => $kejadian->created_at?->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
-                    'jumlah_pelanggaran' => $kejadian->attempt?->events_count ?? 1,
+                    'jumlah_pelanggaran' => max(1, (int) ($kejadian->attempt?->jumlah_pelanggaran ?? 0)),
                 ];
             })
             ->all();

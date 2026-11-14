@@ -17,7 +17,8 @@
             sudahMulai: false,
             layarPenuhAktif: false,
             peringatanKeluar: false,
-            sisaToleransi: 10,
+            durasiPeringatan: config.durasiPeringatan ?? 30,
+            sisaToleransi: config.durasiPeringatan ?? 30,
             timerToleransi: null,
             memprosesPelanggaran: false,
             audioCtx: null,
@@ -284,7 +285,7 @@
                     return;
                 }
                 this.peringatanKeluar = true;
-                this.sisaToleransi = 10;
+                this.sisaToleransi = this.durasiPeringatan;
                 if (! this.keluarSejak) {
                     this.keluarSejak = Date.now();
                 }
@@ -314,19 +315,44 @@
                     this.timerToleransi = null;
                 }
                 this.peringatanKeluar = false;
-                this.sisaToleransi = 10;
+                this.sisaToleransi = this.durasiPeringatan;
             },
-            eksekusiPelanggaran() {
+            async eksekusiPelanggaran() {
                 if (this.memprosesPelanggaran || this.berhenti) {
                     return;
                 }
+
                 this.memprosesPelanggaran = true;
-                this.berhenti = true;
-                this.batalkanToleransi();
-                const form = document.getElementById('form-pelanggaran');
-                if (form) {
-                    form.submit();
+                this.keluarSejak = 0;
+
+                if (this.timerToleransi) {
+                    clearInterval(this.timerToleransi);
+                    this.timerToleransi = null;
                 }
+
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.pelanggaranUrl, {
+                        method: 'POST',
+                        body: {},
+                        progress: false
+                    });
+                } catch (e) {
+                    this.memprosesPelanggaran = false;
+                    this.pesan = 'Koneksi terputus. Tekan Kembali ke Ujian untuk melanjutkan.';
+                    return;
+                }
+
+                this.memprosesPelanggaran = false;
+
+                if (hasil.data?.final) {
+                    this.berhenti = true;
+                    window.location.href = hasil.data.redirect_url || config.dashboardUrl;
+                    return;
+                }
+
+                this.sisaToleransi = 0;
+                this.pesan = 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
             },
             pasangEcho() {
                 const echo = window.buatEcho();
@@ -449,7 +475,9 @@
             resultUrl: '{{ $resultUrl }}',
             dashboardUrl: '{{ route('peserta.dashboard') }}',
             channel: '{{ $channel }}',
-            eventUrl: '{{ route('peserta.attempt.events', $attempt) }}'
+            durasiPeringatan: {{ $session->durasiPeringatan() }},
+            eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
+            pelanggaranUrl: '{{ route('peserta.session.pelanggaran', $session) }}'
         })"
         class="space-y-5"
     >
@@ -635,7 +663,8 @@
                 <h2 class="text-2xl font-bold text-ink sm:text-3xl">Mode Layar Penuh Wajib</h2>
                 <p class="text-base leading-relaxed text-ink-muted">
                     Untuk mencegah kecurangan, kuis ini wajib dikerjakan dalam mode <strong>Layar Penuh (Full Screen)</strong>.
-                    Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi saat kuis berjalan, sistem akan memberi waktu toleransi sebelum <strong>jawaban otomatis dikumpulkan dan akun Anda di-logout</strong>.
+                    Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi saat kuis berjalan, sistem mencatat pelanggaran dan memberi waktu untuk kembali.
+                    Saat batas pelanggaran sesi tercapai dan waktu habis, jawaban dikumpulkan otomatis.
                 </p>
                 <button
                     type="button"
@@ -649,50 +678,43 @@
 
         {{-- Warning Modal: Peringatan Keluar Layar Penuh (Countdown Toleransi) --}}
         <div
-            x-show="peringatanKeluar && !memprosesPelanggaran"
+            x-show="peringatanKeluar"
             x-cloak
             class="fixed inset-0 z-50 flex items-center justify-center bg-ink/90 p-4 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="judul-peringatan-serempak"
         >
-            <div class="card w-full max-w-lg border-4 border-coral-deep bg-page p-6 text-center shadow-2xl sm:p-8 space-y-6">
-                <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-coral-soft text-coral-deep">
-                    <x-icon name="alert" :size="40" />
+            <div class="card flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden border-4 border-coral-deep bg-page text-center shadow-2xl">
+                <div class="space-y-5 overflow-y-auto p-6 sm:p-8">
+                    <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-coral-soft text-coral-deep">
+                        <x-icon name="alert" :size="40" />
+                    </div>
+                    <div>
+                        <span class="pill pill-coral text-xs font-bold uppercase tracking-wider">Pelanggaran Terdeteksi</span>
+                        <h2 id="judul-peringatan-serempak" class="mt-2 text-2xl font-bold text-ink sm:text-3xl">Anda Keluar Dari Layar Penuh!</h2>
+                    </div>
+                    <p class="text-base leading-relaxed text-ink-muted">
+                        Sistem mendeteksi Anda keluar dari mode layar penuh atau berpindah jendela/tab. Kembali ke ujian sekarang untuk melanjutkan.
+                    </p>
+                    <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
+                        <p class="text-sm font-bold text-coral-deep" x-text="sisaToleransi > 0 ? 'Waktu untuk kembali' : 'Waktu kembali habis'">Waktu untuk kembali</p>
+                        <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'">{{ $session->durasiPeringatan() }} detik</p>
+                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat saat Anda keluar layar. Jika batas pelanggaran sesi sudah tercapai dan waktu habis, ujian dikumpulkan otomatis.</p>
+                    </div>
+                    <p x-show="memprosesPelanggaran" x-cloak class="text-sm font-bold text-coral-deep">Mencatat pelanggaran...</p>
                 </div>
-                <div>
-                    <span class="pill pill-coral text-xs font-bold uppercase tracking-wider">Pelanggaran Terdeteksi</span>
-                    <h2 class="mt-2 text-2xl font-bold text-ink sm:text-3xl">Anda Keluar Dari Layar Penuh!</h2>
-                </div>
-                <p class="text-base leading-relaxed text-ink-muted">
-                    Sistem mendeteksi Anda keluar dari mode layar penuh atau berpindah jendela/tab. Segera kembali ke layar penuh sekarang!
-                </p>
-                <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
-                    <p class="text-sm font-bold text-coral-deep">Toleransi Waktu Tersisa</p>
-                    <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'">10 detik</p>
-                    <p class="mt-1 text-xs text-ink-muted">Jika waktu habis, kuis otomatis dikumpulkan dan Anda akan dikeluarkan (logout).</p>
-                </div>
-                <button
-                    type="button"
-                    class="btn btn-primary btn-anak w-full py-3.5 text-lg font-bold shadow-lg"
-                    x-on:click="masukLayarPenuh()"
-                >
-                    Kembali ke Layar Penuh
-                </button>
-            </div>
-        </div>
 
-        {{-- Processing Modal: Toleransi Habis, Mengumpulkan & Logout --}}
-        <div
-            x-show="memprosesPelanggaran"
-            x-cloak
-            class="fixed inset-0 z-50 flex items-center justify-center bg-ink/90 p-4 backdrop-blur-md"
-        >
-            <div class="card w-full max-w-md border border-outline bg-page p-8 text-center shadow-2xl space-y-4">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-coral-soft text-coral-deep">
-                    <x-icon name="alert" :size="32" />
+                <div class="border-t border-outline bg-page p-4 sm:p-5">
+                    <button
+                        type="button"
+                        class="btn btn-primary btn-anak w-full py-3.5 text-lg font-bold shadow-lg"
+                        x-on:click="masukLayarPenuh()"
+                    >
+                        Kembali ke Ujian
+                    </button>
+                    <p class="mt-2 text-sm text-ink-muted">Tombol ini tetap tersedia. Aktifkan layar penuh untuk menutup peringatan.</p>
                 </div>
-                <h2 class="text-2xl font-bold text-ink">Waktu Toleransi Habis</h2>
-                <p class="text-base text-ink-muted">
-                    Jawaban Anda sedang dikumpulkan otomatis dan sesi akun Anda sedang dikeluarkan...
-                </p>
             </div>
         </div>
     </div>

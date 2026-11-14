@@ -27,6 +27,8 @@ class QuizSession extends Model
         'pembahasan_mode',
         'leaderboard_live',
         'max_peserta',
+        'max_pelanggaran',
+        'durasi_peringatan',
         'jeda_detik',
         'status',
         'fase',
@@ -46,6 +48,8 @@ class QuizSession extends Model
             'tampilkan_pembahasan' => 'boolean',
             'leaderboard_live' => 'boolean',
             'max_peserta' => 'integer',
+            'max_pelanggaran' => 'integer',
+            'durasi_peringatan' => 'integer',
             'jeda_detik' => 'integer',
             'soal_aktif_urutan' => 'integer',
             'soal_mulai_at' => 'integer',
@@ -133,6 +137,11 @@ class QuizSession extends Model
     public function isPenuh(): bool
     {
         return $this->max_peserta !== null && $this->joinedCount() >= $this->max_peserta;
+    }
+
+    public function durasiPeringatan(): int
+    {
+        return max(5, min(300, (int) ($this->durasi_peringatan ?: 30)));
     }
 
     public function isDraft(): bool

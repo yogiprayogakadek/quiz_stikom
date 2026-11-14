@@ -310,7 +310,17 @@ class DashboardController extends Controller
 
         $tourBaru = $user->tour_completed_at === null;
 
-        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats', 'tourBaru', 'kelasFilter'));
+        $attemptFeedback = $attempts
+            ->filter(fn (Attempt $attempt) => $attempt->status === 'selesai'
+                && $attempt->quizSession?->quiz !== null
+                && ! $attempt->quizSession->quiz->is_percobaan)
+            ->sortByDesc(fn (Attempt $attempt) => $attempt->selesai_at ?? 0)
+            ->first();
+
+        $tampilkanFeedback = ($attemptFeedback?->needsFeedbackPrompt() ?? false)
+            && ! session('feedback_ditunda');
+
+        return view('peserta.dashboard', compact('sesiTersedia', 'attempts', 'sesiList', 'kelasSaya', 'leaderboard', 'stats', 'tourBaru', 'kelasFilter', 'attemptFeedback', 'tampilkanFeedback'));
     }
 
     public function selesaikanTour(Request $request): JsonResponse

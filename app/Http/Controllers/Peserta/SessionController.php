@@ -2,26 +2,20 @@
 
 namespace App\Http\Controllers\Peserta;
 
-use App\Events\PesertaPeringatan;
 use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAnswerRequest;
 use App\Jobs\CloseQuestionJob;
 use App\Models\Answer;
 use App\Models\Attempt;
-use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
-use App\Models\ParticipantLoginActivity;
 use App\Models\QuizGrade;
 use App\Models\QuizSession;
-use App\Models\User;
-use App\Services\NilaiService;
+use App\Services\ProctoringService;
 use App\Services\QuizEngine;
-use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 class SessionController extends Controller
@@ -70,13 +64,16 @@ class SessionController extends Controller
         ]);
     }
 
-    public function state(Request $request, QuizSession $session, QuizEngine $engine): JsonResponse
+    public function state(Request $request, QuizSession $session, QuizEngine $engine, ProctoringService $proctoring): JsonResponse
     {
         $attempt = $this->attemptUntuk($request, $session);
 
         if ($attempt === null || ! $attempt->sudahBergabung()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
+
+        $proctoring->periksaKedaluwarsa($attempt);
+        $attempt->refresh();
 
         $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
 
@@ -311,75 +308,53 @@ class SessionController extends Controller
         ];
     }
 
-    public function pelanggaran(Request $request, QuizSession $session, QuizEngine $engine): RedirectResponse
+    public function pelanggaran(Request $request, QuizSession $session, ProctoringService $proctoring): JsonResponse|RedirectResponse
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt !== null) {
-            $attempt->loadMissing('user');
+        if ($attempt === null) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Attempt tidak ditemukan.'], 404)
+                : redirect()->route('peserta.dashboard');
+        }
 
-            $kejadian = $attempt->events()->create([
-                'tipe' => 'fullscreen_exit_timeout',
-                'detail' => 'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
-                'ip' => $request->ip(),
-                'created_at' => now(),
+        $hasil = $proctoring->catat(
+            $attempt,
+            'fullscreen_exit_timeout',
+            'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
+            $request->ip(),
+        );
+
+        if (! $hasil['batas_tercapai']) {
+            $proctoring->tutupPeringatan($attempt);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'ok' => true,
+                    'final' => false,
+                    'jumlah' => $hasil['jumlah'],
+                    'maks' => $hasil['maks'],
+                    'durasi' => $hasil['durasi'],
+                ]);
+            }
+
+            return back()->with('sukses', 'Kamu masih bisa melanjutkan ujian.');
+        }
+
+        $proctoring->finalisasi($attempt);
+        $redirect = $proctoring->logout(
+            $request,
+            'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena melewati batas pelanggaran.',
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'final' => true,
+                'redirect_url' => $redirect->getTargetUrl(),
             ]);
-
-            if ($session->display_token) {
-                $label = AttemptEvent::label('fullscreen_exit_timeout');
-
-                PesertaPeringatan::safeDispatch($session->display_token, [
-                    'id' => $kejadian->id,
-                    'nama' => $attempt->user?->nama ?? 'Peserta',
-                    'username' => $attempt->user?->username ?? '-',
-                    'tipe' => 'fullscreen_exit_timeout',
-                    'pesan' => $label['pesan'],
-                    'level' => $label['level'],
-                    'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
-                    'jumlah_pelanggaran' => $attempt->events()->count(),
-                ]);
-            }
-
-            SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
-
-            if ($attempt->status === 'berjalan') {
-                $totalSoal = $session->sessionQuestions()->count();
-                $benar = Answer::query()
-                    ->where('answers.attempt_id', $attempt->id)
-                    ->join('options', 'options.id', '=', 'answers.option_id')
-                    ->where('options.is_correct', true)
-                    ->count();
-
-                $attempt->update([
-                    'status' => 'selesai',
-                    'selesai_at' => now()->getTimestampMs(),
-                    'jumlah_benar' => $benar,
-                    'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
-                    'nilai' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
-                ]);
-
-                app(NilaiService::class)->terapkanUntukSesi($session);
-
-                $freshSession = $session->fresh();
-                $engine->bukaPembahasanOtomatis($freshSession);
-                $engine->siarkanDisplay($freshSession);
-            }
         }
 
-        $user = $request->user();
-        if ($user !== null) {
-            ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'fullscreen_violation');
-            User::whereKey($user->id)->update(['current_session_token' => null]);
-        }
-
-        $organization = app(OrganizationContext::class)->current();
-
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()
-            ->to($organization ? route('organizations.login', $organization) : route('home'))
-            ->with('peringatan', 'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena keluar dari mode layar penuh.');
+        return $redirect;
     }
 }

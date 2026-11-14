@@ -1,7 +1,34 @@
+@php
+    $bisaTambahWaktu = $session->mode === 'acak' && $session->status === 'berjalan';
+    $adaBerjalan = $attempts->contains(fn ($attempt) => $attempt->status === 'berjalan');
+    $tampilkanPilihan = $bisaTambahWaktu && $adaBerjalan;
+@endphp
+
 <div class="flex flex-wrap items-center justify-between gap-3">
     <h2 id="peserta-sesi" class="text-2xl">Peserta di sesi ini</h2>
     <a href="{{ route('admin.reports.session', $session) }}" class="btn btn-secondary">Lihat laporan</a>
 </div>
+
+@if ($tampilkanPilihan)
+    <form
+        id="form-tambah-waktu"
+        method="POST"
+        action="{{ route('admin.sessions.attempts.add-time-bulk', $session) }}"
+        class="mt-4 rounded-2xl border border-outline bg-page p-4"
+    >
+        @csrf
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label for="minutes" class="label">Tambahan menit</label>
+                <input id="minutes" name="minutes" type="number" min="1" max="180" value="{{ old('minutes', 10) }}" class="input w-28" required>
+                @error('minutes') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+            <button type="submit" class="btn btn-primary">Tambah waktu ke peserta terpilih</button>
+        </div>
+        <p class="help mt-2">Centang peserta yang masih mengerjakan di tabel. Pilihan tetap tersimpan saat status diperbarui.</p>
+        @error('attempt_ids') <p class="field-error">{{ $message }}</p> @enderror
+    </form>
+@endif
 
 @if ($attempts->isEmpty())
     <p class="mt-3 text-base text-ink-muted">Belum ada peserta di sesi ini.</p>
@@ -11,17 +38,35 @@
             <caption class="sr-only">Peserta dan status attempt</caption>
             <thead>
                 <tr>
+                    @if ($tampilkanPilihan)
+                        <th scope="col"><span class="sr-only">Pilih peserta</span></th>
+                    @endif
                     <th scope="col">Nama</th>
                     <th scope="col">Status</th>
                     <th scope="col">Benar</th>
                     <th scope="col">Skor</th>
-                    <th scope="col">Kejadian</th>
+                    <th scope="col">Pelanggaran</th>
                     <th scope="col">Aksi</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($attempts as $attempt)
                     <tr>
+                        @if ($tampilkanPilihan)
+                            <td>
+                                @if ($attempt->status === 'berjalan')
+                                    <input
+                                        type="checkbox"
+                                        form="form-tambah-waktu"
+                                        name="attempt_ids[]"
+                                        value="{{ $attempt->id }}"
+                                        data-attempt-id="{{ $attempt->id }}"
+                                        class="h-5 w-5"
+                                        aria-label="Pilih {{ $attempt->user?->nama ?? 'peserta' }}"
+                                    >
+                                @endif
+                            </td>
+                        @endif
                         <td class="font-bold text-ink">{{ $attempt->user?->nama ?? '(peserta dihapus)' }}</td>
                         <td>
                             <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
@@ -49,27 +94,15 @@
                             @endif
                         </td>
                         <td>
-                            @if ($attempt->events_count >= 3)
-                                <span class="pill pill-coral">Perlu ditinjau</span>
+                            @if ($session->max_pelanggaran !== null && $attempt->jumlah_pelanggaran >= $session->max_pelanggaran)
+                                <span class="pill pill-coral">Batas tercapai</span>
                             @else
-                                <span class="text-ink-muted">{{ $attempt->events_count }}</span>
+                                <span class="text-ink-muted">{{ $attempt->jumlah_pelanggaran }}</span>
                             @endif
                         </td>
                         <td>
                             <div class="flex flex-wrap items-center gap-2">
                                 <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
-
-                                @if ($session->mode === 'acak' && $session->status === 'berjalan' && $attempt->status === 'berjalan')
-                                    <form
-                                        method="POST"
-                                        action="{{ route('admin.sessions.attempts.add-time', [$session, $attempt]) }}"
-                                        onsubmit="return confirm('Tambah waktu 10 menit untuk {{ addslashes($attempt->user?->nama ?? 'peserta ini') }}?')"
-                                    >
-                                        @csrf
-                                        <input type="hidden" name="minutes" value="10">
-                                        <button type="submit" class="btn btn-secondary px-2.5 py-1 text-xs whitespace-nowrap" title="Beri tambahan waktu 10 menit">+10m</button>
-                                    </form>
-                                @endif
 
                                 @if ($session->status === 'berjalan' && $attempt->status === 'berjalan')
                                     <form

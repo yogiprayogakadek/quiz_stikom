@@ -2,25 +2,19 @@
 
 namespace App\Http\Controllers\Peserta;
 
-use App\Events\PesertaPeringatan;
 use App\Events\SessionMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAnswerRequest;
 use App\Http\Requests\StoreAttemptEventRequest;
 use App\Models\Answer;
 use App\Models\Attempt;
-use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
-use App\Models\ParticipantLoginActivity;
 use App\Models\QuizGrade;
-use App\Models\User;
-use App\Services\NilaiService;
+use App\Services\ProctoringService;
 use App\Services\QuizEngine;
-use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 class AttemptController extends Controller
@@ -101,6 +95,9 @@ class AttemptController extends Controller
                 'opsi' => $opsi,
                 'jawaban_option_id' => $jawaban->get($question->id)?->option_id,
                 'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
+                'ragu_ragu' => (bool) $aq->ragu_ragu,
+                'highlight_soal' => (bool) $aq->highlight_soal,
+                'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
             ];
         })->values()->all();
 
@@ -256,94 +253,68 @@ class AttemptController extends Controller
         return redirect()->route('peserta.attempt.result', $attempt);
     }
 
-    public function pelanggaran(Request $request, Attempt $attempt, QuizEngine $engine): RedirectResponse
+    public function pelanggaran(Request $request, Attempt $attempt, ProctoringService $proctoring): JsonResponse|RedirectResponse
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
 
-        $attempt->loadMissing(['user', 'quizSession']);
+        $hasil = $proctoring->catat(
+            $attempt,
+            'fullscreen_exit_timeout',
+            'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
+            $request->ip(),
+        );
 
-        $kejadian = $attempt->events()->create([
-            'tipe' => 'fullscreen_exit_timeout',
-            'detail' => 'Kuis dikumpulkan otomatis karena keluar dari layar penuh dan melewati batas toleransi.',
-            'ip' => $request->ip(),
-            'created_at' => now(),
-        ]);
+        if (! $hasil['batas_tercapai']) {
+            $proctoring->tutupPeringatan($attempt);
 
-        $session = $attempt->quizSession;
-        SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
-
-        if ($session && $session->display_token) {
-            $label = AttemptEvent::label('fullscreen_exit_timeout');
-
-            PesertaPeringatan::safeDispatch($session->display_token, [
-                'id' => $kejadian->id,
-                'nama' => $attempt->user?->nama ?? 'Peserta',
-                'username' => $attempt->user?->username ?? '-',
-                'tipe' => 'fullscreen_exit_timeout',
-                'pesan' => $label['pesan'],
-                'level' => $label['level'],
-                'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
-                'jumlah_pelanggaran' => $attempt->events()->count(),
-            ]);
-        }
-
-        if ($attempt->status === 'berjalan') {
-            if ($attempt->quizSession->mode === 'acak') {
-                $engine->selesaikanAcak($attempt);
-            } else {
-                $totalSoal = $attempt->quizSession->sessionQuestions()->count();
-                $benar = Answer::query()
-                    ->where('answers.attempt_id', $attempt->id)
-                    ->join('options', 'options.id', '=', 'answers.option_id')
-                    ->where('options.is_correct', true)
-                    ->count();
-
-                $attempt->update([
-                    'status' => 'selesai',
-                    'selesai_at' => now()->getTimestampMs(),
-                    'jumlah_benar' => $benar,
-                    'skor_total' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
-                    'nilai' => $totalSoal > 0 ? (int) round($benar / $totalSoal * 100) : 0,
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'ok' => true,
+                    'final' => false,
+                    'jumlah' => $hasil['jumlah'],
+                    'maks' => $hasil['maks'],
+                    'durasi' => $hasil['durasi'],
                 ]);
             }
 
-            app(NilaiService::class)->terapkanUntukSesi($attempt->quizSession);
-
-            $freshSession = $attempt->quizSession->fresh();
-            $engine->bukaPembahasanOtomatis($freshSession);
-            $engine->siarkanDisplay($freshSession);
+            return back()->with('sukses', 'Kamu masih bisa melanjutkan ujian.');
         }
 
-        $user = $request->user();
-        if ($user !== null) {
-            ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'fullscreen_violation');
-            User::whereKey($user->id)->update(['current_session_token' => null]);
+        $proctoring->finalisasi($attempt);
+        $redirect = $proctoring->logout(
+            $request,
+            'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena melewati batas pelanggaran.',
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'final' => true,
+                'redirect_url' => $redirect->getTargetUrl(),
+            ]);
         }
 
-        $organization = app(OrganizationContext::class)->current();
-
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()
-            ->to($organization ? route('organizations.login', $organization) : route('home'))
-            ->with('peringatan', 'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena keluar dari mode layar penuh.');
+        return $redirect;
     }
 
     /**
      * Status ringkas untuk halaman pengerjaan. Dipakai polling agar peserta
      * tahu ketika admin mengumpulkan paksa atau mengeluarkannya dari sesi.
      */
-    public function status(Request $request, Attempt $attempt): JsonResponse
+    public function status(Request $request, Attempt $attempt, ProctoringService $proctoring): JsonResponse
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
+
+        $proctoring->periksaKedaluwarsa($attempt);
+        $attempt->refresh();
 
         $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
 
         return response()->json([
             'status' => $attempt->status,
             'selesai' => $attempt->status === 'selesai',
+            'batas_akhir_at' => $attempt->batas_akhir_at,
+            'server_now' => now()->getTimestampMs(),
         ]);
     }
 
@@ -392,14 +363,17 @@ class AttemptController extends Controller
             'tampilkan' => $tampilkan,
             'total_soal' => $attemptQuestions->count(),
             'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
+            'tampilkanFeedback' => $attempt->needsFeedbackPrompt() && ! session('feedback_ditunda'),
         ]);
     }
 
-    public function event(StoreAttemptEventRequest $request, Attempt $attempt): JsonResponse
+    public function event(StoreAttemptEventRequest $request, Attempt $attempt, ProctoringService $proctoring): JsonResponse
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
 
-        $attempt->loadMissing(['user', 'quizSession']);
+        if ($attempt->status !== 'berjalan') {
+            return response()->json(['message' => 'Attempt sudah selesai.'], 403);
+        }
 
         $tipe = $request->input('tipe');
 
@@ -413,44 +387,83 @@ class AttemptController extends Controller
                 ->first()
                 ?->update(['durasi_detik' => max(0, $request->integer('durasi_detik'))]);
 
+            $proctoring->tutupPeringatan($attempt);
+
             return response()->json(['ok' => true]);
         }
 
-        $detail = $request->input('detail');
+        $hasil = $proctoring->catat(
+            $attempt,
+            $tipe,
+            $request->input('detail'),
+            $request->ip(),
+        );
 
-        $kejadian = $attempt->events()->create([
-            'tipe' => $tipe,
-            'detail' => $detail,
-            'ip' => $request->ip(),
-            'created_at' => now(),
+        return response()->json([
+            'ok' => true,
+            'jumlah' => $hasil['jumlah'],
+            'maks' => $hasil['maks'],
+            'durasi' => $hasil['durasi'],
+            'perlu_ditinjau' => $hasil['batas_tercapai'],
+        ], 201);
+    }
+
+    public function tandai(Request $request, Attempt $attempt): JsonResponse
+    {
+        abort_unless($attempt->user_id === $request->user()->id, 403);
+
+        $attempt->loadMissing('quizSession');
+
+        if ($attempt->status !== 'berjalan' || $attempt->quizSession?->mode !== 'acak') {
+            return response()->json(['message' => 'Penanda soal hanya tersedia saat Mode Acak berjalan.'], 422);
+        }
+
+        $data = $request->validate([
+            'question_id' => ['required', 'integer'],
+            'ragu_ragu' => ['sometimes', 'boolean'],
+            'highlight_soal' => ['sometimes', 'boolean'],
+            'highlight_opsi' => ['sometimes', 'array'],
+            'highlight_opsi.*' => ['integer'],
         ]);
 
-        $jumlah = $attempt->events()->count();
+        $attemptQuestion = $attempt->attemptQuestions()
+            ->where('question_id', (int) $data['question_id'])
+            ->first();
 
-        $session = $attempt->quizSession;
-        if ($session) {
-            SessionMonitorUpdated::safeDispatch($session->id, ['action' => 'violation', 'user_id' => $attempt->user_id]);
+        if ($attemptQuestion === null) {
+            return response()->json(['message' => 'Soal ini bukan bagian dari attempt Anda.'], 422);
+        }
 
-            if ($session->display_token) {
-                $label = AttemptEvent::label($tipe);
+        $updates = [];
 
-                PesertaPeringatan::safeDispatch($session->display_token, [
-                    'id' => $kejadian->id,
-                    'nama' => $attempt->user?->nama ?? 'Peserta',
-                    'username' => $attempt->user?->username ?? '-',
-                    'tipe' => $tipe,
-                    'pesan' => $label['pesan'],
-                    'level' => $label['level'],
-                    'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
-                    'jumlah_pelanggaran' => $jumlah,
-                ]);
-            }
+        if (array_key_exists('ragu_ragu', $data)) {
+            $updates['ragu_ragu'] = (bool) $data['ragu_ragu'];
+        }
+
+        if (array_key_exists('highlight_soal', $data)) {
+            $updates['highlight_soal'] = (bool) $data['highlight_soal'];
+        }
+
+        if (array_key_exists('highlight_opsi', $data)) {
+            $valid = array_map('intval', $attemptQuestion->urutan_opsi_json ?? []);
+            $updates['highlight_opsi_json'] = collect($data['highlight_opsi'])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => in_array($id, $valid, true))
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        if ($updates !== []) {
+            $attemptQuestion->update($updates);
         }
 
         return response()->json([
             'ok' => true,
-            'jumlah' => $jumlah,
-            'perlu_ditinjau' => $jumlah >= 3,
-        ], 201);
+            'question_id' => $attemptQuestion->question_id,
+            'ragu_ragu' => (bool) $attemptQuestion->ragu_ragu,
+            'highlight_soal' => (bool) $attemptQuestion->highlight_soal,
+            'highlight_opsi' => array_map('intval', $attemptQuestion->highlight_opsi_json ?? []),
+        ]);
     }
 }

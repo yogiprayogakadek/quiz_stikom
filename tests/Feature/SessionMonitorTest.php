@@ -71,7 +71,7 @@ class SessionMonitorTest extends TestCase
 
         $peringatan = $state['peringatan'][0];
         $this->assertSame($peserta->nama, $peringatan['nama']);
-        $this->assertSame('Keluar dari layar penuh (Toleransi 10s berjalan)', $peringatan['pesan']);
+        $this->assertSame('Keluar dari layar penuh (toleransi berjalan)', $peringatan['pesan']);
         $this->assertSame('warning', $peringatan['level']);
         $this->assertSame(1, $peringatan['jumlah_pelanggaran']);
     }

@@ -120,6 +120,10 @@
     >
         {{-- CENTER FEED COLUMN (8 Columns on xl) --}}
         <div class="xl:col-span-8 space-y-7 min-w-0">
+            @if ($tampilkanFeedback && $attemptFeedback)
+                @include('peserta._feedback', ['attempt' => $attemptFeedback])
+            @endif
+
             {{-- Top Bar: Search, Quick Filter & Hamburger Toggle --}}
             <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5">
                 <div class="flex items-center gap-3 flex-1 min-w-0">

@@ -18,6 +18,8 @@
             peringatan: '',
             jumlahKejadian: 0,
             sisa: 0,
+            batasAkhir: config.batasAkhir ?? 0,
+            offset: Date.now() - config.serverNow,
             berhenti: false,
             selesaiOtomatis: false,
             konfirmasiSelesai: false,
@@ -26,7 +28,8 @@
             sudahMulai: false,
             layarPenuhAktif: false,
             peringatanKeluar: false,
-            sisaToleransi: 10,
+            durasiPeringatan: config.durasiPeringatan ?? 30,
+            sisaToleransi: config.durasiPeringatan ?? 30,
             timerToleransi: null,
             memprosesPelanggaran: false,
             audioCtx: null,
@@ -64,6 +67,50 @@
             pindah(nomor) {
                 this.index = Math.max(0, Math.min(this.questions.length - 1, nomor));
                 this.$nextTick(() => this.$refs.kartuSoal?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            },
+            async tandai(soal, perubahan) {
+                if (!soal || this.berhenti) {
+                    return;
+                }
+
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.markUrl, {
+                        method: 'POST',
+                        body: { question_id: soal.id, ...perubahan },
+                        progress: false
+                    });
+                } catch (e) {
+                    this.pesan = 'Penanda soal belum tersimpan. Periksa koneksi lalu coba lagi.';
+                    return;
+                }
+
+                if (!hasil.ok) {
+                    this.pesan = hasil.data?.message ?? 'Penanda soal belum tersimpan.';
+                    return;
+                }
+
+                soal.ragu_ragu = hasil.data.ragu_ragu;
+                soal.highlight_soal = hasil.data.highlight_soal;
+                soal.highlight_opsi = hasil.data.highlight_opsi;
+            },
+            toggleRagu(soal) {
+                this.tandai(soal, { ragu_ragu: !soal.ragu_ragu });
+            },
+            toggleHighlightSoal(soal) {
+                this.tandai(soal, { highlight_soal: !soal.highlight_soal });
+            },
+            toggleHighlightOpsi(soal, opsiId) {
+                const opsi = new Set(soal.highlight_opsi || []);
+                if (opsi.has(opsiId)) {
+                    opsi.delete(opsiId);
+                } else {
+                    opsi.add(opsiId);
+                }
+                this.tandai(soal, { highlight_opsi: Array.from(opsi) });
+            },
+            opsiDisorot(soal, opsiId) {
+                return (soal.highlight_opsi || []).includes(opsiId);
             },
             get isFullscreen() {
                 return Boolean(
@@ -137,6 +184,13 @@
                         this.batalkanToleransi();
                         alert(data.pesan || 'Pekerjaanmu telah dikumpulkan oleh pengajar.');
                         window.location.href = config.resultUrl;
+                    })
+                    .listen('.PesertaWaktuDitambah', (data) => {
+                        this.batasAkhir = Math.max(this.batasAkhir, Number(data.batas_akhir_at));
+                        this.offset = Date.now() - Number(data.server_now);
+                        this.notifWaktu60 = false;
+                        this.notifWaktu300 = false;
+                        this.pesan = 'Waktu ujian ditambah ' + data.minutes + ' menit.';
                     });
             },
             muatAntreanLokal() {
@@ -268,9 +322,8 @@
                 return menit + ':' + String(detik).padStart(2, '0');
             },
             mulaiTimer() {
-                const selisih = Date.now() - config.serverNow;
                 const hitung = () => {
-                    this.sisa = Math.max(0, Math.round((config.batasAkhir - (Date.now() - selisih)) / 1000));
+                    this.sisa = Math.max(0, Math.round((this.batasAkhir - (Date.now() - this.offset)) / 1000));
 
                     // Alert audio & visual saat waktu kritis mendekati batas
                     if (this.sisa > 0) {
@@ -566,6 +619,23 @@
                     }
                     return;
                 }
+
+                const batas = Number(hasil.data?.batas_akhir_at ?? 0);
+                const serverNow = Number(hasil.data?.server_now ?? 0);
+
+                if (batas > 0 && serverNow > 0) {
+                    const sisaLama = this.sisa;
+                    this.batasAkhir = Math.max(this.batasAkhir, batas);
+                    this.offset = Date.now() - serverNow;
+                    const sisaBaru = Math.max(0, Math.round((this.batasAkhir - (Date.now() - this.offset)) / 1000));
+
+                    if (sisaBaru > sisaLama + 1) {
+                        this.notifWaktu60 = false;
+                        this.notifWaktu300 = false;
+                        this.pesan = 'Waktu ujian ditambah. Timer sudah diperbarui.';
+                    }
+                }
+
                 if (hasil.data?.selesai) {
                     this.berhenti = true;
                     this.batalkanToleransi();
@@ -611,7 +681,7 @@
                     return;
                 }
                 this.peringatanKeluar = true;
-                this.sisaToleransi = 10;
+                this.sisaToleransi = this.durasiPeringatan;
                 if (! this.keluarSejak) {
                     this.keluarSejak = Date.now();
                 }
@@ -641,19 +711,44 @@
                     this.timerToleransi = null;
                 }
                 this.peringatanKeluar = false;
-                this.sisaToleransi = 10;
+                this.sisaToleransi = this.durasiPeringatan;
             },
-            eksekusiPelanggaran() {
+            async eksekusiPelanggaran() {
                 if (this.memprosesPelanggaran || this.berhenti) {
                     return;
                 }
+
                 this.memprosesPelanggaran = true;
-                this.berhenti = true;
-                this.batalkanToleransi();
-                const form = document.getElementById('form-pelanggaran');
-                if (form) {
-                    form.submit();
+                this.keluarSejak = 0;
+
+                if (this.timerToleransi) {
+                    clearInterval(this.timerToleransi);
+                    this.timerToleransi = null;
                 }
+
+                let hasil;
+                try {
+                    hasil = await window.kuisFetch(config.pelanggaranUrl, {
+                        method: 'POST',
+                        body: {},
+                        progress: false
+                    });
+                } catch (e) {
+                    this.memprosesPelanggaran = false;
+                    this.pesan = 'Koneksi terputus. Tekan Kembali ke Ujian untuk melanjutkan.';
+                    return;
+                }
+
+                this.memprosesPelanggaran = false;
+
+                if (hasil.data?.final) {
+                    this.berhenti = true;
+                    window.location.href = hasil.data.redirect_url || config.dashboardUrl;
+                    return;
+                }
+
+                this.sisaToleransi = 0;
+                this.pesan = 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
             },
             kirimKejadian(tipe) {
                 if (this.berhenti) {
@@ -741,8 +836,11 @@
             userId: {{ auth()->id() }},
             attemptId: {{ $attempt->id }},
             mulaiIndex: {{ $mulai_index }},
+            durasiPeringatan: {{ $session->durasiPeringatan() }},
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
+            markUrl: '{{ route('peserta.attempt.tandai', $attempt) }}',
+            pelanggaranUrl: '{{ route('peserta.attempt.pelanggaran', $attempt) }}',
             statusUrl: '{{ route('peserta.attempt.status', $attempt) }}',
             dashboardUrl: '{{ route('peserta.dashboard') }}',
             resultUrl: '{{ route('peserta.attempt.result', $attempt) }}'
@@ -835,7 +933,35 @@
                     </button>
                 </div>
 
-                <h2 id="teks-soal" class="question-text mt-4 whitespace-pre-line" x-text="current.teks"></h2>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        class="btn btn-ghost px-3"
+                        x-bind:class="current.ragu_ragu ? 'bg-coral-soft text-coral-deep' : ''"
+                        x-bind:aria-pressed="current.ragu_ragu ? 'true' : 'false'"
+                        x-on:click="toggleRagu(current)"
+                    >
+                        <x-icon name="flag" :size="18" />
+                        <span x-text="current.ragu_ragu ? 'Ragu-ragu ditandai' : 'Tandai ragu-ragu'"></span>
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-ghost px-3"
+                        x-bind:class="current.highlight_soal ? 'bg-sun-soft text-sun-deep' : ''"
+                        x-bind:aria-pressed="current.highlight_soal ? 'true' : 'false'"
+                        x-on:click="toggleHighlightSoal(current)"
+                    >
+                        <x-icon name="highlight" :size="18" />
+                        <span x-text="current.highlight_soal ? 'Sorotan aktif' : 'Sorot soal'"></span>
+                    </button>
+                </div>
+
+                <h2
+                    id="teks-soal"
+                    class="question-text mt-4 whitespace-pre-line"
+                    x-bind:class="current.highlight_soal ? 'bg-sun-soft' : ''"
+                    x-text="current.teks"
+                ></h2>
 
                 <template x-if="current.tipe === 'essay'">
                     <div class="mt-5">
@@ -861,19 +987,33 @@
                     <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal">
                         <p class="text-base text-ink-muted">Pilih satu jawaban. Jawaban tersimpan saat diklik.</p>
                         <template x-for="(opsi, opsiIndex) in current.opsi" :key="opsi.id">
-                            <button
-                                type="button"
-                                class="tile"
-                                x-bind:aria-pressed="jawaban[current.id] === opsi.id ? 'true' : 'false'"
-                                x-bind:disabled="menyimpan"
-                                x-on:click="pilih(current, opsi)"
-                            >
-                                <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
-                                <span class="tile-text" x-text="opsi.teks"></span>
-                                <span class="tile-check" aria-hidden="true">
-                                    <x-icon name="check" :size="20" />
-                                </span>
-                            </button>
+                            <div class="relative">
+                                <button
+                                    type="button"
+                                    class="tile w-full pr-12"
+                                    x-bind:class="opsiDisorot(current, opsi.id) ? 'ring-2 ring-sun bg-sun-soft' : ''"
+                                    x-bind:aria-pressed="jawaban[current.id] === opsi.id ? 'true' : 'false'"
+                                    x-bind:disabled="menyimpan"
+                                    x-on:click="pilih(current, opsi)"
+                                >
+                                    <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
+                                    <span class="tile-text" x-text="opsi.teks"></span>
+                                    <span class="tile-check" aria-hidden="true">
+                                        <x-icon name="check" :size="20" />
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-outline bg-page p-1.5 text-ink-muted hover:bg-sun-soft hover:text-sun-deep"
+                                    x-bind:class="opsiDisorot(current, opsi.id) ? 'border-sun bg-sun-soft text-sun-deep' : ''"
+                                    x-bind:aria-pressed="opsiDisorot(current, opsi.id) ? 'true' : 'false'"
+                                    x-on:click.stop="toggleHighlightOpsi(current, opsi.id)"
+                                    aria-label="Sorot opsi ini"
+                                    title="Sorot opsi ini"
+                                >
+                                    <x-icon name="highlight" :size="16" />
+                                </button>
+                            </div>
                         </template>
                     </div>
                 </template>
@@ -900,15 +1040,15 @@
                     <button
                         type="button"
                         class="flex h-12 items-center justify-center rounded-xl border-2 font-mono text-base font-bold"
-                        x-bind:class="nomor === index ? 'border-brand bg-brand text-white' : (sudahDijawab(soal) ? 'border-leaf bg-leaf-soft text-leaf-deep' : 'border-outline bg-page text-ink-muted')"
+                        x-bind:class="nomor === index ? (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep ring-2 ring-brand' : 'border-brand bg-brand text-white') : (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep' : (sudahDijawab(soal) ? 'border-leaf bg-leaf-soft text-leaf-deep' : 'border-outline bg-page text-ink-muted'))"
                         x-bind:aria-current="nomor === index ? 'true' : 'false'"
-                        x-bind:aria-label="'Soal ' + (nomor + 1) + (sudahDijawab(soal) ? ', sudah dijawab' : ', belum dijawab')"
+                        x-bind:aria-label="'Soal ' + (nomor + 1) + (soal.ragu_ragu ? ', ditandai ragu-ragu' : (sudahDijawab(soal) ? ', sudah dijawab' : ', belum dijawab'))"
                         x-on:click="pindah(nomor)"
                         x-text="nomor + 1"
                     ></button>
                 </template>
             </div>
-            <p class="mt-3 text-base text-ink-muted">Kotak hijau berarti jawaban sudah tersimpan di server.</p>
+            <p class="mt-3 text-base text-ink-muted">Kotak hijau berarti jawaban sudah tersimpan di server. Kotak merah berarti soal ditandai ragu-ragu.</p>
         </section>
 
         <form id="form-selesai" method="POST" action="{{ route('peserta.attempt.finish', $attempt) }}" class="hidden">
@@ -932,7 +1072,8 @@
                 <h2 class="text-2xl font-bold text-ink sm:text-3xl">Mode Layar Penuh Wajib</h2>
                 <p class="text-base leading-relaxed text-ink-muted">
                     Untuk mencegah kecurangan, kuis ini wajib dikerjakan dalam mode <strong>Layar Penuh (Full Screen)</strong>.
-                    Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi selama kuis, sistem akan memberi waktu toleransi sebelum <strong>jawaban otomatis dikumpulkan dan akun Anda di-logout</strong>.
+                    Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi selama kuis, sistem mencatat pelanggaran dan memberi waktu untuk kembali.
+                    Saat batas pelanggaran sesi tercapai dan waktu habis, jawaban dikumpulkan otomatis.
                 </p>
                 <button
                     type="button"
@@ -946,50 +1087,43 @@
 
         {{-- Warning Modal: Peringatan Keluar Layar Penuh (Countdown Toleransi) --}}
         <div
-            x-show="peringatanKeluar && !memprosesPelanggaran"
+            x-show="peringatanKeluar"
             x-cloak
             class="fixed inset-0 z-50 flex items-center justify-center bg-ink/90 p-4 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="judul-peringatan-layar"
         >
-            <div class="card w-full max-w-lg border-4 border-coral-deep bg-page p-6 text-center shadow-2xl sm:p-8 space-y-6">
-                <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-coral-soft text-coral-deep">
-                    <x-icon name="alert" :size="40" />
+            <div class="card flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden border-4 border-coral-deep bg-page text-center shadow-2xl">
+                <div class="space-y-5 overflow-y-auto p-6 sm:p-8">
+                    <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-coral-soft text-coral-deep">
+                        <x-icon name="alert" :size="40" />
+                    </div>
+                    <div>
+                        <span class="pill pill-coral text-xs font-bold uppercase tracking-wider">Pelanggaran Terdeteksi</span>
+                        <h2 id="judul-peringatan-layar" class="mt-2 text-2xl font-bold text-ink sm:text-3xl">Anda Keluar Dari Layar Penuh!</h2>
+                    </div>
+                    <p class="text-base leading-relaxed text-ink-muted">
+                        Sistem mendeteksi Anda keluar dari mode layar penuh atau berpindah jendela/tab. Kembali ke ujian sekarang untuk melanjutkan.
+                    </p>
+                    <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
+                        <p class="text-sm font-bold text-coral-deep" x-text="sisaToleransi > 0 ? 'Waktu untuk kembali' : 'Waktu kembali habis'">Waktu untuk kembali</p>
+                        <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'" x-init="sisaToleransi = durasiPeringatan">{{ $session->durasiPeringatan() }} detik</p>
+                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat saat Anda keluar layar. Jika batas pelanggaran sesi sudah tercapai dan waktu habis, ujian dikumpulkan otomatis.</p>
+                    </div>
+                    <p x-show="memprosesPelanggaran" x-cloak class="text-sm font-bold text-coral-deep">Mencatat pelanggaran...</p>
                 </div>
-                <div>
-                    <span class="pill pill-coral text-xs font-bold uppercase tracking-wider">Pelanggaran Terdeteksi</span>
-                    <h2 class="mt-2 text-2xl font-bold text-ink sm:text-3xl">Anda Keluar Dari Layar Penuh!</h2>
-                </div>
-                <p class="text-base leading-relaxed text-ink-muted">
-                    Sistem mendeteksi Anda keluar dari mode layar penuh atau berpindah jendela/tab. Segera kembali ke layar penuh sekarang!
-                </p>
-                <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
-                    <p class="text-sm font-bold text-coral-deep">Toleransi Waktu Tersisa</p>
-                    <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'">10 detik</p>
-                    <p class="mt-1 text-xs text-ink-muted">Jika waktu habis, kuis otomatis dikumpulkan dan Anda akan dikeluarkan (logout).</p>
-                </div>
-                <button
-                    type="button"
-                    class="btn btn-primary btn-anak w-full py-3.5 text-lg font-bold shadow-lg"
-                    x-on:click="masukLayarPenuh()"
-                >
-                    Kembali ke Layar Penuh
-                </button>
-            </div>
-        </div>
 
-        {{-- Processing Modal: Toleransi Habis, Mengumpulkan & Logout --}}
-        <div
-            x-show="memprosesPelanggaran"
-            x-cloak
-            class="fixed inset-0 z-50 flex items-center justify-center bg-ink/90 p-4 backdrop-blur-md"
-        >
-            <div class="card w-full max-w-md border border-outline bg-page p-8 text-center shadow-2xl space-y-4">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-coral-soft text-coral-deep">
-                    <x-icon name="alert" :size="32" />
+                <div class="border-t border-outline bg-page p-4 sm:p-5">
+                    <button
+                        type="button"
+                        class="btn btn-primary btn-anak w-full py-3.5 text-lg font-bold shadow-lg"
+                        x-on:click="masukLayarPenuh()"
+                    >
+                        Kembali ke Ujian
+                    </button>
+                    <p class="mt-2 text-sm text-ink-muted">Tombol ini tetap tersedia. Aktifkan layar penuh untuk menutup peringatan.</p>
                 </div>
-                <h2 class="text-2xl font-bold text-ink">Waktu Toleransi Habis</h2>
-                <p class="text-base text-ink-muted">
-                    Jawaban Anda sedang dikumpulkan otomatis dan sesi akun Anda sedang dikeluarkan...
-                </p>
             </div>
         </div>
 

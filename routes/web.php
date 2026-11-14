@@ -211,6 +211,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('sessions.attempts.finish');
     Route::post('sessions/{session}/peserta/{attempt}/tambah-waktu', [AdminSessionController::class, 'addTime'])
         ->name('sessions.attempts.add-time');
+    Route::post('sessions/{session}/tambah-waktu', [AdminSessionController::class, 'addTimeBulk'])
+        ->name('sessions.attempts.add-time-bulk');
     Route::post('sessions/{session}/peserta/{attempt}/reset', [AdminSessionController::class, 'resetAttempt'])
         ->name('sessions.attempts.reset');
     Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
@@ -249,5 +251,6 @@ Route::middleware(['auth', 'role:peserta', 'organization_member'])->group(functi
     Route::post('/attempt/{attempt}/events', [AttemptController::class, 'event'])
         ->middleware('throttle:attempt-events')
         ->name('peserta.attempt.events');
+    Route::post('/attempt/{attempt}/tandai', [AttemptController::class, 'tandai'])->name('peserta.attempt.tandai');
     Route::post('/sesi/{session}/pelanggaran', [PesertaSessionController::class, 'pelanggaran'])->name('peserta.session.pelanggaran');
 });

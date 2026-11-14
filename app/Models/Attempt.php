@@ -28,6 +28,8 @@ class Attempt extends Model
         'nilai',
         'poin_total',
         'poin_maksimal',
+        'jumlah_pelanggaran',
+        'peringatan_mulai_at',
     ];
 
     protected function casts(): array
@@ -43,6 +45,8 @@ class Attempt extends Model
             'nilai' => 'integer',
             'poin_total' => 'integer',
             'poin_maksimal' => 'integer',
+            'jumlah_pelanggaran' => 'integer',
+            'peringatan_mulai_at' => 'integer',
         ];
     }
 
@@ -85,31 +89,32 @@ class Attempt extends Model
         return $this->hasOne(ParticipantFeedback::class);
     }
 
-    public function isFirstCompletedRealAttempt(): bool
+    public function hasCompletedRealQuiz(): bool
     {
-        if ($this->status !== 'selesai') {
-            return false;
-        }
-
         return static::query()
             ->where('organization_id', $this->organization_id)
             ->where('user_id', $this->user_id)
             ->where('status', 'selesai')
             ->whereHas('quizSession.quiz', fn (Builder $query) => $query->where('is_percobaan', false))
-            ->orderBy('selesai_at')
-            ->orderBy('id')
-            ->value('id') === $this->id;
+            ->exists();
     }
 
     public function needsFeedbackPrompt(): bool
     {
-        if (! $this->isFirstCompletedRealAttempt()) {
+        $this->loadMissing('quizSession.quiz');
+
+        if ($this->status !== 'selesai' || $this->quizSession?->quiz?->is_percobaan) {
+            return false;
+        }
+
+        if (! $this->hasCompletedRealQuiz()) {
             return false;
         }
 
         return ! ParticipantFeedback::query()
             ->where('user_id', $this->user_id)
             ->where('organization_id', $this->organization_id)
+            ->where('status', ParticipantFeedback::STATUS_SUBMITTED)
             ->exists();
     }
 

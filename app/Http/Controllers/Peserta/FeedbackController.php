@@ -23,7 +23,7 @@ class FeedbackController extends Controller
         $action = $request->input('action', 'submit');
 
         if ($action === 'dismiss') {
-            ParticipantFeedback::query()->firstOrCreate(
+            ParticipantFeedback::query()->updateOrCreate(
                 [
                     'user_id' => $request->user()->id,
                     'organization_id' => $attempt->organization_id,
@@ -35,7 +35,9 @@ class FeedbackController extends Controller
                 ],
             );
 
-            return back()->with('sukses', 'Masukan untuk workspace ini dilewati.');
+            return back()
+                ->with('sukses', 'Baik, pengingat masukan akan muncul lagi nanti.')
+                ->with('feedback_ditunda', true);
         }
 
         $data = $request->validate([
@@ -43,7 +45,7 @@ class FeedbackController extends Controller
             'message' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        ParticipantFeedback::query()->firstOrCreate(
+        ParticipantFeedback::query()->updateOrCreate(
             [
                 'user_id' => $request->user()->id,
                 'organization_id' => $attempt->organization_id,

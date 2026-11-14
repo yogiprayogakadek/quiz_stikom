@@ -74,9 +74,15 @@ class ParticipantFeedbackTest extends TestCase
             ->get(route('peserta.attempt.result', $attempt))
             ->assertOk()
             ->assertDontSee('Bagaimana pengalaman ujianmu?');
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('Bagaimana pengalaman ujianmu?');
     }
 
-    public function test_hanya_attempt_pertama_yang_memunculkan_masukan(): void
+    public function test_attempt_riil_berikutnya_tetap_memunculkan_masukan(): void
     {
         [$organization, $admin, $participant, $firstSession] = $this->dasar('peserta_pertama');
         $secondSession = $this->quizSession($organization, $admin, 'Sesi Kedua');
@@ -86,15 +92,61 @@ class ParticipantFeedbackTest extends TestCase
 
         $this->actingAs($participant)
             ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
-            ->get(route('peserta.attempt.result', $second))
-            ->assertOk()
-            ->assertDontSee('Bagaimana pengalaman ujianmu?');
-
-        $this->actingAs($participant)
-            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
             ->get(route('peserta.attempt.result', $first))
             ->assertOk()
             ->assertSee('Bagaimana pengalaman ujianmu?');
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('peserta.attempt.result', $second))
+            ->assertOk()
+            ->assertSee('Bagaimana pengalaman ujianmu?');
+    }
+
+    public function test_setelah_masukan_dikirim_pengingat_berhenti_di_attempt_lain(): void
+    {
+        [$organization, $admin, $participant, $firstSession] = $this->dasar('peserta_selesai');
+        $secondSession = $this->quizSession($organization, $admin, 'Sesi Kedua');
+
+        $first = $this->attempt($participant, $firstSession, now()->subMinute()->getTimestampMs());
+        $second = $this->attempt($participant, $secondSession, now()->getTimestampMs());
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('peserta.attempt.feedback', $first), [
+                'rating' => 4,
+                'message' => 'Cukup jelas.',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('peserta.attempt.result', $second))
+            ->assertOk()
+            ->assertDontSee('Bagaimana pengalaman ujianmu?');
+    }
+
+    public function test_dashboard_menampilkan_pengingat_lalu_berhenti_setelah_dikirim(): void
+    {
+        [$organization, $admin, $participant, $session] = $this->dasar('peserta_dashboard');
+        $attempt = $this->attempt($participant, $session);
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('peserta.dashboard'))
+            ->assertOk()
+            ->assertSee('Bagaimana pengalaman ujianmu?');
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('peserta.attempt.feedback', $attempt), ['rating' => 5])
+            ->assertRedirect();
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('peserta.dashboard'))
+            ->assertOk()
+            ->assertDontSee('Bagaimana pengalaman ujianmu?');
     }
 
     public function test_kuis_percobaan_tidak_memunculkan_masukan(): void

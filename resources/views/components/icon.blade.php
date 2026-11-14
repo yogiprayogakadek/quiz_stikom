@@ -29,6 +29,15 @@
             <path d="m4 20 1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5Z" />
             <path d="m14.5 6.5 3 3" />
             @break
+        @case('flag')
+            <path d="M5 21V4" />
+            <path d="M5 5c3-2 6 2 9 0v8c-3 2-6-2-9 0" />
+            @break
+        @case('highlight')
+            <path d="m9 11 4 4" />
+            <path d="M4 20h5l10-10a2.8 2.8 0 0 0-4-4L5 16Z" />
+            <path d="M4 20h16" />
+            @break
         @case('book')
             <path d="M12 6.5C10.5 5.3 8.4 4.8 5 5v13c3.4-.2 5.5.3 7 1.5 1.5-1.2 3.6-1.7 7-1.5V5c-3.4-.2-5.5.3-7 1.5Z" />
             <path d="M12 6.5V19" />

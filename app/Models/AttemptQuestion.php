@@ -14,6 +14,9 @@ class AttemptQuestion extends Model
         'question_id',
         'urutan',
         'urutan_opsi_json',
+        'ragu_ragu',
+        'highlight_soal',
+        'highlight_opsi_json',
     ];
 
     protected function casts(): array
@@ -21,6 +24,9 @@ class AttemptQuestion extends Model
         return [
             'urutan' => 'integer',
             'urutan_opsi_json' => 'array',
+            'ragu_ragu' => 'boolean',
+            'highlight_soal' => 'boolean',
+            'highlight_opsi_json' => 'array',
         ];
     }
 

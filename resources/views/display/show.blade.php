@@ -24,8 +24,10 @@
                 localStorage.setItem('display_skor_limit', nilai);
             },
             get daftarSkor() {
-                const data = this.state?.leaderboard ?? this.state?.top5 ?? [];
-                return Array.isArray(data) ? data : [];
+                const penuh = Array.isArray(this.state?.leaderboard) ? this.state.leaderboard : [];
+                if (penuh.length > 0) return penuh;
+
+                return Array.isArray(this.state?.top5) ? this.state.top5 : [];
             },
             get skorPerHalaman() {
                 if (this.skorLimit === 'semua') {
@@ -462,7 +464,9 @@
                             <p
                                 class="mt-6 text-xl text-ink-muted"
                                 x-text="state.leaderboard_live
-                                    ? 'Belum ada peserta yang selesai. Leaderboard muncul setelah peserta pertama menyelesaikan semua soal.'
+                                    ? (state.selesai > 0
+                                        ? 'Skor peserta sedang disinkronkan. Layar akan diperbarui otomatis.'
+                                        : 'Menunggu peserta pertama menyelesaikan seluruh soal.')
                                     : 'Leaderboard live dimatikan untuk sesi ini. Skor tetap dihitung dan tersedia di laporan akhir.'"
                             ></p>
                         </template>

@@ -8,11 +8,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AttemptEvent extends Model
 {
     public const LABEL = [
-        'fullscreen_exit' => ['pesan' => 'Keluar dari layar penuh (Toleransi 10s berjalan)', 'level' => 'warning'],
+        'fullscreen_exit' => ['pesan' => 'Keluar dari layar penuh (toleransi berjalan)', 'level' => 'warning'],
         'tab_hidden' => ['pesan' => 'Membuka tab lain / tab disembunyikan', 'level' => 'warning'],
         'blur_window' => ['pesan' => 'Berpindah ke jendela aplikasi lain', 'level' => 'warning'],
         'copy_attempt' => ['pesan' => 'Mencoba menyalin (copy) teks soal', 'level' => 'warning'],
-        'fullscreen_exit_timeout' => ['pesan' => 'Toleransi habis: kuis dikumpulkan paksa & akun di-logout', 'level' => 'danger'],
+        'fullscreen_exit_timeout' => ['pesan' => 'Toleransi habis: pelanggaran tercatat', 'level' => 'danger'],
     ];
 
     public $timestamps = false;
