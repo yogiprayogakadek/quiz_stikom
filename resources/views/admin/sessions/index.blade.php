@@ -27,7 +27,7 @@
         @endforeach
     </nav>
 
-    <form method="GET" action="{{ route('admin.sessions.index') }}" class="mt-4 flex flex-wrap items-end gap-3">
+    <form method="GET" action="{{ route('admin.sessions.index') }}" class="mt-4 mb-5 flex flex-wrap items-end gap-3">
         @if ($status)
             <input type="hidden" name="status" value="{{ $status }}">
         @endif
@@ -78,6 +78,9 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <x-status-badge :status="$sesi->status" />
                             <x-mode-badge :mode="$sesi->mode" />
+                            @if ($sesi->quiz->is_percobaan)
+                                <span class="pill pill-neutral text-xs">Percobaan</span>
+                            @endif
                             @if ($sesi->kelas)
                                 <span class="pill pill-brand font-bold">{{ $sesi->kelas->nama }}</span>
                             @endif

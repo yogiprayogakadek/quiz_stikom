@@ -599,7 +599,9 @@
                                 </ol>
                             </template>
                             <template x-if="daftarSkor.length === 0">
-                                <p class="mt-5 text-xl text-ink-muted">Tidak ada peserta yang menyelesaikan sesi ini.</p>
+                                <p class="mt-5 text-xl text-ink-muted" x-text="state.percobaan
+                                    ? 'Kuis ini ditandai sebagai percobaan, jadi leaderboard tidak ditampilkan. Sebaran nilai tetap dihitung.'
+                                    : 'Tidak ada peserta yang menyelesaikan sesi ini.'"></p>
                             </template>
                             <div x-show="totalHalamanSkor > 1" x-cloak class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
                                 <button type="button" @click="keHalamanSkor(-1)" class="rounded-xl border border-outline px-3 py-2 text-sm font-bold text-ink disabled:opacity-40" :disabled="halamanSkorAktif <= 1">Sebelumnya</button>
@@ -610,11 +612,13 @@
 
                         <div class="rounded-panel border border-outline bg-surface p-8">
                             <h2 class="text-3xl">Sebaran nilai</h2>
-                            <div class="mt-6 flex h-64 items-end gap-2">
+                            <div class="mt-6 flex h-64 items-stretch gap-2">
                                 <template x-for="(jumlah, indeks) in state.histogram" :key="indeks">
-                                    <div class="flex flex-1 flex-col items-center justify-end gap-2">
+                                    <div class="flex h-full flex-1 flex-col items-center gap-2">
                                         <span class="font-mono text-base font-bold text-ink" x-text="jumlah"></span>
-                                        <div class="w-full rounded-t-lg bg-brand" x-bind:style="'height:' + tinggiHistogram(jumlah)"></div>
+                                        <div class="flex w-full flex-1 items-end min-h-0">
+                                            <div class="w-full rounded-t-lg bg-brand" x-bind:style="'height:' + tinggiHistogram(jumlah)"></div>
+                                        </div>
                                         <span class="font-mono text-xs text-ink-muted" x-text="indeks * 10"></span>
                                     </div>
                                 </template>

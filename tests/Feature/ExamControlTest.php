@@ -242,6 +242,25 @@ class ExamControlTest extends TestCase
         $this->assertSame(1, $state['histogram'][8]);
     }
 
+    public function test_hasil_akhir_kuis_percobaan_tetap_menghitung_histogram_tanpa_leaderboard(): void
+    {
+        [, , , $session, $attempt] = $this->dasar('final_percobaan');
+
+        $session->quiz->update(['is_percobaan' => true]);
+        $session->update(['status' => 'selesai']);
+        $attempt->update([
+            'status' => 'selesai',
+            'selesai_at' => now()->getTimestampMs(),
+            'skor_total' => 80,
+        ]);
+
+        $state = app(QuizEngine::class)->displayState($session->fresh());
+
+        $this->assertTrue($state['percobaan']);
+        $this->assertSame([], $state['leaderboard']);
+        $this->assertSame(1, $state['histogram'][8]);
+    }
+
     public function test_tutup_sesi_mengunci_attempt_yang_sudah_mulai_tanpa_bergabung_at(): void
     {
         Queue::fake();
