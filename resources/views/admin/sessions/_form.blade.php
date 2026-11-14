@@ -19,8 +19,8 @@
     @endif
 
     <div>
-        <label for="quiz_id" class="label">Kuis</label>
         @if ($terkunci)
+            <label for="quiz_id" class="label">Kuis</label>
             <input type="hidden" name="quiz_id" value="{{ $session->quiz_id }}">
             <select id="quiz_id" class="input" disabled>
                 @foreach ($quizzes as $kuis)
@@ -28,37 +28,60 @@
                 @endforeach
             </select>
         @else
-            <select id="quiz_id" name="quiz_id" class="input" required>
-                <option value="">Pilih kuis</option>
-                @foreach ($quizzes as $kuis)
-                    <option
-                        value="{{ $kuis->id }}"
-                        @selected((int) old('quiz_id', $session?->quiz_id ?? request('quiz_id')) === $kuis->id)
-                        @disabled($kuis->questions_count === 0)
-                    >
-                        {{ $kuis->judul }} ({{ $kuis->questions_count }} soal){{ $kuis->questions_count === 0 ? ' - belum ada soal' : '' }}
-                    </option>
-                @endforeach
-            </select>
+            @php
+                $opsiKuis = $quizzes->map(fn ($kuis) => [
+                    'value' => (string) $kuis->id,
+                    'label' => $kuis->judul.' ('.$kuis->questions_count.' soal)'.($kuis->questions_count === 0 ? ' - belum ada soal' : ''),
+                    'search' => $kuis->judul.' '.$kuis->questions_count.' soal',
+                    'disabled' => $kuis->questions_count === 0,
+                ])->prepend([
+                    'value' => '',
+                    'label' => 'Pilih kuis',
+                    'search' => '',
+                ])->all();
+            @endphp
+            <x-searchable-select
+                id="quiz_id"
+                name="quiz_id"
+                label="Kuis"
+                search-label="Cari kuis"
+                placeholder="Judul kuis"
+                :options="$opsiKuis"
+                :selected="old('quiz_id', $session?->quiz_id ?? request('quiz_id'))"
+                required
+            />
         @endif
         @error('quiz_id') <p class="field-error">{{ $message }}</p> @enderror
     </div>
 
     <div>
-        <label for="kelas_id" class="label">Kelas</label>
         @if ($terkunci)
+            <label for="kelas_id" class="label">Kelas</label>
             <input type="hidden" name="kelas_id" value="{{ $session->kelas_id }}">
             <select id="kelas_id" class="input" disabled>
                 <option>{{ $session->kelas?->nama ?? 'Terbuka untuk semua peserta' }}</option>
             </select>
         @else
-            <select id="kelas_id" name="kelas_id" class="input">
-                <option value="">Terbuka untuk semua peserta</option>
-                @foreach ($kelas as $k)
-                    <option value="{{ $k->id }}" @selected((int) old('kelas_id', $session?->kelas_id ?? request('kelas_id')) === $k->id)>{{ $k->nama }}</option>
-                @endforeach
-            </select>
-            <p class="help mt-2">Sesi kelas hanya tampil untuk anggota kelas itu.</p>
+            @php
+                $opsiKelas = $kelas->map(fn ($k) => [
+                    'value' => (string) $k->id,
+                    'label' => $k->nama,
+                ])->prepend([
+                    'value' => '',
+                    'label' => 'Terbuka untuk semua peserta',
+                    'search' => '',
+                ])->all();
+            @endphp
+            <x-searchable-select
+                id="kelas_id"
+                name="kelas_id"
+                label="Kelas"
+                search-label="Cari kelas"
+                placeholder="Nama kelas"
+                :options="$opsiKelas"
+                :selected="old('kelas_id', $session?->kelas_id ?? request('kelas_id'))"
+                help="Sesi kelas hanya tampil untuk anggota kelas itu."
+            />
         @endif
         @error('kelas_id') <p class="field-error">{{ $message }}</p> @enderror
     </div>

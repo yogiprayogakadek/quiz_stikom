@@ -190,6 +190,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::get('sessions/{session}/remidi/csv', [RemedialController::class, 'export'])->name('sessions.remidi.export');
 
     Route::resource('sessions', AdminSessionController::class);
+    Route::get('sessions/{session}/pratinjau', [AdminSessionController::class, 'preview'])->name('sessions.preview');
     Route::post('sessions/{session}/lobby', [AdminSessionController::class, 'openLobby'])->name('sessions.lobby');
     Route::post('sessions/{session}/mulai', [AdminSessionController::class, 'start'])->name('sessions.start');
     Route::post('sessions/{session}/peserta', [AdminSessionController::class, 'updateParticipants'])->name('sessions.participants.update');

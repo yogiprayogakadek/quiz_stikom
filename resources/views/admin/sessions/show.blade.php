@@ -38,6 +38,11 @@
             </form>
         @endif
 
+        <a href="{{ route('admin.sessions.preview', $session) }}" class="btn btn-secondary">
+            <x-icon name="eye" :size="20" />
+            Pratinjau
+        </a>
+
         <a href="{{ route('admin.sessions.edit', $session) }}" class="btn btn-secondary">Pengaturan</a>
 
         @if ($session->status === 'selesai')

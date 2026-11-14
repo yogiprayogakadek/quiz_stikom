@@ -114,6 +114,28 @@ class SessionController extends Controller
     }
 
     /**
+     * Pratinjau baca-saja: menampilkan isi sesi dan contoh tampilan peserta
+     * tanpa membuat attempt, membuka soal, atau mengirim broadcast.
+     */
+    public function preview(QuizSession $session): View
+    {
+        $session->load('quiz', 'kelas');
+
+        $dariSesi = $session->sessionQuestions()->exists();
+
+        $soal = $dariSesi
+            ? $session->sessionQuestions()->with('question.options')->get()->pluck('question')->filter()->values()
+            : $session->quiz->questions()->with('options')->orderBy('id')->get();
+
+        return view('admin.sessions.preview', [
+            'session' => $session,
+            'soal' => $soal,
+            'dariSesi' => $dariSesi,
+            'totalKuis' => $session->quiz->questions()->count(),
+        ]);
+    }
+
+    /**
      * Potongan halaman yang dipakai polling halaman admin supaya daftar
      * peserta dan statusnya ikut berubah saat peserta bergabung atau menjawab.
      */
