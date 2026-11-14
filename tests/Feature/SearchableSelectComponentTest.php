@@ -7,7 +7,7 @@ use Tests\TestCase;
 
 class SearchableSelectComponentTest extends TestCase
 {
-    public function test_komponen_merender_pencarian_dan_pilihan_yang_dipilih(): void
+    public function test_komponen_merender_satu_kontrol_dengan_pencarian_di_dalam_dropdown(): void
     {
         $html = Blade::render(
             '<x-searchable-select id="quiz_id" name="quiz_id" label="Kuis" :options="$options" :selected="$selected" required help="Pilih kuis yang sudah punya soal." />',
@@ -21,23 +21,29 @@ class SearchableSelectComponentTest extends TestCase
             ],
         );
 
-        $this->assertStringContainsString('for="quiz_id-cari"', $html);
-        $this->assertStringContainsString('id="quiz_id-cari"', $html);
-        $this->assertStringContainsString('type="search"', $html);
+        $this->assertStringNotContainsString('quiz_id-cari', $html);
         $this->assertStringContainsString('for="quiz_id"', $html);
-        $this->assertStringContainsString('name="quiz_id"', $html);
-        $this->assertStringContainsString('required', $html);
+        $this->assertMatchesRegularExpression('/<input[^>]*type="hidden"[^>]*name="quiz_id"[^>]*value="7"/s', $html);
+        $this->assertMatchesRegularExpression('/<button[\s\S]*?id="quiz_id"[\s\S]*?aria-haspopup="listbox"/', $html);
+        $this->assertStringContainsString('aria-expanded="false"', $html);
+        $this->assertStringContainsString('aria-controls="quiz_id-daftar"', $html);
+        $this->assertStringContainsString('aria-required="true"', $html);
+        $this->assertMatchesRegularExpression('/id="quiz_id"[\s\S]*?UTS Matematika \(12 soal\)[\s\S]*?<\/button>/', $html);
+
+        $this->assertMatchesRegularExpression('/id="quiz_id-panel"[\s\S]*?id="quiz_id-pencarian"[\s\S]*?role="combobox"/', $html);
+        $this->assertStringContainsString('role="listbox"', $html);
+        $this->assertStringContainsString('role="option"', $html);
         $this->assertStringContainsString('data-search="uts matematika 12 soal"', $html);
-        $this->assertMatchesRegularExpression('/value="7"\s+data-search="[^"]*"\s+selected/', $html);
-        $this->assertMatchesRegularExpression('/value="9"\s+data-search="[^"]*"\s+disabled/', $html);
+        $this->assertMatchesRegularExpression('/data-nilai="7"[\s\S]*?aria-selected="true"/', $html);
+        $this->assertMatchesRegularExpression('/data-nilai="9"[\s\S]*?aria-disabled="true"/', $html);
         $this->assertStringContainsString('Tidak ada pilihan yang cocok', $html);
         $this->assertStringContainsString('id="quiz_id-help"', $html);
     }
 
-    public function test_komponen_tanpa_pilihan_terpilih_tidak_menandai_opsi_mana_pun(): void
+    public function test_komponen_tanpa_pilihan_terpilih_menampilkan_pilihan_kosong_tanpa_wajib(): void
     {
         $html = Blade::render(
-            '<x-searchable-select id="kelas_id" label="Kelas" :options="$options" />',
+            '<x-searchable-select id="kelas_id" label="Kelas" placeholder="Pilih kelas" :options="$options" />',
             [
                 'options' => [
                     ['value' => '', 'label' => 'Terbuka untuk semua peserta'],
@@ -47,7 +53,9 @@ class SearchableSelectComponentTest extends TestCase
         );
 
         $this->assertStringContainsString('name="kelas_id"', $html);
-        $this->assertDoesNotMatchRegularExpression('/value="3"\s+data-search="[^"]*"\s+selected/', $html);
-        $this->assertStringNotContainsString('required', $html);
+        $this->assertMatchesRegularExpression('/data-nilai=""[\s\S]*?aria-selected="true"/', $html);
+        $this->assertStringNotContainsString('aria-required="true"', $html);
+        $this->assertStringContainsString('Terbuka untuk semua peserta', $html);
+        $this->assertMatchesRegularExpression('/id="kelas_id-panel"[\s\S]*?placeholder="Cari kelas"/', $html);
     }
 }

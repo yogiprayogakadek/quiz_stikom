@@ -15,7 +15,7 @@ class AdminSessionFormTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_form_sesi_memakai_pencarian_kuis_dan_kelas(): void
+    public function test_form_sesi_memakai_pemilih_kuis_dan_kelas_yang_bisa_dicari(): void
     {
         $admin = $this->admin();
         $kelas = Kelas::create(['nama' => 'Kelas Pagi', 'pin' => 'PAGI01', 'created_by' => $admin->id]);
@@ -34,13 +34,18 @@ class AdminSessionFormTest extends TestCase
             ->get('/admin/sessions/create');
 
         $response->assertOk()
-            ->assertSee('Cari kuis')
-            ->assertSee('Cari kelas')
-            ->assertSee('id="quiz_id-cari"', false)
-            ->assertSee('id="kelas_id-cari"', false)
+            ->assertDontSee('id="quiz_id-cari"', false)
+            ->assertDontSee('id="kelas_id-cari"', false)
+            ->assertSee('for="quiz_id"', false)
+            ->assertSee('for="kelas_id"', false)
+            ->assertSee('id="quiz_id-pencarian"', false)
+            ->assertSee('id="kelas_id-pencarian"', false)
+            ->assertSee('placeholder="Cari kuis"', false)
+            ->assertSee('placeholder="Cari kelas"', false)
             ->assertSee('data-search="uts matematika 1 soal"', false)
             ->assertSee('Kuis Kosong (0 soal) - belum ada soal')
-            ->assertSee('Kelas Pagi');
+            ->assertSee('Kelas Pagi')
+            ->assertSee('aria-required="true"', false);
     }
 
     public function test_form_edit_menandai_kuis_dan_kelas_terpilih(): void
@@ -67,8 +72,10 @@ class AdminSessionFormTest extends TestCase
 
         $html = $response->getContent();
 
-        $this->assertMatchesRegularExpression('/value="'.$kuis->id.'"\s+data-search="[^"]*"\s+selected/', $html);
-        $this->assertMatchesRegularExpression('/value="'.$kelas->id.'"\s+data-search="[^"]*"\s+selected/', $html);
+        $this->assertMatchesRegularExpression('/id="quiz_id-opsi-1"[\s\S]*?aria-selected="true"/', $html);
+        $this->assertMatchesRegularExpression('/id="kelas_id-opsi-1"[\s\S]*?aria-selected="true"/', $html);
+        $this->assertMatchesRegularExpression('/id="quiz_id"[\s\S]*?Kuis Sore[\s\S]*?<\/button>/', $html);
+        $this->assertMatchesRegularExpression('/id="kelas_id"[\s\S]*?Kelas Sore[\s\S]*?<\/button>/', $html);
     }
 
     private function admin(): User
