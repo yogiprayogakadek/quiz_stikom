@@ -76,6 +76,7 @@ class SessionController extends Controller
             'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
             'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
             'jeda_detik' => $data['jeda_detik'],
+            'durasi_total_detik' => $this->durasiTotalDetik($data),
             'status' => 'draft',
             'display_token' => Str::random(48),
             'created_by' => $request->user()->id,
@@ -215,6 +216,7 @@ class SessionController extends Controller
             'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
             'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
             'jeda_detik' => $data['jeda_detik'],
+            'durasi_total_detik' => $this->durasiTotalDetik($data),
         ]);
 
         if ((int) $session->kelas_id !== (int) $kelasLama) {
@@ -589,6 +591,32 @@ class SessionController extends Controller
     private function pastikanAttemptMilikSesi(QuizSession $session, Attempt $attempt): void
     {
         abort_unless((int) $attempt->quiz_session_id === (int) $session->id, 404);
+    }
+
+    /**
+     * Mode Acak memakai satu timer global. Sesi essay tanpa isian admin
+     * memakai 100 menit; sesi PG tanpa isian tetap memakai jumlah durasi soal.
+     */
+    private function durasiTotalDetik(array $data): ?int
+    {
+        if (($data['mode'] ?? null) !== 'acak') {
+            return null;
+        }
+
+        $menit = $data['durasi_total_menit'] ?? null;
+
+        if ($menit === null) {
+            $punyaEssay = Quiz::query()
+                ->whereKey($data['quiz_id'])
+                ->whereHas('questions', fn ($query) => $query->where('tipe', 'essay'))
+                ->exists();
+
+            if ($punyaEssay) {
+                $menit = 100;
+            }
+        }
+
+        return $menit !== null ? (int) $menit * 60 : null;
     }
 
     public function close(QuizSession $session, QuizEngine $engine): RedirectResponse

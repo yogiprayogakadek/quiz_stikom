@@ -111,6 +111,24 @@
         </div>
     </div>
 
+    <div x-show="mode === 'acak'" x-cloak>
+        <label for="durasi_total_menit" class="label">Durasi total sesi (menit)</label>
+        <input
+            id="durasi_total_menit"
+            name="durasi_total_menit"
+            type="number"
+            min="1"
+            max="600"
+            value="{{ old('durasi_total_menit', $session?->durasi_total_detik ? intdiv($session->durasi_total_detik, 60) : '') }}"
+            class="input"
+            placeholder="100"
+            x-bind:disabled="mode !== 'acak'"
+            @error('durasi_total_menit') aria-invalid="true" @enderror
+        >
+        <p class="help mt-2">Kosongkan untuk otomatis. Sesi essay memakai 100 menit bila dikosongkan; sesi PG memakai jumlah durasi soal. Isi 1 sampai 600 menit.</p>
+        @error('durasi_total_menit') <p class="field-error">{{ $message }}</p> @enderror
+    </div>
+
     <fieldset class="rounded-2xl border border-outline bg-page p-4">
         <legend class="label">Pengawasan</legend>
         <div class="mt-3 grid gap-5 sm:grid-cols-2">

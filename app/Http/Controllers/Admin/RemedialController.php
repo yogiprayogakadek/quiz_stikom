@@ -97,6 +97,11 @@ class RemedialController extends Controller
         $quizId = $data['sumber_soal'] === 'lama' ? $session->quiz_id : (int) $data['quiz_id'];
         $quiz = Quiz::withCount('questions')->findOrFail($quizId);
 
+        $durasiTotal = $session->durasi_total_detik;
+        if ($durasiTotal === null && $quiz->questions()->where('tipe', 'essay')->exists()) {
+            $durasiTotal = 100 * 60;
+        }
+
         $remidi = QuizSession::create([
             'quiz_id' => $quizId,
             'kelas_id' => $session->kelas_id,
@@ -111,6 +116,7 @@ class RemedialController extends Controller
             'leaderboard_live' => true,
             'max_peserta' => null,
             'jeda_detik' => 5,
+            'durasi_total_detik' => $durasiTotal,
             'status' => 'draft',
             'display_token' => Str::random(48),
             'created_by' => $request->user()->id,

@@ -13,7 +13,7 @@ class StoreQuestionRequest extends FormRequest
             'teks' => ['required', 'string', 'max:2000'],
             'tipe' => ['required', Rule::in(['pilihan_ganda', 'essay'])],
             'bobot' => ['required', 'integer', 'min:1', 'max:1000'],
-            'durasi_detik' => ['required', 'integer', 'min:5', 'max:300'],
+            'durasi_detik' => ['nullable', 'integer', 'min:5', 'max:300', 'required_if:tipe,pilihan_ganda'],
             'pembahasan' => ['nullable', 'string', 'max:5000'],
             'kunci_essay' => ['nullable', 'string', 'max:5000'],
             'rubrik_essay' => ['nullable', 'array', 'max:10'],

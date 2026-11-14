@@ -103,10 +103,16 @@
 
     <div class="grid gap-5 sm:grid-cols-2">
         <div>
-            <label for="durasi_detik" class="label">Durasi soal (detik)</label>
-            <input id="durasi_detik" name="durasi_detik" type="number" min="5" max="300" value="{{ old('durasi_detik', $question?->durasi_detik ?? 30) }}" class="input" required @error('durasi_detik') aria-invalid="true" @enderror>
-            <p class="help mt-2">5 sampai 300 detik. Dipakai sebagai timer di Mode Serempak dan penentu batas total di Mode Acak.</p>
-            @error('durasi_detik') <p class="field-error">{{ $message }}</p> @enderror
+            <div x-show="tipe === 'pilihan_ganda'" x-cloak>
+                <label for="durasi_detik" class="label">Durasi soal (detik)</label>
+                <input id="durasi_detik" name="durasi_detik" type="number" min="5" max="300" value="{{ old('durasi_detik', $question?->durasi_detik ?? 30) }}" class="input" x-bind:required="tipe === 'pilihan_ganda'" x-bind:disabled="tipe !== 'pilihan_ganda'" @error('durasi_detik') aria-invalid="true" @enderror>
+                <p class="help mt-2">5 sampai 300 detik. Timer per soal di Mode Serempak; di Mode Acak menjadi penentu batas total bila durasi sesi kosong.</p>
+                @error('durasi_detik') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+            <div x-show="tipe === 'essay'" x-cloak>
+                <p class="label">Durasi soal</p>
+                <p class="help">Essay memakai durasi total sesi Mode Acak, bukan durasi per soal.</p>
+            </div>
         </div>
 
         <div>

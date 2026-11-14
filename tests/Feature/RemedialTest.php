@@ -116,6 +116,29 @@ class RemedialTest extends TestCase
         ]);
     }
 
+    public function test_sesi_remidi_mewarisi_durasi_total_sesi_awal(): void
+    {
+        [$admin, $kelas, $quiz] = $this->dasar(true);
+        $peserta = $this->peserta('peserta-remidi-durasi');
+        $awal = $this->sesi($quiz, $admin, 'acak', 'selesai');
+        $awal->update(['durasi_total_detik' => 6000]);
+
+        $this->attempt($peserta, $awal, 50);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.sessions.remidi.store', $awal), [
+                'nama' => 'Remidi Durasi',
+                'sumber_soal' => 'lama',
+                'peserta_ids' => [$peserta->id],
+            ])
+            ->assertRedirect();
+
+        $remidi = QuizSession::where('jenis', 'remidi')->firstOrFail();
+
+        $this->assertSame(6000, $remidi->durasi_total_detik);
+    }
+
     public function test_sesi_remidi_menolak_kuis_percobaan(): void
     {
         [$admin, $kelas, $quiz] = $this->dasar(true);

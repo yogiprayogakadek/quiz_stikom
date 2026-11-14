@@ -134,7 +134,9 @@ class QuizEngine
             $this->buatAttemptQuestions($attempt, $questions, $session->acak_opsi);
 
             $now = now()->getTimestampMs();
-            $totalMs = (int) $questions->sum('durasi_detik') * 1000;
+            $totalMs = $session->durasi_total_detik !== null
+                ? (int) $session->durasi_total_detik * 1000
+                : (int) $questions->sum('durasi_detik') * 1000;
 
             $attempt->update([
                 'status' => 'berjalan',
