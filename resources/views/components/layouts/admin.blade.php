@@ -116,13 +116,6 @@
                     <span>Sesi Ujian</span>
                 </a>
                 <a
-                    href="{{ route('admin.backups.index') }}"
-                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.backups.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
-                >
-                    <x-icon name="download" :size="20" class="{{ request()->routeIs('admin.backups.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
-                    <span>Backup</span>
-                </a>
-                <a
                     href="{{ route('admin.settings.edit') }}"
                     class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('admin.settings.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
                     @if (request()->routeIs('admin.settings.*')) aria-current="page" @endif
@@ -311,15 +304,6 @@
                     >
                         <x-icon name="play" :size="20" class="{{ request()->routeIs('admin.sessions.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Sesi Ujian</span>
-                    </a>
-                    <a
-                        href="{{ route('admin.backups.index') }}"
-                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('admin.backups.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
-                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
-                        :title="sidebarCollapsed ? 'Backup' : ''"
-                    >
-                        <x-icon name="download" :size="20" class="{{ request()->routeIs('admin.backups.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
-                        <span x-show="!sidebarCollapsed" x-cloak>Backup</span>
                     </a>
                     <a
                         href="{{ route('admin.settings.edit') }}"

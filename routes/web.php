@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
@@ -137,11 +136,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->middleware('throttle:5,1')
         ->name('workspace.requests.store');
 
-    Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
-    Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
-    Route::get('backups/{nama}', [BackupController::class, 'download'])
-        ->where('nama', '[A-Za-z0-9._-]+')
-        ->name('backups.download');
     Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
     Route::middleware('organization_owner')->group(function () {
@@ -149,10 +143,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         Route::post('team', [TeamController::class, 'store'])->name('team.store');
         Route::delete('team/{admin}', [TeamController::class, 'destroy'])->name('team.destroy');
     });
-    Route::delete('backups/{nama}', [BackupController::class, 'destroy'])
-        ->where('nama', '[A-Za-z0-9._-]+')
-        ->name('backups.destroy');
-
     Route::get('participants/import', [ParticipantController::class, 'importForm'])->name('participants.import');
     Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import.store');
     Route::get('participants/import/result', [ParticipantController::class, 'importResult'])->name('participants.import.result');

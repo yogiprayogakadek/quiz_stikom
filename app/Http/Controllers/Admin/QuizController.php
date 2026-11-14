@@ -8,19 +8,25 @@ use App\Http\Requests\UpdateQuizRequest;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class QuizController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $kelasFilter = (int) $request->query('kelas', 0);
+
         $quizzes = Quiz::with('kelas')
             ->withCount(['questions', 'sessions'])
+            ->when($kelasFilter > 0, fn ($query) => $query->where('kelas_id', $kelasFilter))
             ->orderByDesc('created_at')
-            ->paginate(12);
+            ->get();
 
-        return view('admin.quizzes.index', compact('quizzes'));
+        $kelasList = Kelas::orderBy('nama')->get();
+
+        return view('admin.quizzes.index', compact('quizzes', 'kelasList', 'kelasFilter'));
     }
 
     public function create(): View|RedirectResponse

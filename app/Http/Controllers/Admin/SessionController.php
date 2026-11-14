@@ -33,16 +33,20 @@ class SessionController extends Controller
     public function index(Request $request): View
     {
         $status = $request->query('status');
+        $status = in_array($status, ['draft', 'lobby', 'berjalan', 'selesai'], true) ? $status : null;
+        $kelasFilter = (int) $request->query('kelas', 0);
 
-        $sessions = QuizSession::with('quiz', 'remidi')
+        $sessions = QuizSession::with('quiz', 'remidi', 'kelas')
             ->withCount('attempts')
-            ->when(in_array($status, ['draft', 'lobby', 'berjalan', 'selesai'], true), fn ($q) => $q->where('status', $status))
+            ->when($status !== null, fn ($q) => $q->where('status', $status))
+            ->when($kelasFilter > 0, fn ($q) => $q->where('kelas_id', $kelasFilter))
             ->orderByRaw("CASE status WHEN 'berjalan' THEN 0 WHEN 'lobby' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END")
             ->orderByDesc('updated_at')
-            ->paginate(12)
-            ->withQueryString();
+            ->get();
 
-        return view('admin.sessions.index', compact('sessions', 'status'));
+        $kelasList = Kelas::orderBy('nama')->get();
+
+        return view('admin.sessions.index', compact('sessions', 'status', 'kelasList', 'kelasFilter'));
     }
 
     public function create(): View

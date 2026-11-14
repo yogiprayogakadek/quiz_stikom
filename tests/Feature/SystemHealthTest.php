@@ -27,6 +27,20 @@ class SystemHealthTest extends TestCase
             ->assertSee('Backup database');
     }
 
+    public function test_master_melihat_daftar_backup_sql_saja(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('backups/backup-20260101-120000-abcd.sql', '-- dump');
+        Storage::disk('local')->put('backups/catatan.txt', 'bukan backup');
+
+        $this->actingAs($this->master())
+            ->withSession(['auth_token' => 'master-token'])
+            ->get(route('master.system.index'))
+            ->assertOk()
+            ->assertSee('backup-20260101-120000-abcd.sql')
+            ->assertDontSee('catatan.txt');
+    }
+
     public function test_admin_organisasi_tidak_dapat_melihat_kesehatan_sistem(): void
     {
         $this->actingAs($this->admin())
