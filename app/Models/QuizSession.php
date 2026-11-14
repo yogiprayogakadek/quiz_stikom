@@ -161,12 +161,12 @@ class QuizSession extends Model
             return true;
         }
 
-        if (! $this->attempts()->whereNotNull('bergabung_at')->exists()) {
+        if (! $this->attempts()->mengikuti()->exists()) {
             return false;
         }
 
         return ! $this->attempts()
-            ->whereNotNull('bergabung_at')
+            ->mengikuti()
             ->where('status', '!=', 'selesai')
             ->exists();
     }

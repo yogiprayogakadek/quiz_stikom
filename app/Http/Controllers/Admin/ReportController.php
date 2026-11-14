@@ -32,7 +32,7 @@ class ReportController extends Controller
         $tinjau = $request->boolean('tinjau');
 
         $attempts = $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->with('user')
             ->withCount([
                 'events',
@@ -46,9 +46,9 @@ class ReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        $totalAttempt = $session->attempts()->bergabung()->count();
-        $selesai = $session->attempts()->bergabung()->where('status', 'selesai')->count();
-        $perluTinjau = $session->attempts()->bergabung()->has('events', '>=', 3)->count();
+        $totalAttempt = $session->attempts()->mengikuti()->count();
+        $selesai = $session->attempts()->mengikuti()->where('status', 'selesai')->count();
+        $perluTinjau = $session->attempts()->mengikuti()->has('events', '>=', 3)->count();
 
         $essayBelumDinilai = Answer::query()
             ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
@@ -75,7 +75,7 @@ class ReportController extends Controller
         $session->load(['quiz.kelas', 'kelas']);
 
         $attempts = $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->with('user')
             ->withCount(['events', 'answers'])
             ->orderByDesc('skor_total')
@@ -258,7 +258,7 @@ class ReportController extends Controller
     public function export(QuizSession $session): StreamedResponse
     {
         $attempts = $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->with('user')
             ->withCount([
                 'events',
@@ -378,7 +378,7 @@ class ReportController extends Controller
             return [];
         }
 
-        $attempts = $session->attempts()->bergabung()->get(['id', 'skor_total']);
+        $attempts = $session->attempts()->mengikuti()->get(['id', 'skor_total']);
         $attemptIds = $attempts->pluck('id')->all();
 
         $answers = Answer::query()

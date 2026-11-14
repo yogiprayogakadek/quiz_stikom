@@ -38,7 +38,7 @@ class QuizEngine
                 ->where('quiz_session_id', $session->id)
                 ->first();
 
-            if ($attempt !== null && $attempt->sudahBergabung()) {
+            if ($attempt !== null && $attempt->sudahMengikuti()) {
                 return $attempt;
             }
 
@@ -321,7 +321,7 @@ class QuizEngine
                 }
 
                 $attempts = Attempt::where('quiz_session_id', $session->id)
-                    ->bergabung()
+                    ->mengikuti()
                     ->get();
 
                 foreach ($attempts as $attempt) {
@@ -565,13 +565,15 @@ class QuizEngine
                 continue;
             }
 
-            // Peserta yang tidak pernah menekan Gabung tidak ikut ditutup.
-            // Attempt-nya tetap ada sebagai catatan daftar hadir dari admin.
-            if (! $attempt->sudahBergabung()) {
+            // Attempt yang hanya disiapkan admin dan belum pernah dimulai
+            // tetap berstatus Menunggu. Attempt yang sudah mulai tetap dikunci
+            // meskipun data lamanya belum punya bergabung_at.
+            if (! $attempt->sudahMengikuti()) {
                 continue;
             }
 
-            if ($attempt->status === 'berjalan' && $session->mode === 'acak') {
+            if ($session->mode === 'acak'
+                && ($attempt->status === 'berjalan' || $attempt->mulai_at !== null)) {
                 $this->hitungSelesaiAcakTerkunci($attempt);
             } elseif ($session->mode === 'serempak') {
                 $this->hitungUlangSkorSerempak($attempt->id);
@@ -721,7 +723,7 @@ class QuizEngine
         }
 
         return $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->when($session->mode === 'acak', fn ($q) => $q->where('status', 'selesai'))
             ->when($session->mode === 'serempak', fn ($q) => $q->where('status', '!=', 'menunggu'))
             ->orderByDesc('nilai')
@@ -766,13 +768,13 @@ class QuizEngine
             'status' => $session->status,
             'percobaan' => (bool) $session->quiz->is_percobaan,
             'server_now' => now()->getTimestampMs(),
-            'total_peserta' => $session->attempts()->bergabung()->count(),
+            'total_peserta' => $session->attempts()->mengikuti()->count(),
             'peringatan' => $this->peringatanTerbaru($session),
         ];
 
         if ($session->status === 'lobby' || $session->status === 'draft') {
             return $base + [
-                'peserta' => $session->attempts()->bergabung()->with('user')->get()->pluck('user.nama')->all(),
+                'peserta' => $session->attempts()->mengikuti()->with('user')->get()->pluck('user.nama')->all(),
             ];
         }
 
@@ -784,7 +786,7 @@ class QuizEngine
             return $base + $this->statusSerempak($session);
         }
 
-        $attempts = $session->attempts()->bergabung()->get();
+        $attempts = $session->attempts()->mengikuti()->get();
         $selesai = $attempts->where('status', 'selesai')->count();
         $terjawab = Answer::whereIn('attempt_id', $attempts->pluck('id'))->count();
         $leaderboard = $session->leaderboard_live ? $this->leaderboard($session, null) : [];
@@ -840,7 +842,7 @@ class QuizEngine
         $urutan = $session->soal_aktif_urutan;
         $sessionQuestion = $session->sessionQuestions()->where('urutan', $urutan)->with('question.options')->first();
 
-        $skor = $session->attempts()->bergabung()->count();
+        $skor = $session->attempts()->mengikuti()->count();
 
         $data = [
             'fase' => $session->fase,
@@ -880,7 +882,7 @@ class QuizEngine
 
     private function hasilAkhir(QuizSession $session): array
     {
-        $attempts = $session->attempts()->bergabung()->with('user')->get();
+        $attempts = $session->attempts()->mengikuti()->with('user')->get();
         $totalSoal = $session->mode === 'serempak'
             ? max(1, $session->sessionQuestions()->count())
             : max(1, (int) $attempts->max(fn (Attempt $a) => $a->attemptQuestions()->count()));

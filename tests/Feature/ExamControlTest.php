@@ -16,6 +16,7 @@ use App\Services\QuizEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class ExamControlTest extends TestCase
@@ -202,6 +203,64 @@ class ExamControlTest extends TestCase
         $state = app(QuizEngine::class)->displayState($session->fresh());
 
         $this->assertSame(1, $state['selesai']);
+        $this->assertCount(1, $state['leaderboard']);
+        $this->assertSame($participant->nama, $state['leaderboard'][0]['nama']);
+    }
+
+    public function test_hasil_akhir_menyertakan_attempt_lama_yang_sudah_mulai_tanpa_bergabung_at(): void
+    {
+        [$organization, , $participant, $session, $attempt] = $this->dasar('final_lama');
+
+        $session->update(['status' => 'selesai']);
+
+        $attempt->update([
+            'status' => 'selesai',
+            'bergabung_at' => null,
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+            'skor_total' => 80,
+        ]);
+
+        $absen = $this->peserta($organization, 'final_lama_absen');
+
+        Attempt::create([
+            'organization_id' => $organization->id,
+            'user_id' => $absen->id,
+            'quiz_session_id' => $session->id,
+            'status' => 'menunggu',
+            'bergabung_at' => null,
+            'mulai_at' => null,
+            'skor_total' => 0,
+        ]);
+
+        $state = app(QuizEngine::class)->displayState($session->fresh());
+
+        $this->assertSame('selesai', $state['status']);
+        $this->assertSame(1, $state['total_peserta']);
+        $this->assertCount(1, $state['leaderboard']);
+        $this->assertSame($participant->nama, $state['leaderboard'][0]['nama']);
+        $this->assertSame(1, $state['histogram'][8]);
+    }
+
+    public function test_tutup_sesi_mengunci_attempt_yang_sudah_mulai_tanpa_bergabung_at(): void
+    {
+        Queue::fake();
+
+        [, , $participant, $session, $attempt] = $this->dasar('tutup_lama');
+
+        $attempt->update([
+            'status' => 'berjalan',
+            'bergabung_at' => null,
+            'mulai_at' => now()->getTimestampMs(),
+        ]);
+
+        app(QuizEngine::class)->tutupSesi($session->fresh());
+
+        $this->assertSame('selesai', $attempt->fresh()->status);
+        $this->assertSame('selesai', $session->fresh()->status);
+
+        $state = app(QuizEngine::class)->displayState($session->fresh());
+
         $this->assertCount(1, $state['leaderboard']);
         $this->assertSame($participant->nama, $state['leaderboard'][0]['nama']);
     }

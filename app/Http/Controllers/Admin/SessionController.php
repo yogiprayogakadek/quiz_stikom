@@ -163,8 +163,10 @@ class SessionController extends Controller
             'attempts' => $attempts,
             'soalAktif' => $soalAktif,
             'sudahMenjawab' => $sudahMenjawab,
-            'totalPeserta' => $attempts->whereNotNull('bergabung_at')->count(),
-            'pembahasanSelesai' => $attempts->whereNotNull('bergabung_at')->where('status', 'selesai')->count(),
+            'totalPeserta' => $attempts->filter(fn (Attempt $attempt) => $attempt->sudahMengikuti())->count(),
+            'pembahasanSelesai' => $attempts
+                ->filter(fn (Attempt $attempt) => $attempt->sudahMengikuti() && $attempt->status === 'selesai')
+                ->count(),
             'onlineCount' => $attempts->filter(fn (Attempt $attempt) => $attempt->isOnline())->count(),
             'kejadianTerbaru' => $kejadianTerbaru,
         ];

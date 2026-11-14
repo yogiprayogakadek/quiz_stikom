@@ -72,7 +72,7 @@
                             <span class="pill {{ $attempt->status === 'selesai' ? 'pill-leaf' : ($attempt->status === 'berjalan' ? 'pill-brand' : 'pill-neutral') }}">
                                 {{ ucfirst($attempt->status) }}
                             </span>
-                            @if (! $attempt->sudahBergabung())
+                            @if (! $attempt->sudahMengikuti())
                                 <div class="mt-2">
                                     <span class="pill pill-sun">Belum bergabung</span>
                                 </div>

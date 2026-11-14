@@ -37,7 +37,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null || ! $attempt->sudahBergabung()) {
+        if ($attempt === null || ! $attempt->sudahMengikuti()) {
             return redirect()->route('peserta.dashboard')
                 ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
         }
@@ -68,7 +68,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null || ! $attempt->sudahBergabung()) {
+        if ($attempt === null || ! $attempt->sudahMengikuti()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 
@@ -84,7 +84,7 @@ class SessionController extends Controller
             'attempt_status' => $attempt->status,
             'skor_total' => $attempt->skor_total,
             'jumlah_benar' => $attempt->jumlah_benar,
-            'total_peserta' => $session->attempts()->bergabung()->count(),
+            'total_peserta' => $session->attempts()->mengikuti()->count(),
             'result_url' => route('peserta.session.result', $session),
         ];
 
@@ -144,7 +144,7 @@ class SessionController extends Controller
     {
         $attempt = $this->attemptUntuk($request, $session);
 
-        if ($attempt === null || ! $attempt->sudahBergabung()) {
+        if ($attempt === null || ! $attempt->sudahMengikuti()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 
@@ -200,7 +200,7 @@ class SessionController extends Controller
             ]
         );
 
-        $totalPeserta = $session->attempts()->bergabung()->count();
+        $totalPeserta = $session->attempts()->mengikuti()->count();
         $sudahMenjawab = Answer::query()
             ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
             ->where('question_id', $attemptQuestion->question_id)

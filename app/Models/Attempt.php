@@ -60,12 +60,27 @@ class Attempt extends Model
     }
 
     /**
-     * Batasi ke peserta yang benar-benar menekan Gabung, bukan attempt yang
-     * hanya disiapkan admin dari daftar hadir.
+     * Attempt yang benar-benar dikerjakan peserta. Data lama bisa saja sudah
+     * mulai atau selesai tetapi belum punya bergabung_at.
      */
-    public function scopeBergabung(Builder $query): Builder
+    public function sudahMengikuti(): bool
     {
-        return $query->whereNotNull('bergabung_at');
+        return $this->sudahBergabung()
+            || $this->mulai_at !== null
+            || in_array($this->status, ['berjalan', 'selesai'], true);
+    }
+
+    /**
+     * Peserta yang sudah bergabung atau sudah mulai/selesai mengerjakan.
+     * Tetap mengecualikan attempt yang hanya disiapkan admin.
+     */
+    public function scopeMengikuti(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query) {
+            $query->whereNotNull('bergabung_at')
+                ->orWhereNotNull('mulai_at')
+                ->orWhereIn('status', ['berjalan', 'selesai']);
+        });
     }
 
     public function isOnline(int $jendelaMs = 30000): bool

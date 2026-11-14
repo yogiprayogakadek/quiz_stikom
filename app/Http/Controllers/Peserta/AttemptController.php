@@ -25,7 +25,7 @@ class AttemptController extends Controller
             ->where('quiz_session_id', $session)
             ->first();
 
-        if ($attempt === null || ! $attempt->sudahBergabung()) {
+        if ($attempt === null || ! $attempt->sudahMengikuti()) {
             return redirect()->route('peserta.dashboard')
                 ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
         }
@@ -47,7 +47,7 @@ class AttemptController extends Controller
     {
         abort_unless($attempt->user_id === request()->user()->id, 403);
 
-        if (! $attempt->sudahBergabung()) {
+        if (! $attempt->sudahMengikuti()) {
             return redirect()->route('peserta.dashboard')
                 ->withErrors(['gabung' => 'Gabung sesi terlebih dahulu.']);
         }
@@ -125,7 +125,7 @@ class AttemptController extends Controller
     {
         abort_unless($attempt->user_id === $request->user()->id, 403);
 
-        if (! $attempt->sudahBergabung()) {
+        if (! $attempt->sudahMengikuti()) {
             return response()->json(['message' => 'Gabung sesi terlebih dahulu.'], 403);
         }
 

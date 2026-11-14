@@ -36,7 +36,7 @@ class RemedialController extends Controller
         $session->load('quiz.kelas');
 
         $peserta = $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->where('status', 'selesai')
             ->with('user')
             ->get()
@@ -67,7 +67,7 @@ class RemedialController extends Controller
         }
 
         $pesertaIds = $session->attempts()
-            ->bergabung()
+            ->mengikuti()
             ->where('status', 'selesai')
             ->pluck('user_id')
             ->all();
