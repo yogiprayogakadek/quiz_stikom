@@ -25,6 +25,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -91,7 +92,7 @@ class SessionController extends Controller
 
     public function show(QuizSession $session): View
     {
-        $session->load('quiz', 'kelas', 'remidi');
+        $session->load('quiz.sourceQuiz', 'kelas', 'remidi');
 
         $data = $this->dataMonitor($session);
 
@@ -101,6 +102,10 @@ class SessionController extends Controller
 
         $allowedParticipantIds = $session->allowedParticipants()->pluck('users.id')->all();
 
+        $trialParticipants = $session->status === 'draft' && ! $session->quiz->is_percobaan
+            ? User::where('role', 'peserta')->inCurrentOrganization()->orderBy('nama')->get()
+            : collect();
+
         // Jika belum ada filter peserta khusus yang disimpan, tandai semua peserta terdaftar secara default
         if (empty($allowedParticipantIds)) {
             $allowedParticipantIds = $allParticipants->pluck('id')->all();
@@ -109,8 +114,104 @@ class SessionController extends Controller
         return view('admin.sessions.show', $data + compact(
             'session',
             'allParticipants',
-            'allowedParticipantIds'
+            'allowedParticipantIds',
+            'trialParticipants'
         ));
+    }
+
+    public function trial(Request $request, QuizSession $session): RedirectResponse
+    {
+        $eligibleIds = User::query()
+            ->where('role', 'peserta')
+            ->inCurrentOrganization()
+            ->pluck('id');
+
+        $data = $request->validate([
+            'trial_participant_ids' => ['required', 'array', 'min:1', 'max:10000'],
+            'trial_participant_ids.*' => ['integer', 'distinct', Rule::in($eligibleIds->all())],
+        ], [
+            'trial_participant_ids.required' => 'Pilih minimal satu peserta penguji.',
+            'trial_participant_ids.min' => 'Pilih minimal satu peserta penguji.',
+            'trial_participant_ids.*.in' => 'Peserta penguji harus aktif di workspace ini.',
+            'trial_participant_ids.*.distinct' => 'Peserta penguji tidak boleh dipilih lebih dari sekali.',
+        ]);
+
+        if ($session->status !== 'draft') {
+            throw ValidationException::withMessages(['trial' => 'Simulasi hanya dapat dibuat dari sesi yang masih draft.']);
+        }
+
+        $session->loadMissing('quiz');
+        if ($session->quiz->is_percobaan) {
+            throw ValidationException::withMessages(['trial' => 'Simulasi tidak dapat dibuat dari kuis percobaan.']);
+        }
+
+        $participantIds = collect($data['trial_participant_ids'])->map(fn ($id) => (int) $id)->all();
+        if ($session->max_peserta !== null && count($participantIds) > $session->max_peserta) {
+            throw ValidationException::withMessages([
+                'trial_participant_ids' => "Maksimal {$session->max_peserta} peserta sesuai batas sesi.",
+            ]);
+        }
+
+        $trialSession = DB::transaction(function () use ($request, $session, $participantIds) {
+            $sourceSession = QuizSession::query()
+                ->with(['quiz.questions' => fn ($query) => $query->with('options')->orderBy('id')])
+                ->lockForUpdate()
+                ->findOrFail($session->id);
+
+            if ($sourceSession->status !== 'draft' || $sourceSession->quiz->is_percobaan) {
+                throw ValidationException::withMessages(['trial' => 'Sesi sumber berubah dan tidak lagi dapat dibuatkan simulasi.']);
+            }
+
+            $sourceQuiz = $sourceSession->quiz;
+            $trialQuiz = $sourceQuiz->replicate(['id', 'created_at', 'updated_at']);
+            $trialQuiz->fill([
+                'source_quiz_id' => $sourceQuiz->id,
+                'judul' => Str::limit($sourceQuiz->judul.' — Simulasi', 255, ''),
+                'is_percobaan' => true,
+                'created_by' => $request->user()->id,
+            ]);
+            $trialQuiz->save();
+
+            foreach ($sourceQuiz->questions as $question) {
+                $trialQuestion = $question->replicate(['id', 'quiz_id', 'created_at', 'updated_at', 'deleted_at']);
+                $trialQuestion->quiz_id = $trialQuiz->id;
+                $trialQuestion->save();
+
+                foreach ($question->options as $option) {
+                    $trialOption = $option->replicate(['id', 'question_id']);
+                    $trialOption->question_id = $trialQuestion->id;
+                    $trialOption->save();
+                }
+            }
+
+            $trialSession = QuizSession::create([
+                'quiz_id' => $trialQuiz->id,
+                'kelas_id' => null,
+                'nama' => Str::limit($sourceSession->nama.' — Simulasi', 160, ''),
+                'mode' => $sourceSession->mode,
+                'jenis' => 'utama',
+                'acak_opsi' => $sourceSession->acak_opsi,
+                'tampilkan_pembahasan' => $sourceSession->tampilkan_pembahasan,
+                'pembahasan_mode' => $sourceSession->pembahasan_mode,
+                'leaderboard_live' => $sourceSession->leaderboard_live,
+                'max_peserta' => $sourceSession->max_peserta,
+                'max_pelanggaran' => $sourceSession->max_pelanggaran,
+                'durasi_peringatan' => $sourceSession->durasi_peringatan,
+                'jeda_detik' => $sourceSession->jeda_detik,
+                'durasi_total_detik' => $sourceSession->durasi_total_detik,
+                'status' => 'draft',
+                'display_token' => Str::random(48),
+                'created_by' => $request->user()->id,
+            ]);
+
+            $trialSession->allowedParticipants()->sync($participantIds);
+
+            return $trialSession;
+        });
+
+        return redirect()
+            ->route('admin.sessions.show', $trialSession)
+            ->with('sukses', 'Simulasi dibuat. Periksa pengaturan, lalu buka lobby saat peserta penguji siap.');
     }
 
     /**
@@ -277,7 +378,18 @@ class SessionController extends Controller
     public function destroy(QuizSession $session): RedirectResponse
     {
         $sessionCopy = clone $session;
-        $session->delete();
+        $trialQuiz = $session->quiz()
+            ->where('is_percobaan', true)
+            ->whereNotNull('source_quiz_id')
+            ->first();
+
+        DB::transaction(function () use ($session, $trialQuiz) {
+            $session->delete();
+
+            if ($trialQuiz !== null && ! $trialQuiz->sessions()->exists()) {
+                $trialQuiz->delete();
+            }
+        });
         SesiStatusUpdated::safeDispatch($sessionCopy, ['action' => 'deleted']);
 
         return redirect()->route('admin.sessions.index')->with('sukses', 'Sesi dihapus.');

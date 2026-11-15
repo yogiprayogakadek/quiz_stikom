@@ -12,6 +12,7 @@ class Quiz extends Model
     use BelongsToOrganization;
 
     protected $fillable = [
+        'source_quiz_id',
         'kelas_id',
         'organization_id',
         'judul',
@@ -26,6 +27,7 @@ class Quiz extends Model
     protected function casts(): array
     {
         return [
+            'source_quiz_id' => 'integer',
             'kelas_id' => 'integer',
             'jumlah_soal' => 'integer',
             'acak_opsi' => 'boolean',
@@ -38,6 +40,11 @@ class Quiz extends Model
     public function questions(): HasMany
     {
         return $this->hasMany(Question::class);
+    }
+
+    public function sourceQuiz(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_quiz_id');
     }
 
     public function sessions(): HasMany

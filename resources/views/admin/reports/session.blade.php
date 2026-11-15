@@ -12,6 +12,9 @@
             <x-icon name="download" :size="20" />
             Ekspor CSV
         </a>
+        @if ($session->quiz->sourceQuiz)
+            <a href="{{ route('admin.quizzes.edit', $session->quiz->sourceQuiz) }}" class="btn btn-secondary">Buka ujian asli</a>
+        @endif
         @if ($session->jenis === 'utama' && $session->status === 'selesai' && ! $session->quiz->is_percobaan)
             @php $remidi = $session->remidi->first(); @endphp
             @if ($remidi)

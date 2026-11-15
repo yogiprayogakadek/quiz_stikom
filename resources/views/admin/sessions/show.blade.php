@@ -8,6 +8,11 @@
                     Buka lobby
                 </button>
             </form>
+            @if (! $session->quiz->is_percobaan)
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('trial-dialog').showModal()">
+                    Buat simulasi
+                </button>
+            @endif
         @endif
 
         @if ($session->status === 'lobby')
@@ -60,6 +65,112 @@
             <a href="{{ route('admin.sessions.remidi.laporan', $session) }}" class="btn btn-secondary">Laporan remidi</a>
         @endif
     </x-slot:aksi>
+
+    @if ($session->status === 'draft' && ! $session->quiz->is_percobaan)
+        <div
+            x-data="{
+                peserta: @js($trialParticipants->map(fn ($participant) => [
+                    'id' => $participant->id,
+                    'nama' => $participant->nama,
+                    'username' => $participant->username,
+                ])->values()),
+                terpilih: @js(array_map('intval', old('trial_participant_ids', []))),
+                cari: '',
+                get hasil() {
+                    const kata = this.cari.trim().toLowerCase();
+                    return kata === ''
+                        ? this.peserta
+                        : this.peserta.filter(item => item.nama.toLowerCase().includes(kata) || item.username.toLowerCase().includes(kata));
+                }
+            }"
+            x-init="if (@js($errors->has('trial_participant_ids') || $errors->has('trial_participant_ids.*') || $errors->has('trial'))) $nextTick(() => $refs.dialog.showModal())"
+        >
+            <dialog
+                id="trial-dialog"
+                x-ref="dialog"
+                class="m-auto w-[calc(100%_-_2rem)] max-w-2xl rounded-3xl border border-outline bg-surface p-0 text-ink shadow-2xl backdrop:bg-slate-950/50"
+                aria-labelledby="trial-dialog-title"
+            >
+                <form method="POST" action="{{ route('admin.sessions.trial', $session) }}" class="p-5 sm:p-6" data-progress-message="Membuat simulasi ujian...">
+                    @csrf
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <span class="pill pill-brand">Simulasi terpisah</span>
+                            <h2 id="trial-dialog-title" class="mt-3 text-2xl">Pilih peserta penguji</h2>
+                            <p class="mt-2 text-sm text-ink-muted">
+                                Sistem menyalin kuis dan pengaturan sesi ini. Hanya peserta terpilih yang dapat mengakses simulasi.
+                            </p>
+                        </div>
+                        <button type="button" class="btn btn-ghost min-h-11 min-w-11 !p-2" aria-label="Tutup dialog" x-on:click="$refs.dialog.close()">
+                            <x-icon name="x" :size="20" />
+                        </button>
+                    </div>
+
+                    <div class="mt-5 rounded-2xl border border-sun-deep/30 bg-sun-soft p-4 text-sm text-ink">
+                        Pilih orang yang tepercaya. Peserta penguji akan melihat isi soal sebelum ujian nyata berlangsung.
+                    </div>
+
+                    @error('trial')
+                        <p class="field-error mt-4" role="alert">{{ $message }}</p>
+                    @enderror
+                    @error('trial_participant_ids')
+                        <p class="field-error mt-4" role="alert">{{ $message }}</p>
+                    @enderror
+                    @error('trial_participant_ids.*')
+                        <p class="field-error mt-4" role="alert">{{ $message }}</p>
+                    @enderror
+
+                    <div class="mt-5">
+                        <label for="trial-participant-search" class="label">Cari peserta</label>
+                        <input
+                            id="trial-participant-search"
+                            type="search"
+                            class="input"
+                            placeholder="Nama atau username"
+                            autocomplete="off"
+                            autofocus
+                            x-model="cari"
+                        >
+                    </div>
+
+                    <fieldset class="mt-4">
+                        <legend class="text-sm font-bold text-ink">
+                            <span x-text="terpilih.length"></span> peserta dipilih
+                        </legend>
+                        <div class="mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-2xl border border-outline bg-page p-2 sm:grid-cols-2">
+                            <template x-for="item in hasil" :key="item.id">
+                                <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border p-3 transition" :class="terpilih.includes(item.id) ? 'border-brand bg-brand-soft' : 'border-outline bg-surface hover:border-outline-strong'">
+                                    <input type="checkbox" name="trial_participant_ids[]" x-model="terpilih" :value="item.id" class="h-5 w-5 shrink-0 rounded border-outline text-brand focus:ring-brand">
+                                    <span class="min-w-0">
+                                        <span class="block truncate text-sm font-bold" x-text="item.nama"></span>
+                                        <span class="block truncate text-xs text-ink-muted" x-text="item.username"></span>
+                                    </span>
+                                </label>
+                            </template>
+                            <p x-show="hasil.length === 0" class="py-6 text-center text-sm text-ink-muted sm:col-span-2">Tidak ada peserta yang cocok.</p>
+                        </div>
+                    </fieldset>
+
+                    <div class="mt-5 flex flex-col-reverse gap-3 border-t border-outline pt-5 sm:flex-row sm:justify-end">
+                        <button type="button" class="btn btn-secondary" x-on:click="$refs.dialog.close()">Batal</button>
+                        <button type="submit" class="btn btn-primary" x-bind:disabled="terpilih.length === 0">Buat simulasi</button>
+                    </div>
+                </form>
+            </dialog>
+        </div>
+    @endif
+
+    @if ($session->quiz->is_percobaan)
+        <div class="mb-5 flex flex-col gap-3 rounded-2xl border border-brand/30 bg-brand-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <span class="pill pill-brand">Simulasi</span>
+                <p class="mt-2 text-sm font-semibold text-ink-muted">Hasil sesi ini tidak masuk leaderboard atau total skor peserta.</p>
+            </div>
+            @if ($session->quiz->sourceQuiz)
+                <a href="{{ route('admin.quizzes.edit', $session->quiz->sourceQuiz) }}" class="btn btn-secondary">Buka kuis asli</a>
+            @endif
+        </div>
+    @endif
 
     <section class="card" aria-labelledby="alur-sesi">
         <h2 id="alur-sesi" class="text-2xl">Alur sesi</h2>

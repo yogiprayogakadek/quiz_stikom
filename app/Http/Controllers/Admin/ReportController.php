@@ -27,7 +27,7 @@ class ReportController extends Controller
 {
     public function session(Request $request, QuizSession $session): View
     {
-        $session->load('quiz', 'remidi');
+        $session->load('quiz.sourceQuiz', 'remidi');
 
         $tinjau = $request->boolean('tinjau');
 
