@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\PesertaWaktuDitambah;
+use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
 use App\Models\Kelas;
@@ -14,6 +15,7 @@ use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\QuizEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
@@ -117,6 +119,174 @@ class ExamControlTest extends TestCase
         $attempt->refresh();
         $this->assertSame('berjalan', $attempt->status);
         $this->assertNull($attempt->peringatan_mulai_at);
+    }
+
+    public function test_batas_kosong_mengumpulkan_dan_logout_setelah_timer_habis(): void
+    {
+        [$organization, , $participant, $session, $attempt] = $this->dasar('tanpa_batas', maxPelanggaran: 2);
+        $session->update(['max_pelanggaran' => null]);
+
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.events', $attempt), ['tipe' => 'fullscreen_exit'])
+            ->assertCreated();
+
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.pelanggaran', $attempt))
+            ->assertOk()
+            ->assertJsonPath('final', true)
+            ->assertJsonPath('forced_logout', true);
+
+        $this->assertSame('selesai', $attempt->fresh()->status);
+    }
+
+    public function test_pengurangan_waktu_berulang_setiap_kelipatan_batas(): void
+    {
+        [$organization, , $participant, $session, $attempt] = $this->dasar('potong_waktu', maxPelanggaran: 2);
+        $session->update([
+            'pelanggaran_action' => 'reduce_time',
+            'pelanggaran_penalty_seconds' => 60,
+        ]);
+        $awal = $attempt->batas_akhir_at;
+
+        for ($i = 1; $i <= 4; $i++) {
+            $this->sebagaiPeserta($participant, $organization)
+                ->postJson(route('peserta.attempt.events', $attempt), ['tipe' => 'fullscreen_exit'])
+                ->assertCreated();
+
+            $response = $this->sebagaiPeserta($participant, $organization)
+                ->postJson(route('peserta.attempt.pelanggaran', $attempt))
+                ->assertOk()
+                ->assertJsonPath('final', false);
+
+            if ($i % 2 === 0) {
+                $response->assertJsonPath('action', 'reduce_time');
+            }
+        }
+
+        $attempt->refresh();
+        $this->assertSame($awal - 120000, $attempt->batas_akhir_at);
+        $this->assertSame(120, $attempt->total_pengurangan_waktu_detik);
+        $this->assertSame('reduce_time', $attempt->last_pelanggaran_action);
+    }
+
+    public function test_admin_melanjutkan_attempt_dengan_jawaban_dan_urutan_yang_sama(): void
+    {
+        [$organization, $admin, $participant, $session, $attempt] = $this->dasar('lanjut_attempt');
+        $question = Question::create([
+            'organization_id' => $organization->id,
+            'quiz_id' => $session->quiz_id,
+            'teks' => 'Soal yang sudah dijawab',
+            'tipe' => 'pilihan_ganda',
+            'bobot' => 1,
+            'durasi_detik' => 60,
+        ]);
+        $option = Option::create([
+            'question_id' => $question->id,
+            'teks' => 'Jawaban lama',
+            'is_correct' => true,
+        ]);
+        $attemptQuestion = AttemptQuestion::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'urutan' => 1,
+            'urutan_opsi_json' => [$option->id],
+            'ragu_ragu' => true,
+        ]);
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'option_id' => $option->id,
+            'skor' => 100,
+            'answered_at' => now(),
+        ]);
+        $attempt->update(['status' => 'selesai', 'selesai_at' => now()->getTimestampMs(), 'skor_total' => 100]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('admin.sessions.attempts.reset', [$session, $attempt]), [
+                'reset_mode' => 'resume',
+                'retry_duration_minutes' => 25,
+            ])
+            ->assertRedirect();
+
+        $attempt->refresh();
+        $this->assertSame('menunggu', $attempt->status);
+        $this->assertSame(1500, $attempt->retry_duration_detik);
+        $this->assertDatabaseHas('answers', ['attempt_id' => $attempt->id, 'option_id' => $option->id, 'skor' => 0]);
+        $this->assertDatabaseHas('attempt_questions', ['id' => $attemptQuestion->id, 'ragu_ragu' => true]);
+
+        $this->sebagaiPeserta($participant, $organization)
+            ->post(route('peserta.attempt.start', $session))
+            ->assertRedirect(route('peserta.attempt.show', $attempt));
+
+        $attempt->refresh();
+        $this->assertSame('berjalan', $attempt->status);
+        $this->assertNull($attempt->retry_duration_detik);
+        $this->assertGreaterThan(now()->getTimestampMs() + 1490000, $attempt->batas_akhir_at);
+        $this->assertSame([$option->id], $attemptQuestion->fresh()->urutan_opsi_json);
+    }
+
+    public function test_jadwal_server_memulai_dan_mengumpulkan_tanpa_menghapus_jawaban(): void
+    {
+        [$organization, , $participant, $session, $attempt] = $this->dasar('jadwal_server');
+        $start = Carbon::now()->subMinute();
+        $end = Carbon::now()->addMinutes(10);
+        $question = Question::create([
+            'organization_id' => $organization->id,
+            'quiz_id' => $session->quiz_id,
+            'teks' => 'Jawaban sebelum cutoff',
+            'tipe' => 'pilihan_ganda',
+            'bobot' => 1,
+            'durasi_detik' => 60,
+        ]);
+        $option = Option::create(['question_id' => $question->id, 'teks' => 'Tersimpan', 'is_correct' => true]);
+        $session->update([
+            'status' => 'lobby',
+            'timing_mode' => 'scheduled',
+            'scheduled_start_at' => $start,
+            'scheduled_end_at' => $end,
+        ]);
+        $attempt->update(['status' => 'menunggu', 'mulai_at' => null, 'batas_akhir_at' => null]);
+
+        $this->assertSame('started', app(QuizEngine::class)->reconcileScheduledSession($session));
+        $this->assertSame('berjalan', $session->fresh()->status);
+
+        AttemptQuestion::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'urutan' => 1,
+            'urutan_opsi_json' => [$option->id],
+        ]);
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'option_id' => $option->id,
+            'answered_at' => now(),
+        ]);
+        $attempt->update(['status' => 'berjalan', 'mulai_at' => now()->getTimestampMs(), 'batas_akhir_at' => $end->getTimestampMs()]);
+
+        Carbon::setTestNow($end->copy()->addSecond());
+        $this->assertSame('closed', app(QuizEngine::class)->reconcileScheduledSession($session));
+        Carbon::setTestNow();
+
+        $this->assertSame('selesai', $session->fresh()->status);
+        $this->assertSame('selesai', $attempt->fresh()->status);
+        $this->assertDatabaseHas('answers', ['attempt_id' => $attempt->id, 'option_id' => $option->id]);
+    }
+
+    public function test_validasi_part_key_memakai_batas_64_dan_pesan_indonesia(): void
+    {
+        [$organization, , $participant, , $attempt] = $this->dasar('part_key');
+
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => 999999,
+                'part_key' => str_repeat('a', 65),
+                'jawaban_teks' => 'Jawaban',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['part_key'])
+            ->assertJsonPath('errors.part_key.0', 'Kode bagian jawaban maksimal 64 karakter.');
     }
 
     public function test_tambah_waktu_bulk_memperbarui_timer_peserta_terpilih(): void

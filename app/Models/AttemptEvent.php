@@ -13,6 +13,7 @@ class AttemptEvent extends Model
         'blur_window' => ['pesan' => 'Berpindah ke jendela aplikasi lain', 'level' => 'warning'],
         'copy_attempt' => ['pesan' => 'Mencoba menyalin (copy) teks soal', 'level' => 'warning'],
         'fullscreen_exit_timeout' => ['pesan' => 'Toleransi habis: pelanggaran tercatat', 'level' => 'danger'],
+        'time_penalty' => ['pesan' => 'Waktu ujian dikurangi sebagai sanksi', 'level' => 'danger'],
     ];
 
     public $timestamps = false;

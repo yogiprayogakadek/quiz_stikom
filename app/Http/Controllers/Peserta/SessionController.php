@@ -66,14 +66,38 @@ class SessionController extends Controller
 
     public function state(Request $request, QuizSession $session, QuizEngine $engine, ProctoringService $proctoring): JsonResponse
     {
+        $engine->reconcileScheduledSession($session);
+        $session->refresh();
         $attempt = $this->attemptUntuk($request, $session);
 
         if ($attempt === null || ! $attempt->sudahMengikuti()) {
             return response()->json(['message' => 'Attempt tidak ditemukan.'], 404);
         }
 
-        $proctoring->periksaKedaluwarsa($attempt);
+        $outcome = $proctoring->periksaKedaluwarsa($attempt);
         $attempt->refresh();
+
+        if ($attempt->status === 'berjalan' && $attempt->isLewatBatas()) {
+            $proctoring->finalisasi($attempt);
+            $attempt->refresh();
+        }
+
+        if ($outcome['final'] ?? false) {
+            $redirect = $proctoring->logout(
+                $request,
+                'Ujian Anda telah dikumpulkan otomatis karena batas pelanggaran terlewati.',
+            );
+
+            return response()->json([
+                'status' => $session->status,
+                'attempt_status' => 'selesai',
+                'selesai' => true,
+                'forced_logout' => true,
+                'message' => 'Pekerjaan dikumpulkan paksa. Anda akan keluar dari sistem.',
+                'redirect_url' => $redirect->getTargetUrl(),
+                'server_now' => now()->getTimestampMs(),
+            ]);
+        }
 
         $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
 
@@ -86,6 +110,8 @@ class SessionController extends Controller
             'jumlah_benar' => $attempt->jumlah_benar,
             'total_peserta' => $session->attempts()->mengikuti()->count(),
             'result_url' => route('peserta.session.result', $session),
+            'proctoring_action' => $outcome['action'] ?? 'none',
+            'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
         ];
 
         if ($session->status === 'lobby') {
@@ -142,6 +168,8 @@ class SessionController extends Controller
 
     public function answer(StoreAnswerRequest $request, QuizSession $session, QuizEngine $engine): JsonResponse
     {
+        $engine->reconcileScheduledSession($session);
+        $session->refresh();
         $attempt = $this->attemptUntuk($request, $session);
 
         if ($attempt === null || ! $attempt->sudahMengikuti()) {
@@ -154,6 +182,12 @@ class SessionController extends Controller
 
         if ($attempt->status !== 'berjalan' || $session->status !== 'berjalan') {
             return response()->json(['message' => 'Sesi tidak sedang berjalan.'], 403);
+        }
+
+        if ($attempt->isLewatBatas()) {
+            app(ProctoringService::class)->finalisasi($attempt);
+
+            return response()->json(['message' => 'Waktu ujian habis. Pekerjaan sudah dikumpulkan.', 'selesai' => true], 403);
         }
 
         if ($session->fase !== 'soal_terbuka' || $session->soal_aktif_urutan === null) {
@@ -325,23 +359,27 @@ class SessionController extends Controller
             $request->ip(),
         );
 
-        if (! $hasil['batas_tercapai']) {
-            $proctoring->tutupPeringatan($attempt);
+        $outcome = $proctoring->terapkanSanksi($attempt);
 
-            if ($request->expectsJson()) {
-                return response()->json([
+        if (! $outcome['final']) {
+            $message = $outcome['action'] === 'reduce_time'
+                ? 'Waktu ujian dikurangi '.($outcome['penalty_seconds'] ?? 0).' detik. Aktifkan layar penuh untuk melanjutkan.'
+                : 'Pelanggaran tercatat. Aktifkan layar penuh untuk melanjutkan.';
+
+            return $request->expectsJson()
+                ? response()->json([
                     'ok' => true,
                     'final' => false,
+                    'action' => $outcome['action'],
+                    'message' => $message,
                     'jumlah' => $hasil['jumlah'],
                     'maks' => $hasil['maks'],
                     'durasi' => $hasil['durasi'],
-                ]);
-            }
-
-            return back()->with('sukses', 'Kamu masih bisa melanjutkan ujian.');
+                    'batas_akhir_at' => $outcome['batas_akhir_at'] ?? null,
+                ])
+                : back()->with('sukses', $message);
         }
 
-        $proctoring->finalisasi($attempt);
         $redirect = $proctoring->logout(
             $request,
             'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena melewati batas pelanggaran.',
@@ -351,6 +389,8 @@ class SessionController extends Controller
             return response()->json([
                 'ok' => true,
                 'final' => true,
+                'forced_logout' => true,
+                'message' => 'Pekerjaan dikumpulkan paksa karena batas pelanggaran telah terlewati. Anda akan keluar dari sistem.',
                 'redirect_url' => $redirect->getTargetUrl(),
             ]);
         }

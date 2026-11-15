@@ -75,7 +75,7 @@ class ProctoringService
             'jumlah' => $jumlah,
             'maks' => $maks !== null ? (int) $maks : null,
             'durasi' => $durasi,
-            'batas_tercapai' => $maks !== null && $jumlah >= (int) $maks,
+            'batas_tercapai' => $maks === null || ($jumlah > 0 && $jumlah % (int) $maks === 0),
         ];
     }
 
@@ -91,31 +91,95 @@ class ProctoringService
      * timeout, polling status menyelesaikan attempt saat batas pelanggaran
      * sudah tercapai dan durasi peringatan habis.
      */
-    public function periksaKedaluwarsa(Attempt $attempt): bool
+    public function periksaKedaluwarsa(Attempt $attempt): array
     {
         if ($attempt->status !== 'berjalan' || $attempt->peringatan_mulai_at === null) {
-            return false;
+            return ['action' => 'none', 'final' => false];
         }
 
         $attempt->loadMissing('quizSession');
         $batas = $attempt->peringatan_mulai_at + ($attempt->quizSession?->durasiPeringatan() ?? 30) * 1000;
 
         if (now()->getTimestampMs() < $batas) {
-            return false;
+            return ['action' => 'none', 'final' => false];
         }
 
-        $maks = $attempt->quizSession?->max_pelanggaran;
+        return $this->terapkanSanksi($attempt);
+    }
 
-        if ($maks !== null && (int) $attempt->jumlah_pelanggaran >= (int) $maks) {
+    public function terapkanSanksi(Attempt $attempt): array
+    {
+        $attempt->refresh()->loadMissing('quizSession');
+
+        if ($attempt->status !== 'berjalan' || $attempt->peringatan_mulai_at === null) {
+            return ['action' => 'none', 'final' => false];
+        }
+
+        $session = $attempt->quizSession;
+        $maks = $session?->max_pelanggaran;
+        $jumlah = (int) $attempt->jumlah_pelanggaran;
+        $batasTercapai = $maks === null || ($jumlah > 0 && $jumlah % (int) $maks === 0);
+
+        if (! $batasTercapai) {
+            $this->tutupPeringatan($attempt);
+
+            return ['action' => 'continue', 'final' => false];
+        }
+
+        if ($maks === null || ($session?->pelanggaran_action ?? 'submit') !== 'reduce_time') {
             $this->finalisasi($attempt);
 
-            return true;
+            return ['action' => 'submit', 'final' => true];
         }
 
-        // Di bawah batas, sesi peringatan tetap terbuka sampai peserta kembali
-        // atau mengirim timeout. Ini mencegah hitungan ganda dari polling dan
-        // timer client yang tiba sedikit berbeda.
-        return false;
+        $penalty = max(1, (int) $session->pelanggaran_penalty_seconds);
+        $now = now()->getTimestampMs();
+
+        [$attempt, $applied] = DB::transaction(function () use ($attempt, $penalty) {
+            $locked = Attempt::query()->lockForUpdate()->findOrFail($attempt->id);
+
+            if ($locked->status !== 'berjalan' || $locked->peringatan_mulai_at === null) {
+                return [$locked, false];
+            }
+
+            $locked->forceFill([
+                'batas_akhir_at' => max(0, (int) $locked->batas_akhir_at - ($penalty * 1000)),
+                'total_pengurangan_waktu_detik' => (int) $locked->total_pengurangan_waktu_detik + $penalty,
+                'last_pelanggaran_action' => 'reduce_time',
+                'peringatan_mulai_at' => null,
+            ])->save();
+
+            $locked->events()->create([
+                'tipe' => 'time_penalty',
+                'detail' => "Waktu ujian dikurangi {$penalty} detik.",
+                'created_at' => now(),
+            ]);
+
+            return [$locked, true];
+        });
+
+        if (! $applied) {
+            return ['action' => 'none', 'final' => $attempt->status === 'selesai'];
+        }
+
+        if ((int) $attempt->batas_akhir_at <= $now) {
+            $this->finalisasi($attempt);
+
+            return ['action' => 'submit', 'final' => true, 'penalty_seconds' => $penalty];
+        }
+
+        SessionMonitorUpdated::safeDispatch($session->id, [
+            'action' => 'time_penalty',
+            'user_id' => $attempt->user_id,
+            'penalty_seconds' => $penalty,
+        ]);
+
+        return [
+            'action' => 'reduce_time',
+            'final' => false,
+            'penalty_seconds' => $penalty,
+            'batas_akhir_at' => (int) $attempt->batas_akhir_at,
+        ];
     }
 
     public function finalisasi(Attempt $attempt): Attempt
@@ -127,6 +191,11 @@ class ProctoringService
         }
 
         $session = $attempt->quizSession;
+
+        $attempt->forceFill([
+            'last_pelanggaran_action' => 'submit',
+            'peringatan_mulai_at' => null,
+        ])->save();
 
         if ($session->mode === 'acak') {
             $attempt = $this->engine->selesaikanAcak($attempt);

@@ -1,5 +1,17 @@
 <h2 id="status-langsung" class="text-2xl">Status langsung</h2>
 
+@if ($session->isTerjadwal() && $session->scheduled_start_at && $session->scheduled_end_at)
+    <div class="mt-3 rounded-xl border border-outline bg-page p-3 text-sm text-ink-muted">
+        <p class="font-bold text-ink">Jadwal server</p>
+        <p class="mt-1">{{ $session->scheduled_start_at->timezone($orgTimezone)->format('d M Y, H:i') }} sampai {{ $session->scheduled_end_at->timezone($orgTimezone)->format('d M Y, H:i') }} {{ $orgTimezone }}</p>
+        @if ($session->status === 'draft' && now()->greaterThanOrEqualTo($session->scheduled_start_at))
+            <p class="mt-2 font-bold text-coral-deep">Jam mulai terlewat karena lobby belum dibuka. Buka lobby untuk menjalankan sesi selama jadwal belum berakhir.</p>
+        @elseif ($session->status === 'lobby' && now()->lessThan($session->scheduled_start_at))
+            <p class="mt-2 font-bold text-brand-deep">Lobby siap. Sesi akan dimulai otomatis pada jadwal.</p>
+        @endif
+    </div>
+@endif
+
 @if ($session->status === 'lobby' || $session->status === 'draft')
     @php $bergabung = $attempts->whereNotNull('bergabung_at'); @endphp
     <p class="mt-3 text-base text-ink-muted">Peserta yang sudah bergabung</p>

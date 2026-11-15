@@ -21,6 +21,8 @@
             sisaToleransi: config.durasiPeringatan ?? 30,
             timerToleransi: null,
             memprosesPelanggaran: false,
+            pengumpulanPaksa: false,
+            pesanPengumpulanPaksa: '',
             audioCtx: null,
             terakhirBipDetik: null,
             isOnline: navigator.onLine ?? true,
@@ -106,8 +108,18 @@
                 if (hasil.data.selesai) {
                     this.berhenti = true;
                     this.batalkanToleransi();
-                    window.location.href = hasil.data.result_url || config.resultUrl;
+                    if (hasil.data.forced_logout) {
+                        this.tampilkanPengumpulanPaksa(hasil.data);
+                    } else {
+                        window.location.href = hasil.data.result_url || config.resultUrl;
+                    }
                     return;
+                }
+                if (hasil.data.proctoring_action && hasil.data.proctoring_action !== 'none') {
+                    this.batalkanToleransi();
+                    this.pesan = hasil.data.proctoring_action === 'reduce_time'
+                        ? 'Waktu ujian dikurangi karena pelanggaran.'
+                        : 'Pelanggaran tercatat. Anda dapat melanjutkan ujian.';
                 }
                 this.target = hasil.data.fase === 'jeda'
                     ? (hasil.data.ends_at ?? 0) + ((hasil.data.jeda_detik ?? 0) * 1000)
@@ -314,6 +326,7 @@
                     clearInterval(this.timerToleransi);
                     this.timerToleransi = null;
                 }
+
                 this.peringatanKeluar = false;
                 this.sisaToleransi = this.durasiPeringatan;
             },
@@ -329,6 +342,11 @@
                     clearInterval(this.timerToleransi);
                     this.timerToleransi = null;
                 }
+
+                await Promise.race([
+                    this.prosesAntrean(),
+                    new Promise((resolve) => setTimeout(resolve, 1500))
+                ]);
 
                 let hasil;
                 try {
@@ -347,12 +365,19 @@
 
                 if (hasil.data?.final) {
                     this.berhenti = true;
-                    window.location.href = hasil.data.redirect_url || config.dashboardUrl;
+                    this.tampilkanPengumpulanPaksa(hasil.data);
                     return;
                 }
 
                 this.sisaToleransi = 0;
-                this.pesan = 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
+                this.pesan = hasil.data?.message ?? 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
+            },
+            tampilkanPengumpulanPaksa(data) {
+                this.pengumpulanPaksa = true;
+                this.pesanPengumpulanPaksa = data?.message ?? 'Pekerjaan dikumpulkan paksa. Anda akan keluar dari sistem.';
+                setTimeout(() => {
+                    window.location.href = data?.redirect_url || config.dashboardUrl;
+                }, 3000);
             },
             pasangEcho() {
                 const echo = window.buatEcho();
@@ -650,6 +675,18 @@
             @csrf
         </form>
 
+        <div x-show="pengumpulanPaksa" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-4"
+            role="alertdialog" aria-modal="true" aria-labelledby="judul-pengumpulan-paksa-serempak">
+            <div class="card w-full max-w-md border-2 border-coral bg-page p-6 text-center shadow-2xl sm:p-8">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-coral-soft text-coral-deep">
+                    <x-icon name="alert" :size="32" />
+                </div>
+                <h2 id="judul-pengumpulan-paksa-serempak" class="mt-5 text-2xl font-bold text-ink">Pekerjaan dikumpulkan paksa</h2>
+                <p class="mt-3 text-base text-ink-muted" x-text="pesanPengumpulanPaksa"></p>
+                <p class="mt-4 text-sm font-bold text-coral-deep" aria-live="assertive">Anda akan keluar dari sistem dalam beberapa detik.</p>
+            </div>
+        </div>
+
         {{-- Gate Modal: Masuk Layar Penuh --}}
         <div
             x-show="!sudahMulai || (!layarPenuhAktif && !peringatanKeluar && !memprosesPelanggaran)"
@@ -664,7 +701,7 @@
                 <p class="text-base leading-relaxed text-ink-muted">
                     Untuk mencegah kecurangan, kuis ini wajib dikerjakan dalam mode <strong>Layar Penuh (Full Screen)</strong>.
                     Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi saat kuis berjalan, sistem mencatat pelanggaran dan memberi waktu untuk kembali.
-                    Saat batas pelanggaran sesi tercapai dan waktu habis, jawaban dikumpulkan otomatis.
+                    Saat timer peringatan habis, sistem menerapkan sanksi yang ditetapkan pengajar.
                 </p>
                 <button
                     type="button"
@@ -700,7 +737,7 @@
                     <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
                         <p class="text-sm font-bold text-coral-deep" x-text="sisaToleransi > 0 ? 'Waktu untuk kembali' : 'Waktu kembali habis'">Waktu untuk kembali</p>
                         <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'">{{ $session->durasiPeringatan() }} detik</p>
-                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat saat Anda keluar layar. Jika batas pelanggaran sesi sudah tercapai dan waktu habis, ujian dikumpulkan otomatis.</p>
+                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat. Saat timer habis, sistem dapat mengurangi waktu atau mengumpulkan pekerjaan.</p>
                     </div>
                     <p x-show="memprosesPelanggaran" x-cloak class="text-sm font-bold text-coral-deep">Mencatat pelanggaran...</p>
                 </div>

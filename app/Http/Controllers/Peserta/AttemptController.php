@@ -53,6 +53,8 @@ class AttemptController extends Controller
         }
 
         $attempt->load('quizSession.quiz');
+        $engine->reconcileScheduledSession($attempt->quizSession);
+        $attempt->refresh()->load('quizSession.quiz');
 
         if ($attempt->quizSession->mode !== 'acak') {
             return redirect()->route('peserta.session.play', $attempt->quiz_session_id);
@@ -147,6 +149,8 @@ class AttemptController extends Controller
         }
 
         $attempt->load('quizSession');
+        $engine->reconcileScheduledSession($attempt->quizSession);
+        $attempt->refresh()->load('quizSession');
 
         if ($attempt->quizSession->mode !== 'acak') {
             return response()->json(['message' => 'Mode sesi ini bukan Acak.'], 422);
@@ -311,23 +315,27 @@ class AttemptController extends Controller
             $request->ip(),
         );
 
-        if (! $hasil['batas_tercapai']) {
-            $proctoring->tutupPeringatan($attempt);
+        $outcome = $proctoring->terapkanSanksi($attempt);
 
-            if ($request->expectsJson()) {
-                return response()->json([
+        if (! $outcome['final']) {
+            $message = $outcome['action'] === 'reduce_time'
+                ? 'Waktu ujian dikurangi '.($outcome['penalty_seconds'] ?? 0).' detik. Aktifkan layar penuh untuk melanjutkan.'
+                : 'Pelanggaran tercatat. Aktifkan layar penuh untuk melanjutkan.';
+
+            return $request->expectsJson()
+                ? response()->json([
                     'ok' => true,
                     'final' => false,
+                    'action' => $outcome['action'],
+                    'message' => $message,
                     'jumlah' => $hasil['jumlah'],
                     'maks' => $hasil['maks'],
                     'durasi' => $hasil['durasi'],
-                ]);
-            }
-
-            return back()->with('sukses', 'Kamu masih bisa melanjutkan ujian.');
+                    'batas_akhir_at' => $outcome['batas_akhir_at'] ?? null,
+                ])
+                : back()->with('sukses', $message);
         }
 
-        $proctoring->finalisasi($attempt);
         $redirect = $proctoring->logout(
             $request,
             'Ujian Anda telah dikumpulkan otomatis dan Anda dikeluarkan dari sistem karena melewati batas pelanggaran.',
@@ -337,6 +345,8 @@ class AttemptController extends Controller
             return response()->json([
                 'ok' => true,
                 'final' => true,
+                'forced_logout' => true,
+                'message' => 'Pekerjaan dikumpulkan paksa karena batas pelanggaran telah terlewati. Anda akan keluar dari sistem.',
                 'redirect_url' => $redirect->getTargetUrl(),
             ]);
         }
@@ -348,12 +358,34 @@ class AttemptController extends Controller
      * Status ringkas untuk halaman pengerjaan. Dipakai polling agar peserta
      * tahu ketika admin mengumpulkan paksa atau mengeluarkannya dari sesi.
      */
-    public function status(Request $request, Attempt $attempt, ProctoringService $proctoring): JsonResponse
-    {
+    public function status(
+        Request $request,
+        Attempt $attempt,
+        ProctoringService $proctoring,
+        QuizEngine $engine,
+    ): JsonResponse {
         abort_unless($attempt->user_id === $request->user()->id, 403);
 
-        $proctoring->periksaKedaluwarsa($attempt);
+        $attempt->loadMissing('quizSession');
+        $engine->reconcileScheduledSession($attempt->quizSession);
+        $outcome = $proctoring->periksaKedaluwarsa($attempt);
         $attempt->refresh();
+
+        if ($outcome['final'] ?? false) {
+            $redirect = $proctoring->logout(
+                $request,
+                'Ujian Anda telah dikumpulkan otomatis karena batas pelanggaran terlewati.',
+            );
+
+            return response()->json([
+                'status' => 'selesai',
+                'selesai' => true,
+                'forced_logout' => true,
+                'message' => 'Pekerjaan dikumpulkan paksa. Anda akan keluar dari sistem.',
+                'redirect_url' => $redirect->getTargetUrl(),
+                'server_now' => now()->getTimestampMs(),
+            ]);
+        }
 
         $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
 
@@ -362,6 +394,8 @@ class AttemptController extends Controller
             'selesai' => $attempt->status === 'selesai',
             'batas_akhir_at' => $attempt->batas_akhir_at,
             'server_now' => now()->getTimestampMs(),
+            'proctoring_action' => $outcome['action'] ?? 'none',
+            'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
         ]);
     }
 

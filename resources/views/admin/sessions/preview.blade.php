@@ -74,16 +74,23 @@
                             : (int) $session->durasi_total_detik;
                     @endphp
                     <dd class="mt-1 text-lg font-bold text-ink">
-                        {{ $detikTampil > 0 ? intdiv($detikTampil, 60).' menit' : 'Otomatis' }}
+                        @if ($session->isTerjadwal())
+                            {{ $session->scheduled_start_at?->timezone($orgTimezone)->format('d M Y H:i') }} sampai {{ $session->scheduled_end_at?->timezone($orgTimezone)->format('d M Y H:i') }}
+                        @else
+                            {{ $detikTampil > 0 ? intdiv($detikTampil, 60).' menit' : 'Otomatis' }}
+                        @endif
                     </dd>
-                    <p class="mt-1 text-sm text-ink-muted">Mengikuti durasi soal dan pengaturan sesi.</p>
+                    <p class="mt-1 text-sm text-ink-muted">{{ $session->isTerjadwal() ? 'Mengikuti waktu server '.$orgTimezone.'.' : 'Mengikuti durasi soal dan pengaturan sesi.' }}</p>
                 </div>
                 <div class="rounded-xl border border-outline bg-page p-4">
                     <dt class="text-sm font-bold text-ink-muted">Pengawasan</dt>
                     <dd class="mt-1 text-lg font-bold text-ink">
-                        {{ $session->max_pelanggaran ? 'Maks '.$session->max_pelanggaran.' pelanggaran' : 'Tanpa batas' }}
+                        {{ $session->max_pelanggaran ? 'Sanksi setiap '.$session->max_pelanggaran.' pelanggaran' : 'Sanksi saat satu peringatan habis' }}
                     </dd>
-                    <p class="mt-1 text-sm text-ink-muted">Peringatan {{ $session->durasiPeringatan() }} detik.</p>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        Peringatan {{ $session->durasiPeringatan() }} detik.
+                        {{ $session->pelanggaran_action === 'reduce_time' ? 'Waktu dikurangi '.$session->pelanggaran_penalty_seconds.' detik.' : 'Pekerjaan dikumpulkan dan peserta logout.' }}
+                    </p>
                 </div>
             </dl>
 

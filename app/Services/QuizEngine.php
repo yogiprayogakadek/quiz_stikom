@@ -10,7 +10,9 @@ use App\Events\SoalDibuka;
 use App\Events\SoalDitutup;
 use App\Jobs\AutoGradeEssayJob;
 use App\Jobs\CloseQuestionJob;
+use App\Jobs\CloseScheduledSessionJob;
 use App\Jobs\NextQuestionJob;
+use App\Jobs\StartScheduledSessionJob;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptEvent;
@@ -31,6 +33,9 @@ class QuizEngine
 {
     public function gabung(QuizSession $session, User $user): Attempt
     {
+        $this->reconcileScheduledSession($session);
+        $session->refresh();
+
         $attempt = DB::transaction(function () use ($session, $user) {
             $session = QuizSession::lockForUpdate()->findOrFail($session->id);
 
@@ -61,7 +66,9 @@ class QuizEngine
                 ]);
             }
 
-            if ($session->mode === 'serempak' && $session->status !== 'lobby') {
+            if ($session->mode === 'serempak'
+                && $session->status !== 'lobby'
+                && ! ($session->isTerjadwal() && $session->status === 'berjalan')) {
                 throw ValidationException::withMessages([
                     'gabung' => 'Sesi Serempak sudah dimulai. Tunggu sesi berikutnya.',
                 ]);
@@ -83,6 +90,23 @@ class QuizEngine
 
             $attempt->update(['bergabung_at' => now()]);
 
+            if ($session->mode === 'serempak'
+                && $session->isTerjadwal()
+                && $session->status === 'berjalan'
+                && $attempt->status === 'menunggu') {
+                $questions = $session->sessionQuestions()->with('question')->get()->pluck('question')->filter()->values();
+
+                if ($attempt->attemptQuestions()->doesntExist()) {
+                    $this->buatAttemptQuestions($attempt, $questions, $session->acak_opsi);
+                }
+
+                $attempt->update([
+                    'status' => 'berjalan',
+                    'mulai_at' => now()->getTimestampMs(),
+                    'batas_akhir_at' => $session->scheduledEndMs(),
+                ]);
+            }
+
             return $attempt;
         });
 
@@ -100,6 +124,9 @@ class QuizEngine
 
     public function mulaiAcak(Attempt $attempt): Attempt
     {
+        $attempt->loadMissing('quizSession');
+        $this->reconcileScheduledSession($attempt->quizSession);
+
         return DB::transaction(function () use ($attempt) {
             $attempt = Attempt::lockForUpdate()->findOrFail($attempt->id);
 
@@ -123,7 +150,10 @@ class QuizEngine
                 ]);
             }
 
-            $questions = $this->pilihSoal($session);
+            $existingQuestions = $attempt->attemptQuestions()->with('question')->get();
+            $questions = $existingQuestions->isNotEmpty()
+                ? $existingQuestions->pluck('question')->filter()->values()
+                : $this->pilihSoal($session);
 
             if ($questions->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -131,17 +161,25 @@ class QuizEngine
                 ]);
             }
 
-            $this->buatAttemptQuestions($attempt, $questions, $session->acak_opsi);
+            if ($existingQuestions->isEmpty()) {
+                $this->buatAttemptQuestions($attempt, $questions, $session->acak_opsi);
+            }
 
             $now = now()->getTimestampMs();
-            $totalMs = $session->durasi_total_detik !== null
-                ? (int) $session->durasi_total_detik * 1000
-                : (int) $questions->sum('durasi_detik') * 1000;
+            $totalSeconds = $attempt->retry_duration_detik
+                ?? $session->durasi_total_detik
+                ?? (int) $questions->sum('durasi_detik');
+            $deadline = $now + ((int) $totalSeconds * 1000);
+
+            if ($session->isTerjadwal()) {
+                $deadline = min($deadline, (int) $session->scheduledEndMs());
+            }
 
             $attempt->update([
                 'status' => 'berjalan',
                 'mulai_at' => $now,
-                'batas_akhir_at' => $now + $totalMs,
+                'batas_akhir_at' => $deadline,
+                'retry_duration_detik' => null,
             ]);
 
             return $attempt->fresh();
@@ -283,8 +321,90 @@ class QuizEngine
         return $ids->count();
     }
 
+    public function scheduleSessionJobs(QuizSession $session): void
+    {
+        if (! $session->isTerjadwal() || $session->scheduled_start_at === null || $session->scheduled_end_at === null) {
+            return;
+        }
+
+        StartScheduledSessionJob::dispatch($session->id)->delay($session->scheduled_start_at);
+        CloseScheduledSessionJob::dispatch($session->id)->delay($session->scheduled_end_at);
+    }
+
+    public function reconcileScheduledSession(QuizSession $session): string
+    {
+        $session->refresh();
+
+        if (! $session->isTerjadwal() || $session->scheduled_start_at === null || $session->scheduled_end_at === null) {
+            return 'none';
+        }
+
+        $now = now();
+
+        if ($now->greaterThanOrEqualTo($session->scheduled_end_at)) {
+            if (in_array($session->status, ['lobby', 'berjalan'], true)) {
+                $this->tutupSesi($session);
+
+                return 'closed';
+            }
+
+            return 'none';
+        }
+
+        if ($session->status === 'lobby' && $now->greaterThanOrEqualTo($session->scheduled_start_at)) {
+            try {
+                $this->mulaiSesi($session);
+            } catch (ValidationException $exception) {
+                if ($session->fresh()->status === 'lobby') {
+                    throw $exception;
+                }
+
+                return 'none';
+            }
+
+            return 'started';
+        }
+
+        return 'none';
+    }
+
+    public function reconcileScheduledSessions(): array
+    {
+        $hasil = ['started' => 0, 'closed' => 0];
+
+        QuizSession::query()
+            ->where('timing_mode', 'scheduled')
+            ->whereIn('status', ['lobby', 'berjalan'])
+            ->orderBy('id')
+            ->each(function (QuizSession $session) use (&$hasil) {
+                $action = $this->reconcileScheduledSession($session);
+
+                if (isset($hasil[$action])) {
+                    $hasil[$action]++;
+                }
+            });
+
+        return $hasil;
+    }
+
     public function mulaiSesi(QuizSession $session): void
     {
+        if ($session->isTerjadwal()
+            && $session->scheduled_start_at !== null
+            && now()->lessThan($session->scheduled_start_at)) {
+            throw ValidationException::withMessages([
+                'sesi' => 'Sesi baru dapat dimulai pada jadwal server yang ditetapkan.',
+            ]);
+        }
+
+        if ($session->isTerjadwal()
+            && $session->scheduled_end_at !== null
+            && now()->greaterThanOrEqualTo($session->scheduled_end_at)) {
+            throw ValidationException::withMessages([
+                'sesi' => 'Jadwal sesi sudah berakhir.',
+            ]);
+        }
+
         $dibuka = null;
 
         DB::transaction(function () use ($session, &$dibuka) {
@@ -312,6 +432,9 @@ class QuizEngine
 
             $now = now()->getTimestampMs();
             $totalMs = (int) $questions->sum('durasi_detik') * 1000;
+            $deadline = $session->isTerjadwal()
+                ? (int) $session->scheduledEndMs()
+                : $now + $totalMs;
 
             if ($session->mode === 'serempak') {
                 foreach ($questions->values() as $index => $question) {
@@ -332,7 +455,7 @@ class QuizEngine
                     $attempt->update([
                         'status' => 'berjalan',
                         'mulai_at' => $now,
-                        'batas_akhir_at' => $now + $totalMs,
+                        'batas_akhir_at' => $deadline,
                     ]);
                 }
             }
@@ -627,6 +750,11 @@ class QuizEngine
         $durasiMs = max(1, $sessionQuestion->question->durasi_detik * 1000);
         $now = now()->getTimestampMs();
         $berakhir = $now + $durasiMs;
+
+        if ($session->isTerjadwal()) {
+            $berakhir = min($berakhir, (int) $session->scheduledEndMs());
+            $durasiMs = max(1, $berakhir - $now);
+        }
 
         $session->update([
             'fase' => 'soal_terbuka',

@@ -14,8 +14,9 @@ class CloseExpiredAttempts extends Command
     public function handle(QuizEngine $engine): int
     {
         $jumlah = $engine->tutupAttemptKedaluwarsa();
+        $sessions = $engine->reconcileScheduledSessions();
 
-        $this->info("{$jumlah} attempt ditutup.");
+        $this->info("{$jumlah} attempt ditutup; {$sessions['started']} sesi dimulai; {$sessions['closed']} sesi ditutup.");
 
         return self::SUCCESS;
     }

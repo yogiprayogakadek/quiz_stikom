@@ -29,8 +29,13 @@ class QuizSession extends Model
         'max_peserta',
         'max_pelanggaran',
         'durasi_peringatan',
+        'pelanggaran_action',
+        'pelanggaran_penalty_seconds',
         'jeda_detik',
         'durasi_total_detik',
+        'timing_mode',
+        'scheduled_start_at',
+        'scheduled_end_at',
         'status',
         'fase',
         'soal_aktif_urutan',
@@ -51,8 +56,11 @@ class QuizSession extends Model
             'max_peserta' => 'integer',
             'max_pelanggaran' => 'integer',
             'durasi_peringatan' => 'integer',
+            'pelanggaran_penalty_seconds' => 'integer',
             'jeda_detik' => 'integer',
             'durasi_total_detik' => 'integer',
+            'scheduled_start_at' => 'datetime',
+            'scheduled_end_at' => 'datetime',
             'soal_aktif_urutan' => 'integer',
             'soal_mulai_at' => 'integer',
             'soal_berakhir_at' => 'integer',
@@ -144,6 +152,16 @@ class QuizSession extends Model
     public function durasiPeringatan(): int
     {
         return max(5, min(300, (int) ($this->durasi_peringatan ?: 30)));
+    }
+
+    public function isTerjadwal(): bool
+    {
+        return $this->timing_mode === 'scheduled';
+    }
+
+    public function scheduledEndMs(): ?int
+    {
+        return $this->scheduled_end_at?->getTimestampMs();
     }
 
     public function isDraft(): bool

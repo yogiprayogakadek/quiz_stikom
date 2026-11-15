@@ -11,6 +11,7 @@ use App\Models\AttemptQuestion;
 use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\QuizSession;
+use App\Services\AttemptResetService;
 use App\Services\EssayGrader;
 use App\Services\NilaiService;
 use App\Services\QuizEngine;
@@ -325,20 +326,30 @@ class ReportController extends Controller
         }, 'nilai-'.$this->slug($session->nama).'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function resetAttempt(Request $request, Attempt $attempt): RedirectResponse
+    public function resetAttempt(Request $request, Attempt $attempt, AttemptResetService $resetter): RedirectResponse
     {
+        $request->mergeIfMissing(['reset_mode' => 'fresh']);
         $request->validate([
-            'konfirmasi' => ['required', 'in:HAPUS'],
+            'reset_mode' => ['required', 'in:fresh,resume'],
+            'konfirmasi' => ['nullable', 'required_if:reset_mode,fresh', 'in:HAPUS'],
+            'retry_duration_minutes' => ['nullable', 'integer', 'min:1', 'max:600', 'required_if:reset_mode,resume'],
         ], [
-            'konfirmasi.required' => 'Ketik HAPUS untuk mengonfirmasi reset attempt.',
+            'reset_mode.required' => 'Pilih cara peserta mengulang.',
+            'konfirmasi.required_if' => 'Ketik HAPUS untuk mengonfirmasi reset attempt.',
             'konfirmasi.in' => 'Ketik HAPUS (huruf kapital) untuk mengonfirmasi.',
+            'retry_duration_minutes.required_if' => 'Isi durasi ulang untuk melanjutkan jawaban terakhir.',
+            'retry_duration_minutes.min' => 'Durasi ulang minimal 1 menit.',
+            'retry_duration_minutes.max' => 'Durasi ulang maksimal 600 menit.',
         ]);
 
         $sessionId = $attempt->quiz_session_id;
         $nama = $attempt->user?->nama;
         $atas = $attempt->user?->username;
 
-        Log::notice('Admin mereset attempt peserta.', [
+        $mode = $request->string('reset_mode')->toString();
+        $duration = $request->filled('retry_duration_minutes') ? $request->integer('retry_duration_minutes') : null;
+
+        Log::notice('Admin membuka ulang attempt peserta.', [
             'admin_id' => $request->user()->id,
             'admin_username' => $request->user()->username,
             'attempt_id' => $attempt->id,
@@ -346,13 +357,17 @@ class ReportController extends Controller
             'peserta_username' => $atas,
             'quiz_session_id' => $sessionId,
             'alasan' => $request->input('catatan'),
+            'reset_mode' => $mode,
+            'retry_duration_minutes' => $duration,
         ]);
 
-        $attempt->delete();
+        $resetter->reset($attempt, $mode, $duration);
 
         return redirect()
             ->route('admin.reports.session', $sessionId)
-            ->with('sukses', 'Attempt '.($nama ?? '').' direset. Catatan tersimpan di log aplikasi.');
+            ->with('sukses', $mode === 'resume'
+                ? 'Attempt '.($nama ?? '').' dibuka ulang dengan jawaban terakhir.'
+                : 'Attempt '.($nama ?? '').' dihapus. Peserta dapat mengulang dari awal.');
     }
 
     private function statistikSoal(QuizSession $session): array

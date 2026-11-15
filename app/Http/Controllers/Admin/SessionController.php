@@ -17,11 +17,14 @@ use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Services\AttemptResetService;
 use App\Services\QuizEngine;
+use App\Support\OrganizationContext;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -58,7 +61,7 @@ class SessionController extends Controller
         return view('admin.sessions.create', compact('quizzes', 'kelas'));
     }
 
-    public function store(StoreSessionRequest $request): RedirectResponse
+    public function store(StoreSessionRequest $request, QuizEngine $engine): RedirectResponse
     {
         $data = $request->validated();
         $pembahasanMode = $data['pembahasan_mode']
@@ -76,8 +79,13 @@ class SessionController extends Controller
             'max_peserta' => $data['max_peserta'] ?? null,
             'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
             'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
+            'pelanggaran_action' => $data['pelanggaran_action'] ?? 'submit',
+            'pelanggaran_penalty_seconds' => ($data['pelanggaran_action'] ?? 'submit') === 'reduce_time'
+                ? $data['pelanggaran_penalty_seconds']
+                : null,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
+            ...$this->timingData($data),
             'status' => 'draft',
             'display_token' => Str::random(48),
             'created_by' => $request->user()->id,
@@ -86,6 +94,8 @@ class SessionController extends Controller
         if ($session->kelas_id !== null) {
             $session->allowedParticipants()->sync($session->kelas->peserta()->pluck('users.id')->all());
         }
+
+        $engine->scheduleSessionJobs($session);
 
         return redirect()->route('admin.sessions.show', $session)->with('sukses', 'Sesi dibuat. Buka lobby saat peserta siap bergabung.');
     }
@@ -197,8 +207,13 @@ class SessionController extends Controller
                 'max_peserta' => $sourceSession->max_peserta,
                 'max_pelanggaran' => $sourceSession->max_pelanggaran,
                 'durasi_peringatan' => $sourceSession->durasi_peringatan,
+                'pelanggaran_action' => $sourceSession->pelanggaran_action,
+                'pelanggaran_penalty_seconds' => $sourceSession->pelanggaran_penalty_seconds,
                 'jeda_detik' => $sourceSession->jeda_detik,
                 'durasi_total_detik' => $sourceSession->durasi_total_detik,
+                'timing_mode' => $sourceSession->timing_mode,
+                'scheduled_start_at' => $sourceSession->scheduled_start_at,
+                'scheduled_end_at' => $sourceSession->scheduled_end_at,
                 'status' => 'draft',
                 'display_token' => Str::random(48),
                 'created_by' => $request->user()->id,
@@ -308,7 +323,7 @@ class SessionController extends Controller
         return view('admin.sessions.edit', compact('session', 'quizzes', 'kelas'));
     }
 
-    public function update(UpdateSessionRequest $request, QuizSession $session): RedirectResponse
+    public function update(UpdateSessionRequest $request, QuizSession $session, QuizEngine $engine): RedirectResponse
     {
         $data = $request->validated();
         $kelasLama = $session->kelas_id;
@@ -338,8 +353,13 @@ class SessionController extends Controller
             'max_peserta' => $data['max_peserta'] ?? null,
             'max_pelanggaran' => $data['max_pelanggaran'] ?? null,
             'durasi_peringatan' => $data['durasi_peringatan'] ?? 30,
+            'pelanggaran_action' => $data['pelanggaran_action'] ?? 'submit',
+            'pelanggaran_penalty_seconds' => ($data['pelanggaran_action'] ?? 'submit') === 'reduce_time'
+                ? $data['pelanggaran_penalty_seconds']
+                : null,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
+            ...$this->timingData($data),
         ]);
 
         if ((int) $session->kelas_id !== (int) $kelasLama) {
@@ -347,6 +367,8 @@ class SessionController extends Controller
                 $session->kelas_id === null ? [] : $session->kelas->peserta()->pluck('users.id')->all()
             );
         }
+
+        $engine->scheduleSessionJobs($session->fresh());
 
         return redirect()->route('admin.sessions.show', $session)->with('sukses', 'Pengaturan sesi diperbarui.');
     }
@@ -401,6 +423,12 @@ class SessionController extends Controller
             throw ValidationException::withMessages(['status' => 'Lobby hanya bisa dibuka dari status draft.']);
         }
 
+        if ($session->isTerjadwal()
+            && $session->scheduled_end_at !== null
+            && now()->greaterThanOrEqualTo($session->scheduled_end_at)) {
+            throw ValidationException::withMessages(['status' => 'Jadwal selesai sudah terlewat. Ubah jadwal sebelum membuka lobby.']);
+        }
+
         $session->update([
             'status' => 'lobby',
             'dibuka_at' => now(),
@@ -414,6 +442,7 @@ class SessionController extends Controller
             Log::warning('Broadcast display error: '.$e->getMessage());
         }
         SesiStatusUpdated::safeDispatch($fresh);
+        $engine->scheduleSessionJobs($fresh);
 
         return back()->with('sukses', 'Lobby dibuka. Mode dan kuis sekarang terkunci.');
     }
@@ -592,9 +621,9 @@ class SessionController extends Controller
     {
         $this->pastikanAttemptMilikSesi($session, $attempt);
 
-        if ($session->mode !== 'acak' || $session->status !== 'berjalan' || $attempt->status !== 'berjalan') {
+        if ($session->mode !== 'acak' || $session->isTerjadwal() || $session->status !== 'berjalan' || $attempt->status !== 'berjalan') {
             throw ValidationException::withMessages([
-                'peserta' => 'Penambahan waktu hanya bisa dilakukan saat sesi dan attempt sedang berjalan (mode acak).',
+                'peserta' => 'Penambahan waktu hanya tersedia untuk sesi Mode Acak berbasis durasi yang sedang berjalan.',
             ]);
         }
 
@@ -609,9 +638,9 @@ class SessionController extends Controller
 
     public function addTimeBulk(Request $request, QuizSession $session): RedirectResponse
     {
-        if ($session->mode !== 'acak' || $session->status !== 'berjalan') {
+        if ($session->mode !== 'acak' || $session->isTerjadwal() || $session->status !== 'berjalan') {
             throw ValidationException::withMessages([
-                'peserta' => 'Penambahan waktu hanya bisa dilakukan saat sesi Mode Acak sedang berjalan.',
+                'peserta' => 'Penambahan waktu hanya tersedia untuk sesi Mode Acak berbasis durasi yang sedang berjalan.',
             ]);
         }
 
@@ -693,17 +722,34 @@ class SessionController extends Controller
     /**
      * Reset attempt peserta agar bisa masuk atau mengulang dari awal tanpa dikeluarkan dari sesi.
      */
-    public function resetAttempt(Request $request, QuizSession $session, Attempt $attempt): RedirectResponse
-    {
+    public function resetAttempt(
+        Request $request,
+        QuizSession $session,
+        Attempt $attempt,
+        AttemptResetService $resetter,
+    ): RedirectResponse {
         $this->pastikanAttemptMilikSesi($session, $attempt);
+        $request->mergeIfMissing(['reset_mode' => 'fresh']);
 
         $attempt->loadMissing('user');
         $nama = $attempt->user?->nama ?? 'Peserta';
         $userId = $attempt->user_id;
 
-        DB::transaction(function () use ($attempt) {
-            $attempt->delete();
-        });
+        $data = $request->validate([
+            'reset_mode' => ['required', 'in:fresh,resume'],
+            'konfirmasi' => ['nullable', 'required_if:reset_mode,fresh', 'in:HAPUS'],
+            'retry_duration_minutes' => ['nullable', 'integer', 'min:1', 'max:600', 'required_if:reset_mode,resume'],
+        ], [
+            'reset_mode.required' => 'Pilih cara peserta mengulang.',
+            'reset_mode.in' => 'Pilihan pengulangan tidak valid.',
+            'konfirmasi.required_if' => 'Konfirmasikan bahwa seluruh pekerjaan akan dihapus.',
+            'konfirmasi.in' => 'Konfirmasi penghapusan tidak valid.',
+            'retry_duration_minutes.required_if' => 'Isi durasi ulang untuk melanjutkan jawaban terakhir.',
+            'retry_duration_minutes.min' => 'Durasi ulang minimal 1 menit.',
+            'retry_duration_minutes.max' => 'Durasi ulang maksimal 600 menit.',
+        ]);
+
+        $resetter->reset($attempt, $data['reset_mode'], $data['retry_duration_minutes'] ?? null);
 
         Log::notice('Admin mereset attempt peserta via ruang kendali.', [
             'admin_id' => $request->user()->id,
@@ -711,6 +757,8 @@ class SessionController extends Controller
             'peserta' => $nama,
             'user_id' => $userId,
             'quiz_session_id' => $session->id,
+            'reset_mode' => $data['reset_mode'],
+            'retry_duration_minutes' => $data['retry_duration_minutes'] ?? null,
         ]);
 
         SessionMonitorUpdated::safeDispatch($session->id, [
@@ -719,7 +767,11 @@ class SessionController extends Controller
         ]);
         PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
-        return back()->with('sukses', "Attempt untuk {$nama} berhasil direset. Peserta dapat masuk kembali.");
+        $message = $data['reset_mode'] === 'resume'
+            ? "Attempt {$nama} dibuka ulang dengan jawaban terakhir."
+            : "Attempt {$nama} dihapus. Peserta dapat mengulang dari awal.";
+
+        return back()->with('sukses', $message);
     }
 
     private function pastikanAttemptMilikSesi(QuizSession $session, Attempt $attempt): void
@@ -733,7 +785,7 @@ class SessionController extends Controller
      */
     private function durasiTotalDetik(array $data): ?int
     {
-        if (($data['mode'] ?? null) !== 'acak') {
+        if (($data['mode'] ?? null) !== 'acak' || ($data['timing_mode'] ?? 'duration') === 'scheduled') {
             return null;
         }
 
@@ -751,6 +803,25 @@ class SessionController extends Controller
         }
 
         return $menit !== null ? (int) $menit * 60 : null;
+    }
+
+    private function timingData(array $data): array
+    {
+        if (($data['timing_mode'] ?? 'duration') !== 'scheduled') {
+            return [
+                'timing_mode' => 'duration',
+                'scheduled_start_at' => null,
+                'scheduled_end_at' => null,
+            ];
+        }
+
+        $timezone = app(OrganizationContext::class)->timezone();
+
+        return [
+            'timing_mode' => 'scheduled',
+            'scheduled_start_at' => Carbon::parse($data['scheduled_start_at'], $timezone)->utc(),
+            'scheduled_end_at' => Carbon::parse($data['scheduled_end_at'], $timezone)->utc(),
+        ];
     }
 
     public function close(QuizSession $session, QuizEngine $engine): RedirectResponse

@@ -190,9 +190,21 @@ class ReportAndQuizOptionsTest extends TestCase
         $this->assertGreaterThan((int) (microtime(true) * 1000) + (20 * 60 * 1000), $attempt->batas_akhir_at);
 
         // 2. Reset Attempt
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-sesi'])
+            ->from(route('admin.sessions.show', $session))
+            ->post(route('admin.sessions.attempts.reset', [$session, $attempt]), [
+                'reset_mode' => 'fresh',
+            ])
+            ->assertSessionHasErrors('konfirmasi');
+        $this->assertDatabaseHas('attempts', ['id' => $attempt->id]);
+
         $resReset = $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-sesi'])
-            ->post(route('admin.sessions.attempts.reset', [$session, $attempt]));
+            ->post(route('admin.sessions.attempts.reset', [$session, $attempt]), [
+                'reset_mode' => 'fresh',
+                'konfirmasi' => 'HAPUS',
+            ]);
 
         $resReset->assertRedirect();
         $this->assertDatabaseMissing('attempts', ['id' => $attempt->id]);

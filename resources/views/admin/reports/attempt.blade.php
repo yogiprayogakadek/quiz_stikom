@@ -335,24 +335,44 @@
         </section>
     @endif
 
-    <section class="mt-6 card border-coral" aria-labelledby="reset-attempt">
-        <h2 id="reset-attempt" class="text-2xl">Reset attempt</h2>
+    <section class="mt-6 card border-coral" aria-labelledby="reset-attempt" x-data="{ resetMode: 'fresh' }">
+        <h2 id="reset-attempt" class="text-2xl">Ulangi attempt</h2>
         <p class="mt-2 text-base text-ink-muted">
-            Gunakan hanya untuk gangguan teknis. Attempt, jawaban, dan log akan dihapus, lalu peserta bisa bergabung lagi.
-            Tindakan ini dicatat di log aplikasi.
+            Gunakan untuk gangguan teknis. Mulai dari awal menghapus pekerjaan; lanjut dari jawaban terakhir mempertahankan isi jawaban dan urutan soal.
         </p>
 
-        <form method="POST" action="{{ route('admin.attempts.reset', $attempt) }}" class="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end" onsubmit="return confirm('Hapus attempt ini beserta jawaban dan log kejadiannya?')">
+        <form method="POST" action="{{ route('admin.attempts.reset', $attempt) }}" class="mt-4 space-y-4" data-progress-message="Membuka ulang attempt peserta...">
             @csrf
-            <div>
-                <label for="konfirmasi" class="label">Ketik HAPUS</label>
-                <input id="konfirmasi" name="konfirmasi" type="text" class="input" required autocomplete="off" placeholder="HAPUS">
+            <div class="grid gap-3 sm:grid-cols-2">
+                <label class="rounded-xl border-2 border-outline p-4 has-[:checked]:border-coral">
+                    <span class="flex items-start gap-3">
+                        <input type="radio" name="reset_mode" value="fresh" x-model="resetMode" class="mt-1 h-5 w-5" checked>
+                        <span><span class="block font-bold">Mulai dari awal</span><span class="mt-1 block text-sm text-ink-muted">Hapus seluruh pekerjaan dan log attempt.</span></span>
+                    </span>
+                </label>
+                <label class="rounded-xl border-2 border-outline p-4 has-[:checked]:border-brand {{ $attempt->quizSession->mode !== 'acak' || $attempt->quizSession->status !== 'berjalan' ? 'opacity-60' : '' }}">
+                    <span class="flex items-start gap-3">
+                        <input type="radio" name="reset_mode" value="resume" x-model="resetMode" class="mt-1 h-5 w-5" @disabled($attempt->quizSession->mode !== 'acak' || $attempt->quizSession->status !== 'berjalan')>
+                        <span><span class="block font-bold">Lanjut dari jawaban terakhir</span><span class="mt-1 block text-sm text-ink-muted">Pertahankan jawaban dan urutan soal; nilai dihitung ulang.</span></span>
+                    </span>
+                </label>
             </div>
-            <div>
+
+            <div x-show="resetMode === 'fresh'" x-cloak class="max-w-sm">
+                <label for="konfirmasi" class="label">Ketik HAPUS</label>
+                <input id="konfirmasi" name="konfirmasi" type="text" class="input" autocomplete="off" placeholder="HAPUS"
+                    x-bind:required="resetMode === 'fresh'" x-bind:disabled="resetMode !== 'fresh'">
+            </div>
+            <div x-show="resetMode === 'resume'" x-cloak class="max-w-sm">
+                <label for="retry_duration_minutes" class="label">Durasi baru (menit)</label>
+                <input id="retry_duration_minutes" name="retry_duration_minutes" type="number" min="1" max="600" value="60" class="input"
+                    x-bind:required="resetMode === 'resume'" x-bind:disabled="resetMode !== 'resume'">
+            </div>
+            <div class="max-w-xl">
                 <label for="catatan" class="label">Catatan (opsional)</label>
                 <input id="catatan" name="catatan" type="text" class="input" maxlength="500" placeholder="Contoh: PC peserta mati saat soal 4">
             </div>
-            <button type="submit" class="btn btn-soft-danger">Reset attempt</button>
+            <button type="submit" class="btn btn-primary">Buka ulang attempt</button>
         </form>
     </section>
 </x-layouts.admin>

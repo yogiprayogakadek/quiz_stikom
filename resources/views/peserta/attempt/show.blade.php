@@ -37,6 +37,8 @@
             sisaToleransi: config.durasiPeringatan ?? 30,
             timerToleransi: null,
             memprosesPelanggaran: false,
+            pengumpulanPaksa: false,
+            pesanPengumpulanPaksa: '',
             audioCtx: null,
             notifWaktu300: false,
             notifWaktu60: false,
@@ -348,7 +350,10 @@
                         break;
                     }
 
-                    const item = this.antreanOffline[0];
+                    const queueIndex = this.antreanOffline.findIndex((queued) => !queued.validation_failed);
+                    if (queueIndex === -1) break;
+
+                    const item = this.antreanOffline[queueIndex];
                     const body = { question_id: item.question_id };
                     if (item.tipe === 'essay') {
                         body.jawaban_teks = item.jawaban_teks;
@@ -368,7 +373,7 @@
                         });
 
                         if (res.ok) {
-                            this.antreanOffline.shift();
+                            this.antreanOffline.splice(queueIndex, 1);
                             this.simpanAntreanKeStorage();
                             if (item.tipe === 'essay' && item.part_key) {
                                 this.partsTersimpan[item.question_id] = res.data?.jawaban_parts ?? {};
@@ -398,9 +403,13 @@
                             await new Promise((r) => setTimeout(r, 2000));
                             break;
                         } else {
-                            // Kesalahan validasi data client (422 dll)
-                            this.antreanOffline.shift();
+                            const key = item.question_id + ':' + (item.part_key ?? '');
+                            if (item.part_key) this.statusParts[key] = 'gagal';
+                            else if (item.tipe === 'essay') this.statusTeks[item.question_id] = 'gagal';
+                            this.antreanOffline[queueIndex] = { ...item, validation_failed: true };
                             this.simpanAntreanKeStorage();
+                            this.pesan = res.data?.message ?? 'Jawaban lokal belum dapat diterima server. Periksa isinya lalu coba lagi.';
+                            continue;
                         }
                     } catch (err) {
                         // Jaringan putus saat request
@@ -591,6 +600,13 @@
                     return false;
                 }
 
+                if (hasil.status === 422) {
+                    this.statusTeks[soal.id] = 'gagal';
+                    this.tambahAntrean({ question_id: soal.id, jawaban_teks: nilai, tipe: 'essay', waktu: Date.now() });
+                    this.pesan = hasil.data?.message ?? 'Jawaban belum dapat diterima server. Isi jawaban tetap tersimpan di perangkat.';
+                    return false;
+                }
+
                 // Error jaringan / temporary server, simpan offline
                 this.statusTeks[soal.id] = 'offline';
                 this.tambahAntrean({
@@ -701,7 +717,8 @@
 
                 if (hasil.status === 422) {
                     this.statusParts[key] = 'gagal';
-                    this.pesan = hasil.data?.message ?? 'Jawaban tidak diterima.';
+                    this.tambahAntrean({ question_id: soal.id, part_key: bagian.key, jawaban_teks: nilai, tipe: 'essay', waktu: Date.now() });
+                    this.pesan = hasil.data?.message ?? 'Jawaban belum dapat diterima server. Isi jawaban tetap tersimpan di perangkat.';
                     return false;
                 }
 
@@ -851,7 +868,7 @@
 
                 if (batas > 0 && serverNow > 0) {
                     const sisaLama = this.sisa;
-                    this.batasAkhir = Math.max(this.batasAkhir, batas);
+                    this.batasAkhir = batas;
                     this.offset = Date.now() - serverNow;
                     const sisaBaru = Math.max(0, Math.round((this.batasAkhir - (Date.now() - this.offset)) / 1000));
 
@@ -859,13 +876,24 @@
                         this.notifWaktu60 = false;
                         this.notifWaktu300 = false;
                         this.pesan = 'Waktu ujian ditambah. Timer sudah diperbarui.';
+                    } else if (sisaBaru + 1 < sisaLama) {
+                        this.pesan = 'Waktu ujian dikurangi karena pelanggaran. Timer sudah diperbarui.';
                     }
                 }
 
                 if (hasil.data?.selesai) {
                     this.berhenti = true;
                     this.batalkanToleransi();
-                    window.location.href = config.resultUrl;
+                    if (hasil.data?.forced_logout) {
+                        this.tampilkanPengumpulanPaksa(hasil.data);
+                    } else {
+                        window.location.href = config.resultUrl;
+                    }
+                } else if (hasil.data?.proctoring_action && hasil.data.proctoring_action !== 'none') {
+                    this.batalkanToleransi();
+                    this.pesan = hasil.data.proctoring_action === 'reduce_time'
+                        ? 'Waktu ujian dikurangi karena pelanggaran. Timer sudah diperbarui.'
+                        : 'Pelanggaran tercatat. Anda dapat melanjutkan ujian.';
                 }
             },
             async masukLayarPenuh() {
@@ -952,6 +980,14 @@
                     this.timerToleransi = null;
                 }
 
+                await Promise.race([
+                    (async () => {
+                        await this.simpanSemuaTeks();
+                        if (navigator.onLine && this.antreanOffline.length > 0) await this.prosesAntrean(false);
+                    })(),
+                    new Promise((resolve) => setTimeout(resolve, 1500))
+                ]);
+
                 let hasil;
                 try {
                     hasil = await window.kuisFetch(config.pelanggaranUrl, {
@@ -969,12 +1005,20 @@
 
                 if (hasil.data?.final) {
                     this.berhenti = true;
-                    window.location.href = hasil.data.redirect_url || config.dashboardUrl;
+                    this.tampilkanPengumpulanPaksa(hasil.data);
                     return;
                 }
 
                 this.sisaToleransi = 0;
-                this.pesan = 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
+                if (hasil.data?.batas_akhir_at) this.batasAkhir = Number(hasil.data.batas_akhir_at);
+                this.pesan = hasil.data?.message ?? 'Pelanggaran tercatat. Tekan Kembali ke Ujian untuk melanjutkan.';
+            },
+            tampilkanPengumpulanPaksa(data) {
+                this.pengumpulanPaksa = true;
+                this.pesanPengumpulanPaksa = data?.message ?? 'Pekerjaan dikumpulkan paksa. Anda akan keluar dari sistem.';
+                setTimeout(() => {
+                    window.location.href = data?.redirect_url || config.dashboardUrl;
+                }, 3000);
             },
             kirimKejadian(tipe) {
                 if (this.berhenti) {
@@ -1375,6 +1419,18 @@
             @csrf
         </form>
 
+        <div x-show="pengumpulanPaksa" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-4"
+            role="alertdialog" aria-modal="true" aria-labelledby="judul-pengumpulan-paksa">
+            <div class="card w-full max-w-md border-2 border-coral bg-page p-6 text-center shadow-2xl sm:p-8">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-coral-soft text-coral-deep">
+                    <x-icon name="alert" :size="32" />
+                </div>
+                <h2 id="judul-pengumpulan-paksa" class="mt-5 text-2xl font-bold text-ink">Pekerjaan dikumpulkan paksa</h2>
+                <p class="mt-3 text-base text-ink-muted" x-text="pesanPengumpulanPaksa"></p>
+                <p class="mt-4 text-sm font-bold text-coral-deep" aria-live="assertive">Anda akan keluar dari sistem dalam beberapa detik.</p>
+            </div>
+        </div>
+
         {{-- Gate Modal: Masuk Layar Penuh --}}
         <div
             x-show="!sudahMulai || (!layarPenuhAktif && !peringatanKeluar && !memprosesPelanggaran)"
@@ -1389,7 +1445,7 @@
                 <p class="text-base leading-relaxed text-ink-muted">
                     Untuk mencegah kecurangan, kuis ini wajib dikerjakan dalam mode <strong>Layar Penuh (Full Screen)</strong>.
                     Jika Anda keluar dari layar penuh atau berpindah tab/aplikasi selama kuis, sistem mencatat pelanggaran dan memberi waktu untuk kembali.
-                    Saat batas pelanggaran sesi tercapai dan waktu habis, jawaban dikumpulkan otomatis.
+                    Saat timer peringatan habis, sistem menerapkan sanksi yang ditetapkan pengajar.
                 </p>
                 <button
                     type="button"
@@ -1425,7 +1481,7 @@
                     <div class="rounded-2xl border border-coral-deep/30 bg-coral-soft/60 p-4">
                         <p class="text-sm font-bold text-coral-deep" x-text="sisaToleransi > 0 ? 'Waktu untuk kembali' : 'Waktu kembali habis'">Waktu untuk kembali</p>
                         <p class="timer mt-1 text-5xl font-bold text-coral-deep" x-text="sisaToleransi + ' detik'" x-init="sisaToleransi = durasiPeringatan">{{ $session->durasiPeringatan() }} detik</p>
-                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat saat Anda keluar layar. Jika batas pelanggaran sesi sudah tercapai dan waktu habis, ujian dikumpulkan otomatis.</p>
+                        <p class="mt-1 text-xs text-ink-muted">Pelanggaran sudah dicatat. Saat timer habis, sistem dapat mengurangi waktu atau mengumpulkan pekerjaan.</p>
                     </div>
                     <p x-show="memprosesPelanggaran" x-cloak class="text-sm font-bold text-coral-deep">Mencatat pelanggaran...</p>
                 </div>

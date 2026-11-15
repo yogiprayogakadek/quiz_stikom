@@ -20,6 +20,7 @@ class Attempt extends Model
         'status',
         'mulai_at',
         'batas_akhir_at',
+        'retry_duration_detik',
         'selesai_at',
         'bergabung_at',
         'last_seen_at',
@@ -29,6 +30,8 @@ class Attempt extends Model
         'poin_total',
         'poin_maksimal',
         'jumlah_pelanggaran',
+        'total_pengurangan_waktu_detik',
+        'last_pelanggaran_action',
         'peringatan_mulai_at',
     ];
 
@@ -37,6 +40,7 @@ class Attempt extends Model
         return [
             'mulai_at' => 'integer',
             'batas_akhir_at' => 'integer',
+            'retry_duration_detik' => 'integer',
             'selesai_at' => 'integer',
             'bergabung_at' => 'datetime',
             'last_seen_at' => 'integer',
@@ -46,6 +50,7 @@ class Attempt extends Model
             'poin_total' => 'integer',
             'poin_maksimal' => 'integer',
             'jumlah_pelanggaran' => 'integer',
+            'total_pengurangan_waktu_detik' => 'integer',
             'peringatan_mulai_at' => 'integer',
         ];
     }
