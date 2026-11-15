@@ -70,6 +70,53 @@ class EssayTest extends TestCase
         $this->assertSame($admin->id, $audit->actor_id);
     }
 
+    public function test_hasil_menyembunyikan_nilai_sampai_essay_terisi_selesai_dinilai(): void
+    {
+        [$admin, $peserta, $session, $attempt, , $essay] = $this->buatAcakBerjalan();
+        $session->update(['pembahasan_mode' => 'terbuka']);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('data-score-pending', false)
+            ->assertSee('data-essay-score-pending', false)
+            ->assertSee('Menunggu penilaian essay')
+            ->assertDontSee('data-final-score', false);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay->id => 8],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('data-final-score', false)
+            ->assertSee('8 / 10')
+            ->assertDontSee('data-score-pending', false);
+    }
+
+    public function test_essay_kosong_tidak_dianggap_menunggu_penilaian(): void
+    {
+        [, $peserta, $session, $attempt] = $this->buatAcakBerjalan(false);
+        $session->update(['pembahasan_mode' => 'terbuka']);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('data-final-score', false)
+            ->assertSee('Tidak dijawab')
+            ->assertDontSee('data-score-pending', false)
+            ->assertDontSee('data-essay-score-pending', false);
+    }
+
     public function test_peserta_bisa_menyimpan_dan_menghapus_jawaban_essay(): void
     {
         [$admin, $peserta, $session, $attempt, $pg, $essay] = $this->buatAcakBerjalan(false);
@@ -277,7 +324,12 @@ class EssayTest extends TestCase
             ->assertSee('Topologi jaringan')
             ->assertSee('Jelaskan topologi jaringan.')
             ->assertSee('Topologi star memakai switch.')
-            ->assertSee('Pilih media transmisi.');
+            ->assertSee('Pilih media transmisi.')
+            ->assertSee('x-bind:disabled="mengumpulkan || berhenti"', false)
+            ->assertSee("tampilkanProgress('Menyinkronkan jawaban...', 0)", false)
+            ->assertSee('requestSubmit()', false)
+            ->assertSee('data-progress-message="Mengunci jawaban dan menghitung hasil..."', false)
+            ->assertSee('data-progress-delay="0"', false);
     }
 
     public function test_laporan_admin_menampilkan_jawaban_essay_per_sub_soal(): void

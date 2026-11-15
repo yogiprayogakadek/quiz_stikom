@@ -15,6 +15,7 @@
             timerTeks: {},
             timerParts: {},
             menyimpan: false,
+            mengumpulkan: false,
             sedangSinkron: false,
             antreanOffline: [],
             isOnline: navigator.onLine ?? true,
@@ -774,62 +775,68 @@
                 return true;
             },
             async akhiri(paksa = false) {
-                if (this.berhenti) {
+                if (this.mengumpulkan || this.berhenti) {
                     return;
                 }
 
-                if (paksa) {
-                    await Promise.race([
-                        this.simpanSemuaTeks(),
-                        new Promise((resolve) => setTimeout(resolve, 1200))
-                    ]);
-                    if (navigator.onLine && this.antreanOffline.length > 0) {
-                        await Promise.race([
-                            this.prosesAntrean(),
-                            new Promise((resolve) => setTimeout(resolve, 2000))
-                        ]);
-                    }
-                    this.kirimSelesai();
-
-                    return;
-                }
-
-                if (this.belum > 0) {
+                if (!paksa && this.belum > 0) {
                     this.konfirmasiSelesai = true;
                     this.$nextTick(() => this.$refs.tombolKembali?.focus());
 
                     return;
                 }
 
-                const tersimpan = await this.simpanSemuaTeks();
-                if (!tersimpan) {
-                    this.pesan = 'Masih ada jawaban essay yang belum tersimpan. Periksa koneksi lalu coba lagi.';
-                    return;
-                }
-
-                const sinkron = await this.pastikanAntreanTersinkron();
-                if (!sinkron) {
-                    return;
-                }
-
-                this.kirimSelesai();
+                await this.prosesPengumpulan(paksa);
             },
             async kumpulkanSekarang() {
-                const tersimpan = await this.simpanSemuaTeks();
-                if (!tersimpan) {
-                    this.pesan = 'Masih ada jawaban essay yang belum tersimpan. Periksa koneksi lalu coba lagi.';
+                await this.prosesPengumpulan(false);
+            },
+            async prosesPengumpulan(paksa = false) {
+                if (this.mengumpulkan || this.berhenti) {
                     return;
                 }
 
-                const sinkron = await this.pastikanAntreanTersinkron();
-                if (!sinkron) {
-                    return;
-                }
+                this.mengumpulkan = true;
+                window.tampilkanProgress('Menyinkronkan jawaban...', 0);
 
-                this.kirimSelesai();
+                try {
+                    if (paksa) {
+                        await Promise.race([
+                            this.simpanSemuaTeks(),
+                            new Promise((resolve) => setTimeout(resolve, 1200))
+                        ]);
+                        if (navigator.onLine && this.antreanOffline.length > 0) {
+                            await Promise.race([
+                                this.prosesAntrean(),
+                                new Promise((resolve) => setTimeout(resolve, 2000))
+                            ]);
+                        }
+                        this.kirimSelesai();
+
+                        return;
+                    }
+
+                    const tersimpan = await this.simpanSemuaTeks();
+                    if (!tersimpan) {
+                        this.pesan = 'Masih ada jawaban essay yang belum tersimpan. Periksa koneksi lalu coba lagi.';
+                        return;
+                    }
+
+                    const sinkron = await this.pastikanAntreanTersinkron();
+                    if (!sinkron) {
+                        return;
+                    }
+
+                    this.kirimSelesai();
+                } finally {
+                    if (!this.berhenti) {
+                        this.mengumpulkan = false;
+                        window.sembunyikanProgress();
+                    }
+                }
             },
             tutupKonfirmasi() {
-                if (!this.konfirmasiSelesai) {
+                if (!this.konfirmasiSelesai || this.mengumpulkan) {
                     return;
                 }
                 this.konfirmasiSelesai = false;
@@ -845,7 +852,7 @@
                 try {
                     localStorage.removeItem(this.storageKey);
                 } catch (e) {}
-                document.getElementById('form-selesai').submit();
+                document.getElementById('form-selesai').requestSubmit();
             },
             async cekStatus() {
                 if (this.berhenti) {
@@ -1200,7 +1207,17 @@
                         <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
                             <x-icon name="eye" :size="20" />
                         </button>
-                        <button type="button" class="btn btn-primary" x-ref="tombolSelesai" x-on:click="akhiri(false)">Selesai</button>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            x-ref="tombolSelesai"
+                            x-on:click="akhiri(false)"
+                            x-bind:disabled="mengumpulkan || berhenti"
+                            x-bind:aria-busy="mengumpulkan"
+                        >
+                            <span x-show="mengumpulkan" x-cloak class="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
+                            <span x-text="mengumpulkan ? 'Mengumpulkan...' : 'Selesai'">Selesai</span>
+                        </button>
                     </div>
                 </div>
 
@@ -1466,7 +1483,14 @@
             <p class="mt-3 text-base text-ink-muted">Kotak hijau berarti semua bagian sudah dijawab. Kotak kuning berarti baru sebagian bagian essay dijawab. Kotak merah berarti soal ditandai ragu-ragu.</p>
         </section>
 
-        <form id="form-selesai" method="POST" action="{{ route('peserta.attempt.finish', $attempt) }}" class="hidden">
+        <form
+            id="form-selesai"
+            method="POST"
+            action="{{ route('peserta.attempt.finish', $attempt) }}"
+            class="hidden"
+            data-progress-message="Mengunci jawaban dan menghitung hasil..."
+            data-progress-delay="0"
+        >
             @csrf
         </form>
 
@@ -1631,6 +1655,7 @@
                         class="btn btn-secondary flex-1"
                         x-ref="tombolKembali"
                         x-on:click="tutupKonfirmasi()"
+                        x-bind:disabled="mengumpulkan"
                     >
                         Kembali kerjakan
                     </button>
@@ -1638,8 +1663,11 @@
                         type="button"
                         class="btn btn-primary flex-1"
                         x-on:click="kumpulkanSekarang()"
+                        x-bind:disabled="mengumpulkan || berhenti"
+                        x-bind:aria-busy="mengumpulkan"
                     >
-                        Kumpulkan sekarang
+                        <span x-show="mengumpulkan" x-cloak class="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
+                        <span x-text="mengumpulkan ? 'Mengumpulkan...' : 'Kumpulkan sekarang'">Kumpulkan sekarang</span>
                     </button>
                 </div>
             </div>

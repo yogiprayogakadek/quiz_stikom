@@ -4,7 +4,10 @@
         ? ($total_soal > 0 ? (int) round($attempt->skor_total / ($total_soal * 1000) * 100) : 0)
         : (int) $attempt->skor_total;
     $bintang = $persen >= 90 ? 3 : ($persen >= 70 ? 2 : 1);
-    $essayBelum = $rincian->where('tipe', 'essay')->whereNull('dinilai_at')->count();
+    $essayBelum = $rincian->filter(fn ($baris) => $baris['tipe'] === 'essay'
+        && filled($baris['jawaban_saya'])
+        && $baris['dinilai_at'] === null)->count();
+    $nilaiTertunda = $essayBelum > 0;
     $adaEssay = $rincian->contains(fn ($baris) => $baris['tipe'] === 'essay');
 @endphp
 
@@ -19,26 +22,36 @@
     <div class="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <section class="card text-center" aria-labelledby="skor-akhir">
             <p class="pill pill-brand mx-auto">{{ $mode === 'serempak' ? 'Mode Serempak' : 'Mode Acak' }}</p>
-            <h2 id="skor-akhir" class="sr-only">Skor akhir</h2>
+            <h2 id="skor-akhir" class="sr-only">Status nilai</h2>
 
-            <p class="display-number mt-5 text-[72px] text-ink sm:text-[88px]">{{ $attempt->skor_total }}</p>
-            <p class="text-lg font-bold text-ink-muted">{{ $mode === 'serempak' ? 'poin' : 'nilai dari 100' }}</p>
+            @if ($nilaiTertunda)
+                <div class="mx-auto mt-6 max-w-md rounded-2xl bg-sun-soft px-5 py-6" data-score-pending>
+                    <x-icon name="clock" :size="32" class="mx-auto text-sun-deep" />
+                    <p class="mt-3 text-xl font-bold text-ink">Menunggu penilaian essay</p>
+                    <p class="mt-1 text-base text-ink-muted">{{ $essayBelum }} jawaban sedang dinilai. Nilai akhir akan muncul otomatis setelah seluruh penilaian selesai.</p>
+                </div>
+            @else
+                <div data-final-score>
+                    <p class="display-number mt-5 text-[72px] text-ink sm:text-[88px]">{{ $attempt->skor_total }}</p>
+                    <p class="text-lg font-bold text-ink-muted">{{ $mode === 'serempak' ? 'poin' : 'nilai dari 100' }}</p>
 
-            @if ($mode === 'serempak')
-                <p class="mt-1 text-base text-ink-muted">Setara {{ $persen }}% dari poin maksimum {{ $total_soal * 1000 }}.</p>
-            @elseif ($attempt->poin_maksimal > 0)
-                <p class="mt-1 text-base text-ink-muted">Poin {{ $attempt->poin_total }} dari {{ $attempt->poin_maksimal }}.</p>
+                    @if ($mode === 'serempak')
+                        <p class="mt-1 text-base text-ink-muted">Setara {{ $persen }}% dari poin maksimum {{ $total_soal * 1000 }}.</p>
+                    @elseif ($attempt->poin_maksimal > 0)
+                        <p class="mt-1 text-base text-ink-muted">Poin {{ $attempt->poin_total }} dari {{ $attempt->poin_maksimal }}.</p>
+                    @endif
+
+                    <div class="mt-5 flex items-center justify-center gap-2" aria-label="{{ $bintang }} dari 3 bintang">
+                        @for ($i = 1; $i <= 3; $i++)
+                            <x-icon
+                                name="star"
+                                :size="40"
+                                class="{{ $i <= $bintang ? 'text-sun fill-current' : 'text-outline-strong' }}"
+                            />
+                        @endfor
+                    </div>
+                </div>
             @endif
-
-            <div class="mt-5 flex items-center justify-center gap-2" aria-label="{{ $bintang }} dari 3 bintang">
-                @for ($i = 1; $i <= 3; $i++)
-                    <x-icon
-                        name="star"
-                        :size="40"
-                        class="{{ $i <= $bintang ? 'text-sun fill-current' : 'text-outline-strong' }}"
-                    />
-                @endfor
-            </div>
 
             <div class="mt-5 grid grid-cols-2 gap-3">
                 <div class="rounded-2xl bg-leaf-soft p-4">
@@ -70,7 +83,7 @@
             @if ($essayBelum > 0)
                 <div class="mt-4 rounded-2xl bg-sun-soft px-4 py-3">
                     <p class="font-bold text-ink">{{ $essayBelum }} jawaban essay menunggu penilaian.</p>
-                    <p class="mt-1 text-sm text-ink-muted">Poin di atas masih sementara dan belum termasuk nilai essay. Nilai akhir diperbarui setelah admin menilai.</p>
+                    <p class="mt-1 text-sm text-ink-muted">Halaman ini akan diperbarui otomatis setelah admin atau AI menyelesaikan penilaian.</p>
                 </div>
             @endif
 
@@ -95,7 +108,7 @@
         @include('peserta._feedback', ['attempt' => $attempt, 'inline' => true])
     @endif
 
-    @if ($nilaiAkhir)
+    @if ($nilaiAkhir && ! $nilaiTertunda)
         <section class="mt-6 card border-leaf" aria-labelledby="nilai-akhir-heading">
             <p class="pill pill-leaf">Nilai akhir</p>
             <h2 id="nilai-akhir-heading" class="mt-3 text-2xl">Nilai akhir setelah remidi</h2>
@@ -105,7 +118,7 @@
                 Nilai awal {{ $nilaiAkhir->nilai_awal }}@if ($nilaiAkhir->nilai_remidi !== null), nilai remidi {{ $nilaiAkhir->nilai_remidi }}@endif.
             </p>
         </section>
-    @elseif ($session->isRemidi() && $attempt->status === 'selesai')
+    @elseif (! $nilaiTertunda && $session->isRemidi() && $attempt->status === 'selesai')
         <section class="mt-6 card" aria-labelledby="nilai-akhir-heading">
             <h2 id="nilai-akhir-heading" class="text-2xl">Nilai remidi tersimpan</h2>
             <p class="mt-2 text-base text-ink-muted">Nilai akhir menunggu admin memilih nilai terbaik antara nilai awal dan nilai remidi.</p>
@@ -170,8 +183,10 @@
                                     @if ($baris['tipe'] === 'essay')
                                         @if ($baris['dinilai_at'])
                                             <span class="pill pill-leaf">Dinilai</span>
-                                        @else
+                                        @elseif (filled($baris['jawaban_saya']))
                                             <span class="pill pill-sun">Menunggu penilaian</span>
+                                        @else
+                                            <span class="pill">Tidak dijawab</span>
                                         @endif
                                     @elseif ($baris['benar'])
                                         <span class="pill pill-leaf">
@@ -186,7 +201,11 @@
                                     @endif
                                 </td>
                                 <td class="font-mono">
-                                    @if ($mode === 'acak')
+                                    @if ($baris['tipe'] === 'essay' && ! $baris['dinilai_at'] && filled($baris['jawaban_saya']))
+                                        <span class="font-sans text-ink-muted" data-essay-score-pending>Menunggu penilaian</span>
+                                    @elseif ($baris['tipe'] === 'essay' && ! filled($baris['jawaban_saya']))
+                                        <span class="font-sans text-ink-muted">Tidak dijawab</span>
+                                    @elseif ($mode === 'acak')
                                         {{ $baris['skor'] }} / {{ $baris['bobot'] }}
                                     @else
                                         {{ $baris['skor'] }}

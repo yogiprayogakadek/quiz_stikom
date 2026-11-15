@@ -252,7 +252,11 @@ document.addEventListener('submit', (event) => {
         submitter.disabled = true;
         submitter.dataset.progressDisabled = 'true';
     }
-    window.tampilkanProgress(form.dataset.progressMessage || 'Menyimpan perubahan...', 350);
+    const configuredDelay = Number(form.dataset.progressDelay);
+    const progressDelay = Number.isFinite(configuredDelay) && form.dataset.progressDelay !== ''
+        ? Math.max(0, configuredDelay)
+        : 350;
+    window.tampilkanProgress(form.dataset.progressMessage || 'Menyimpan perubahan...', progressDelay);
 });
 
 window.addEventListener('pageshow', () => {
