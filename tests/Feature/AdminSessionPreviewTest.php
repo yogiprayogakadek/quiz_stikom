@@ -11,6 +11,7 @@ use App\Models\SessionQuestion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AdminSessionPreviewTest extends TestCase
@@ -29,7 +30,7 @@ class AdminSessionPreviewTest extends TestCase
         $quiz = $this->kuisDenganSoal($organization, $admin, 'UTS Matematika');
         $session = $this->sesi($organization, $admin, $quiz, $kelas, 'Pratinjau UTS');
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
             ->get(route('admin.sessions.preview', $session))
             ->assertOk()
@@ -46,9 +47,35 @@ class AdminSessionPreviewTest extends TestCase
             ->assertSee('Tampilkan kunci')
             ->assertSee('x-show="kunci"', false)
             ->assertSee('x-cloak', false)
+            ->assertSee('previewIndex: 0', false)
+            ->assertSee('x-show="previewIndex === 0"', false)
+            ->assertSee('x-show="previewIndex === 1"', false)
+            ->assertSee('x-on:click="pindahPreview(previewIndex - 1)"', false)
+            ->assertSee('x-on:click="pindahPreview(previewIndex + 1)"', false)
+            ->assertSee('x-on:click="pindahPreview(0)"', false)
+            ->assertSee('x-on:click="pindahPreview(1)"', false)
+            ->assertSee('aria-label="Tampilkan pratinjau soal 1"', false)
+            ->assertSee('aria-label="Tampilkan pratinjau soal 2"', false)
+            ->assertSee('x-bind:aria-current', false)
+            ->assertSee('Sebelumnya')
+            ->assertSee('Berikutnya')
+            ->assertSee('Yang harus dijawab')
+            ->assertSee('Jelaskan bahan yang diperlukan.')
+            ->assertSee('Bagian A')
+            ->assertSee('Sebutkan bahan fotosintesis.')
+            ->assertSee('Gunakan istilah ilmiah.')
+            ->assertSee('Bagian B')
+            ->assertSee('Jelaskan hasil prosesnya.')
+            ->assertSee('disabled', false)
             ->assertSee('Daftar mengikuti kuis.');
 
+        $participantPanel = Str::after($response->getContent(), 'id="panel-peserta"');
+
+        $this->assertStringContainsString('<button', $participantPanel);
+        $this->assertStringNotContainsString('Kunci essay rahasia', $participantPanel);
+        $this->assertStringNotContainsString('Ketepatan penjelasan', $participantPanel);
         $this->assertDatabaseCount('attempts', 0);
+        $this->assertDatabaseCount('answers', 0);
     }
 
     public function test_tombol_pratinjau_tampil_di_ruang_kendali(): void
@@ -86,6 +113,7 @@ class AdminSessionPreviewTest extends TestCase
             ->assertSee('Berapa hasil 2 + 2?')
             ->assertDontSee('Jelaskan proses fotosintesis.')
             ->assertSee('Sesi memakai 1 dari 2 soal.')
+            ->assertSee('Navigasi ini hanya untuk pemeriksaan admin.')
             ->assertSee('1 soal');
     }
 
@@ -166,6 +194,19 @@ class AdminSessionPreviewTest extends TestCase
             'durasi_detik' => 300,
             'bobot' => 75,
             'kunci_essay' => 'Kunci essay rahasia',
+            'petunjuk_json' => ['Jelaskan bahan yang diperlukan.'],
+            'sub_soal_json' => [
+                [
+                    'label' => 'A',
+                    'teks' => 'Sebutkan bahan fotosintesis.',
+                    'petunjuk' => ['Gunakan istilah ilmiah.'],
+                ],
+                [
+                    'label' => 'B',
+                    'teks' => 'Jelaskan hasil prosesnya.',
+                    'petunjuk' => [],
+                ],
+            ],
             'rubrik_essay' => [
                 ['label' => 'Ketepatan penjelasan', 'points' => 50],
                 ['label' => 'Kelengkapan', 'points' => 25],

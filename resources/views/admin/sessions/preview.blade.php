@@ -13,6 +13,8 @@
         x-data="{
             tab: 'soal',
             kunci: false,
+            previewIndex: 0,
+            previewTotal: {{ $soal->count() }},
             pilih(nama) {
                 this.tab = nama;
                 this.$nextTick(() => document.getElementById('tab-' + nama).focus());
@@ -21,6 +23,18 @@
                 const urutan = ['soal', 'peserta'];
                 const posisi = urutan.indexOf(this.tab);
                 this.pilih(urutan[(posisi + arah + urutan.length) % urutan.length]);
+            },
+            pindahPreview(index) {
+                const tujuan = Math.max(0, Math.min(index, this.previewTotal - 1));
+                if (tujuan === this.previewIndex) return;
+                this.previewIndex = tujuan;
+                this.$nextTick(() => {
+                    document.getElementById('preview-soal-' + tujuan)?.focus({ preventScroll: true });
+                    document.getElementById('preview-panel-soal')?.scrollIntoView({
+                        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                        block: 'start'
+                    });
+                });
             }
         }"
     >
@@ -228,11 +242,14 @@
                     keterangan="Contoh tampilan peserta muncul setelah kuis punya soal."
                 />
             @else
-                @php $contoh = $soal->first(); @endphp
-
                 <p class="text-base text-ink-muted">
-                    Gambar statis, bukan attempt. Tombol dan timer di bawah tidak aktif.
+                    Pratinjau baca-saja, bukan attempt. Jawaban dan timer di bawah tidak aktif.
                 </p>
+                @if ($session->mode === 'serempak')
+                    <x-alert jenis="info" class="mt-4">
+                        Navigasi ini hanya untuk pemeriksaan admin. Saat sesi berjalan, peserta melihat soal yang dibuka admin dan tidak dapat memilih nomor soal sendiri.
+                    </x-alert>
+                @endif
 
                 <figure class="mt-4">
                     <div class="overflow-hidden rounded-2xl border border-outline bg-surface">
@@ -248,48 +265,110 @@
                         </div>
 
                         <div class="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
-                            <div class="card min-w-0">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <span class="pill pill-brand">Soal 1 / {{ $soal->count() }}</span>
-                                    <span class="pill {{ $contoh->isEssay() ? 'pill-sun' : 'pill-neutral' }}">{{ $contoh->isEssay() ? 'Essay' : 'Pilihan ganda' }}</span>
-                                </div>
+                            <div id="preview-panel-soal" class="card min-w-0 scroll-mt-24">
+                                @foreach ($soal as $nomor => $item)
+                                    <section
+                                        x-show="previewIndex === {{ $nomor }}"
+                                        @if ($nomor > 0) x-cloak @endif
+                                        aria-labelledby="preview-soal-{{ $nomor }}"
+                                    >
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <span class="pill pill-brand">Soal {{ $nomor + 1 }} / {{ $soal->count() }}</span>
+                                            <span class="pill {{ $item->isEssay() ? 'pill-sun' : 'pill-neutral' }}">{{ $item->isEssay() ? 'Essay' : 'Pilihan ganda' }}</span>
+                                        </div>
 
-                                <p class="question-text mt-3 whitespace-pre-line">{{ \Illuminate\Support\Str::limit($contoh->teks, 220) }}</p>
+                                        <h3 id="preview-soal-{{ $nomor }}" tabindex="-1" class="question-text mt-3 whitespace-pre-line focus:outline-none">{{ $item->teks }}</h3>
 
-                                @if ($contoh->isEssay())
-                                    <div class="input mt-4 min-h-24 text-ink-subtle">Jawaban peserta ditulis di sini.</div>
-                                @elseif ($contoh->options->isNotEmpty())
-                                    <div class="mt-4 space-y-2">
-                                        @foreach ($contoh->options as $opsi)
-                                            <div class="tile pointer-events-none">
-                                                <span class="tile-mark">{{ chr(65 + $loop->index) }}</span>
-                                                <span class="tile-text">{{ $opsi->teks }}</span>
+                                        @if ($item->isEssay() && ! empty($item->petunjuk_json))
+                                            <div class="mt-4 rounded-xl border border-outline bg-page p-4">
+                                                <p class="text-sm font-bold text-ink">Yang harus dijawab</p>
+                                                <ul class="mt-2 space-y-1 text-base text-ink-muted">
+                                                    @foreach ($item->petunjuk_json as $poin)
+                                                        <li class="flex gap-2">
+                                                            <span class="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-brand" aria-hidden="true"></span>
+                                                            <span>{{ $poin }}</span>
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
                                             </div>
-                                        @endforeach
-                                    </div>
-                                @endif
+                                        @endif
 
-                                <div class="mt-5 flex flex-wrap gap-2">
-                                    <span class="btn btn-secondary opacity-60">Sebelumnya</span>
-                                    <span class="btn btn-secondary opacity-60">Berikutnya</span>
+                                        @if ($item->isEssay() && ! empty($item->sub_soal_json))
+                                            <div class="mt-5 space-y-5">
+                                                @foreach ($item->sub_soal_json as $bagian)
+                                                    <div @class(['border-t border-outline pt-5' => ! $loop->first])>
+                                                        <h4 class="text-lg font-bold text-ink">Bagian {{ $bagian['label'] ?? $loop->iteration }}</h4>
+                                                        <p class="mt-1 whitespace-pre-line text-base text-ink-muted">{{ $bagian['teks'] ?? '' }}</p>
+                                                        @if (! empty($bagian['petunjuk']))
+                                                            <ul class="mt-2 space-y-1 text-sm text-ink-muted">
+                                                                @foreach ((array) $bagian['petunjuk'] as $poin)
+                                                                    <li class="flex gap-2">
+                                                                        <span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-brand" aria-hidden="true"></span>
+                                                                        <span>{{ $poin }}</span>
+                                                                    </li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                        <label class="label mt-3" for="preview-jawaban-{{ $item->id }}-{{ $loop->index }}">Jawaban {{ $bagian['label'] ?? $loop->iteration }}</label>
+                                                        <textarea id="preview-jawaban-{{ $item->id }}-{{ $loop->index }}" class="input min-h-28 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @elseif ($item->isEssay())
+                                            <div class="mt-5">
+                                                <label class="label" for="preview-jawaban-{{ $item->id }}">Jawaban Anda</label>
+                                                <textarea id="preview-jawaban-{{ $item->id }}" class="input min-h-40 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                            </div>
+                                        @elseif ($item->options->isNotEmpty())
+                                            <div class="mt-5 space-y-3" role="group" aria-label="Opsi jawaban soal {{ $nomor + 1 }}">
+                                                @foreach ($item->options as $opsi)
+                                                    <div class="tile pointer-events-none" aria-disabled="true">
+                                                        <span class="tile-mark">{{ chr(65 + $loop->index) }}</span>
+                                                        <span class="tile-text">{{ $opsi->teks }}</span>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </section>
+                                @endforeach
+
+                                <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-outline pt-4">
+                                    <button type="button" class="btn btn-secondary" x-on:click="pindahPreview(previewIndex - 1)" x-bind:disabled="previewIndex === 0">
+                                        <x-icon name="arrow-left" :size="20" />
+                                        Sebelumnya
+                                    </button>
+                                    <p class="text-sm font-bold text-ink-muted" aria-live="polite">
+                                        Soal <span x-text="previewIndex + 1">1</span> dari {{ $soal->count() }}
+                                    </p>
+                                    <button type="button" class="btn btn-secondary" x-on:click="pindahPreview(previewIndex + 1)" x-bind:disabled="previewIndex === previewTotal - 1">
+                                        Berikutnya
+                                        <x-icon name="arrow-left" :size="20" class="rotate-180" />
+                                    </button>
                                 </div>
                             </div>
 
-                            <div class="card min-w-0">
-                                <p class="text-sm font-bold text-ink">Navigasi soal</p>
+                            <nav class="card min-w-0" aria-labelledby="preview-navigation-heading">
+                                <p id="preview-navigation-heading" class="text-sm font-bold text-ink">Navigasi soal</p>
                                 <div class="mt-3 grid grid-cols-6 gap-2 lg:grid-cols-5">
                                     @foreach ($soal as $nomor => $item)
-                                        <span class="flex h-9 items-center justify-center rounded-lg border-2 font-mono text-sm font-bold {{ $nomor === 0 ? 'border-brand bg-brand-soft text-brand-deep' : 'border-outline text-ink-muted' }}">
+                                        <button
+                                            type="button"
+                                            class="flex h-11 items-center justify-center rounded-lg border-2 font-mono text-sm font-bold transition"
+                                            x-bind:class="previewIndex === {{ $nomor }} ? 'border-brand bg-brand text-white' : 'border-outline bg-page text-ink-muted hover:border-brand hover:text-brand-deep'"
+                                            x-bind:aria-current="previewIndex === {{ $nomor }} ? 'true' : 'false'"
+                                            x-on:click="pindahPreview({{ $nomor }})"
+                                            aria-label="Tampilkan pratinjau soal {{ $nomor + 1 }}"
+                                        >
                                             {{ $nomor + 1 }}
-                                        </span>
+                                        </button>
                                     @endforeach
                                 </div>
-                            </div>
+                            </nav>
                         </div>
                     </div>
 
                     <figcaption class="mt-3 text-sm text-ink-muted">
-                        Contoh tata letak peserta. Timer, pilihan jawaban, dan navigasi hanya ilustrasi.
+                        Contoh tata letak peserta. Hanya navigasi pratinjau yang aktif; timer dan jawaban tidak disimpan.
                     </figcaption>
                 </figure>
             @endif
