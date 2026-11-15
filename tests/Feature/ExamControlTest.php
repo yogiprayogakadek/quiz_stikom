@@ -38,6 +38,7 @@ class ExamControlTest extends TestCase
                 'jeda_detik' => 5,
                 'max_pelanggaran' => 4,
                 'durasi_peringatan' => 45,
+                'clipboard_policy' => 'block',
             ])
             ->assertRedirect();
 
@@ -45,6 +46,7 @@ class ExamControlTest extends TestCase
             'nama' => 'Sesi Pengaturan Baru',
             'max_pelanggaran' => 4,
             'durasi_peringatan' => 45,
+            'clipboard_policy' => 'block',
         ]);
 
         $this->actingAs($admin)
@@ -63,7 +65,54 @@ class ExamControlTest extends TestCase
             'nama' => 'Sesi Tanpa Batas',
             'max_pelanggaran' => null,
             'durasi_peringatan' => 30,
+            'clipboard_policy' => 'monitor',
         ]);
+    }
+
+    public function test_kebijakan_clipboard_mengatur_pencatatan_dan_pelanggaran(): void
+    {
+        [$organization, , $participant, $session, $attempt] = $this->dasar('clipboard');
+
+        $session->update(['clipboard_policy' => 'monitor']);
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.events', $attempt), ['tipe' => 'copy_attempt'])
+            ->assertCreated()
+            ->assertJsonPath('jumlah', 0)
+            ->assertJsonPath('clipboard_policy', 'monitor');
+
+        $this->assertSame(0, $attempt->fresh()->jumlah_pelanggaran);
+        $this->assertNull($attempt->peringatan_mulai_at);
+        $this->assertDatabaseHas('attempt_events', [
+            'attempt_id' => $attempt->id,
+            'tipe' => 'copy_attempt',
+        ]);
+        $this->assertSame([], app(QuizEngine::class)->displayState($session->fresh())['peringatan']);
+
+        $session->update(['clipboard_policy' => 'allow']);
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.events', $attempt), ['tipe' => 'paste_attempt'])
+            ->assertOk()
+            ->assertJsonPath('ignored', true);
+
+        $this->assertSame(1, $attempt->events()->count());
+
+        $session->update(['clipboard_policy' => 'block']);
+        $this->sebagaiPeserta($participant, $organization)
+            ->postJson(route('peserta.attempt.events', $attempt), ['tipe' => 'paste_attempt'])
+            ->assertCreated()
+            ->assertJsonPath('jumlah', 1)
+            ->assertJsonPath('clipboard_policy', 'block');
+
+        $attempt->refresh();
+        $this->assertSame(1, $attempt->jumlah_pelanggaran);
+        $this->assertNotNull($attempt->peringatan_mulai_at);
+
+        $this->sebagaiPeserta($participant, $organization)
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('data-protected-question', false)
+            ->assertSee('data-answer-input', false)
+            ->assertSee('Paste jawaban diblokir dan dihitung sebagai pelanggaran.');
     }
 
     public function test_satu_sesi_peringatan_hanya_menambah_satu_pelanggaran(): void

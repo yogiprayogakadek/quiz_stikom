@@ -421,7 +421,9 @@ class DashboardController extends Controller
 
     private function formatSesi($sesiTersedia, $attempts): array
     {
-        return $sesiTersedia->map(function (QuizSession $sesi) use ($attempts) {
+        $timezone = app(OrganizationContext::class)->timezone();
+
+        return $sesiTersedia->map(function (QuizSession $sesi) use ($attempts, $timezone) {
             $attempt = $attempts->firstWhere('quiz_session_id', $sesi->id);
             $penuh = $sesi->max_peserta !== null && $sesi->attempts_count >= $sesi->max_peserta;
             $jumlahSoal = $sesi->quiz->jumlah_soal ?? $sesi->quiz->questions_count;
@@ -437,6 +439,20 @@ class DashboardController extends Controller
                 'attempts_count' => $sesi->attempts_count,
                 'max_peserta' => $sesi->max_peserta,
                 'penuh' => $penuh,
+                'rules' => [
+                    'timing_mode' => $sesi->timing_mode ?? 'duration',
+                    'duration_minutes' => $sesi->durasi_total_detik !== null
+                        ? (int) ceil($sesi->durasi_total_detik / 60)
+                        : null,
+                    'scheduled_start' => $sesi->scheduled_start_at?->timezone($timezone)->format('d/m/Y H:i'),
+                    'scheduled_end' => $sesi->scheduled_end_at?->timezone($timezone)->format('d/m/Y H:i'),
+                    'timezone' => $timezone,
+                    'max_violations' => $sesi->max_pelanggaran,
+                    'warning_seconds' => $sesi->durasiPeringatan(),
+                    'violation_action' => $sesi->pelanggaran_action ?? 'submit',
+                    'penalty_seconds' => $sesi->pelanggaran_penalty_seconds,
+                    'clipboard_policy' => $sesi->clipboard_policy ?? 'monitor',
+                ],
                 'attempt' => $attempt ? [
                     'id' => $attempt->id,
                     'status' => $attempt->status,

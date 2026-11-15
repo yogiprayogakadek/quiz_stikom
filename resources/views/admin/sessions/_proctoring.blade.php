@@ -24,7 +24,7 @@
     </div>
 @empty
     <div id="proctoring-empty" class="p-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
-        <p class="text-xs font-bold text-slate-600">Belum ada pelanggaran terdeteksi.</p>
-        <p class="text-[11px] text-slate-400 mt-0.5">Notifikasi otomatis muncul di sini bila ada siswa yang berpindah tab atau keluar fullscreen.</p>
+        <p class="text-xs font-bold text-slate-600">Belum ada aktivitas pengawasan.</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">Perpindahan tab, keluar layar penuh, dan aktivitas clipboard akan muncul di sini.</p>
     </div>
 @endforelse

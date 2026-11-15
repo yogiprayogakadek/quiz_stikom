@@ -31,6 +31,7 @@ class QuizSession extends Model
         'durasi_peringatan',
         'pelanggaran_action',
         'pelanggaran_penalty_seconds',
+        'clipboard_policy',
         'jeda_detik',
         'durasi_total_detik',
         'timing_mode',

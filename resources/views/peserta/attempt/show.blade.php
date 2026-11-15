@@ -39,6 +39,9 @@
             memprosesPelanggaran: false,
             pengumpulanPaksa: false,
             pesanPengumpulanPaksa: '',
+            clipboardToast: '',
+            clipboardToastBlocked: false,
+            clipboardToastTimer: null,
             audioCtx: null,
             notifWaktu300: false,
             notifWaktu60: false,
@@ -1020,6 +1023,14 @@
                     window.location.href = data?.redirect_url || config.dashboardUrl;
                 }, 3000);
             },
+            tampilkanClipboardToast(pesan, blocked = false) {
+                this.clipboardToast = pesan;
+                this.clipboardToastBlocked = blocked;
+                if (this.clipboardToastTimer) clearTimeout(this.clipboardToastTimer);
+                this.clipboardToastTimer = setTimeout(() => {
+                    this.clipboardToast = '';
+                }, 4000);
+            },
             kirimKejadian(tipe) {
                 if (this.berhenti) {
                     return;
@@ -1036,7 +1047,9 @@
                 }).then((hasil) => {
                     if (hasil.ok) {
                         this.jumlahKejadian = hasil.data.jumlah;
-                        this.peringatan = 'Aktivitas ini tercatat: ' + this.labelKejadian(tipe) + '. Tetap fokus pada soal.';
+                        if (!['copy_attempt', 'paste_attempt'].includes(tipe)) {
+                            this.peringatan = 'Aktivitas ini tercatat: ' + this.labelKejadian(tipe) + '. Tetap fokus pada soal.';
+                        }
                     }
                 });
             },
@@ -1046,7 +1059,8 @@
                     tab_hidden: 'tab kuis disembunyikan',
                     fullscreen_exit: 'keluar dari layar penuh',
                     fullscreen_exit_timeout: 'toleransi keluar layar penuh habis',
-                    copy_attempt: 'upaya menyalin soal'
+                    copy_attempt: 'upaya menyalin soal',
+                    paste_attempt: 'paste teks ke jawaban'
                 }[tipe] ?? tipe;
             },
             pasangPengawas() {
@@ -1079,11 +1093,49 @@
                 });
 
                 document.addEventListener('copy', (event) => {
-                    const area = document.getElementById('area-kuis');
-                    if (area && window.getSelection()?.anchorNode && area.contains(window.getSelection().anchorNode)) {
-                        event.preventDefault();
-                        this.kirimKejadian('copy_attempt');
+                    const target = event.target instanceof Element ? event.target : null;
+                    if (target?.closest('textarea, input, [contenteditable="true"]')) return;
+
+                    const anchor = window.getSelection()?.anchorNode;
+                    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
+                    if (!element?.closest('[data-protected-question]')) return;
+
+                    if (config.clipboardPolicy === 'allow') {
+                        this.tampilkanClipboardToast('Teks soal disalin. Sesi ini mengizinkan copy.');
+                        return;
                     }
+
+                    event.preventDefault();
+                    const blocked = config.clipboardPolicy === 'block';
+                    this.tampilkanClipboardToast(
+                        blocked
+                            ? 'Copy soal diblokir dan dihitung sebagai pelanggaran.'
+                            : 'Copy soal diblokir dan dicatat tanpa menambah pelanggaran.',
+                        blocked
+                    );
+                    this.kirimKejadian('copy_attempt');
+                    if (blocked) this.mulaiToleransi();
+                });
+
+                document.addEventListener('paste', (event) => {
+                    const target = event.target instanceof Element ? event.target : null;
+                    if (!target?.closest('[data-answer-input]')) return;
+
+                    if (config.clipboardPolicy === 'allow') {
+                        this.tampilkanClipboardToast('Teks ditempelkan. Sesi ini mengizinkan paste.');
+                        return;
+                    }
+
+                    const blocked = config.clipboardPolicy === 'block';
+                    if (blocked) event.preventDefault();
+                    this.tampilkanClipboardToast(
+                        blocked
+                            ? 'Paste jawaban diblokir dan dihitung sebagai pelanggaran.'
+                            : 'Paste jawaban diizinkan dan dicatat tanpa menambah pelanggaran.',
+                        blocked
+                    );
+                    this.kirimKejadian('paste_attempt');
+                    if (blocked) this.mulaiToleransi();
                 });
 
                 if (this.isFullscreen) {
@@ -1108,6 +1160,7 @@
             attemptId: {{ $attempt->id }},
             mulaiIndex: {{ $mulai_index }},
             durasiPeringatan: {{ $session->durasiPeringatan() }},
+            clipboardPolicy: @js($session->clipboard_policy ?? 'monitor'),
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
             markUrl: '{{ route('peserta.attempt.tandai', $attempt) }}',
@@ -1195,7 +1248,7 @@
         </div>
 
         <template x-if="current">
-            <section x-ref="kartuSoal" class="card scroll-mt-32" aria-labelledby="teks-soal">
+            <section x-ref="kartuSoal" class="card scroll-mt-32" aria-labelledby="teks-soal" data-protected-question>
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <span class="pill pill-brand" x-text="current.tipe === 'essay' ? 'Essay · maks ' + current.bobot : 'Pilihan ganda'"></span>
                     <button type="button" class="btn btn-ghost px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen">
@@ -1253,6 +1306,7 @@
                         <label for="jawaban-essay" class="label">Jawaban Anda</label>
                         <textarea
                             id="jawaban-essay"
+                            data-answer-input
                             class="input min-h-[12rem] resize-y"
                             maxlength="5000"
                             x-bind:disabled="berhenti"
@@ -1323,6 +1377,7 @@
                                     <div class="mt-3">
                                         <label class="label" x-bind:for="'jawaban-' + current.id + '-' + bagianIndex">Jawaban <span x-text="kodeBagian(current, bagian)"></span></label>
                                         <textarea
+                                            data-answer-input
                                             class="input min-h-[9rem] resize-y"
                                             maxlength="5000"
                                             x-bind:id="'jawaban-' + current.id + '-' + bagianIndex"
@@ -1418,6 +1473,20 @@
         <form id="form-pelanggaran" method="POST" action="{{ route('peserta.attempt.pelanggaran', $attempt) }}" class="hidden">
             @csrf
         </form>
+
+        <div
+            x-show="clipboardToast"
+            x-cloak
+            class="fixed right-4 top-4 z-[80] w-[min(calc(100vw-2rem),24rem)] rounded-xl border bg-page p-4 shadow-xl"
+            x-bind:class="clipboardToastBlocked ? 'border-coral text-coral-deep' : 'border-brand text-ink'"
+            role="status"
+            aria-live="polite"
+        >
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm font-bold leading-relaxed" x-text="clipboardToast"></p>
+                <button type="button" class="btn btn-ghost min-h-10 px-2" x-on:click="clipboardToast = ''" aria-label="Tutup notifikasi copy dan paste">Tutup</button>
+            </div>
+        </div>
 
         <div x-show="pengumpulanPaksa" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-4"
             role="alertdialog" aria-modal="true" aria-labelledby="judul-pengumpulan-paksa">

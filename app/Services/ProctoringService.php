@@ -26,8 +26,13 @@ class ProctoringService
      *
      * @return array{jumlah:int,maks:?int,durasi:int,batas_tercapai:bool}
      */
-    public function catat(Attempt $attempt, string $tipe, ?string $detail, ?string $ip): array
-    {
+    public function catat(
+        Attempt $attempt,
+        string $tipe,
+        ?string $detail,
+        ?string $ip,
+        bool $hitungPelanggaran = true,
+    ): array {
         $attempt->loadMissing(['user', 'quizSession']);
         $session = $attempt->quizSession;
 
@@ -38,7 +43,7 @@ class ProctoringService
             'created_at' => now(),
         ]);
 
-        if ($attempt->status === 'berjalan' && $attempt->peringatan_mulai_at === null) {
+        if ($hitungPelanggaran && $attempt->status === 'berjalan' && $attempt->peringatan_mulai_at === null) {
             $attempt->forceFill([
                 'jumlah_pelanggaran' => (int) $attempt->jumlah_pelanggaran + 1,
                 'peringatan_mulai_at' => now()->getTimestampMs(),
@@ -55,7 +60,7 @@ class ProctoringService
                 'user_id' => $attempt->user_id,
             ]);
 
-            if ($session->display_token) {
+            if ($session->display_token && $hitungPelanggaran) {
                 $label = AttemptEvent::label($tipe);
 
                 PesertaPeringatan::safeDispatch($session->display_token, [
@@ -75,7 +80,8 @@ class ProctoringService
             'jumlah' => $jumlah,
             'maks' => $maks !== null ? (int) $maks : null,
             'durasi' => $durasi,
-            'batas_tercapai' => $maks === null || ($jumlah > 0 && $jumlah % (int) $maks === 0),
+            'batas_tercapai' => $hitungPelanggaran
+                && ($maks === null || ($jumlah > 0 && $jumlah % (int) $maks === 0)),
         ];
     }
 

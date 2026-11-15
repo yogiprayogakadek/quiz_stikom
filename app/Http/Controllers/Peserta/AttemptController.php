@@ -476,11 +476,20 @@ class AttemptController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        $attempt->loadMissing('quizSession');
+        $clipboard = in_array($tipe, ['copy_attempt', 'paste_attempt'], true);
+        $clipboardPolicy = $attempt->quizSession?->clipboard_policy ?? 'monitor';
+
+        if ($clipboard && $clipboardPolicy === 'allow') {
+            return response()->json(['ok' => true, 'ignored' => true]);
+        }
+
         $hasil = $proctoring->catat(
             $attempt,
             $tipe,
             $request->input('detail'),
             $request->ip(),
+            ! $clipboard || $clipboardPolicy === 'block',
         );
 
         return response()->json([
@@ -489,6 +498,7 @@ class AttemptController extends Controller
             'maks' => $hasil['maks'],
             'durasi' => $hasil['durasi'],
             'perlu_ditinjau' => $hasil['batas_tercapai'],
+            'clipboard_policy' => $clipboard ? $clipboardPolicy : null,
         ], 201);
     }
 

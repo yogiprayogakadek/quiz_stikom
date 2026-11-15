@@ -942,6 +942,10 @@ class QuizEngine
     {
         return AttemptEvent::query()
             ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
+            ->when(
+                ($session->clipboard_policy ?? 'monitor') !== 'block',
+                fn ($query) => $query->whereNotIn('tipe', ['copy_attempt', 'paste_attempt'])
+            )
             ->where('created_at', '>=', now()->subMinutes(5))
             ->with(['attempt' => fn ($q) => $q->with('user')->withCount('events')])
             ->orderByDesc('id')

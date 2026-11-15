@@ -23,6 +23,9 @@
             memprosesPelanggaran: false,
             pengumpulanPaksa: false,
             pesanPengumpulanPaksa: '',
+            clipboardToast: '',
+            clipboardToastBlocked: false,
+            clipboardToastTimer: null,
             audioCtx: null,
             terakhirBipDetik: null,
             isOnline: navigator.onLine ?? true,
@@ -379,6 +382,14 @@
                     window.location.href = data?.redirect_url || config.dashboardUrl;
                 }, 3000);
             },
+            tampilkanClipboardToast(pesan, blocked = false) {
+                this.clipboardToast = pesan;
+                this.clipboardToastBlocked = blocked;
+                if (this.clipboardToastTimer) clearTimeout(this.clipboardToastTimer);
+                this.clipboardToastTimer = setTimeout(() => {
+                    this.clipboardToast = '';
+                }, 4000);
+            },
             pasangEcho() {
                 const echo = window.buatEcho();
                 if (!echo) {
@@ -432,7 +443,9 @@
                 }).then((hasil) => {
                     if (hasil.ok) {
                         this.jumlahKejadian = hasil.data.jumlah;
-                        this.peringatan = 'Aktivitas ini tercatat: ' + this.labelKejadian(tipe) + '. Tetap fokus pada soal.';
+                        if (!['copy_attempt', 'paste_attempt'].includes(tipe)) {
+                            this.peringatan = 'Aktivitas ini tercatat: ' + this.labelKejadian(tipe) + '. Tetap fokus pada soal.';
+                        }
                     }
                 });
             },
@@ -442,7 +455,8 @@
                     tab_hidden: 'tab kuis disembunyikan',
                     fullscreen_exit: 'keluar dari layar penuh',
                     fullscreen_exit_timeout: 'toleransi keluar layar penuh habis',
-                    copy_attempt: 'upaya menyalin soal'
+                    copy_attempt: 'upaya menyalin soal',
+                    paste_attempt: 'paste teks ke jawaban'
                 }[tipe] ?? tipe;
             },
             pasangPengawas() {
@@ -477,11 +491,28 @@
                 });
 
                 document.addEventListener('copy', (event) => {
-                    const area = document.getElementById('area-serempak');
-                    if (area && window.getSelection()?.anchorNode && area.contains(window.getSelection().anchorNode)) {
-                        event.preventDefault();
-                        this.kirimKejadian('copy_attempt');
+                    const target = event.target instanceof Element ? event.target : null;
+                    if (target?.closest('textarea, input, [contenteditable="true"]')) return;
+
+                    const anchor = window.getSelection()?.anchorNode;
+                    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
+                    if (!element?.closest('[data-protected-question]')) return;
+
+                    if (config.clipboardPolicy === 'allow') {
+                        this.tampilkanClipboardToast('Teks soal disalin. Sesi ini mengizinkan copy.');
+                        return;
                     }
+
+                    event.preventDefault();
+                    const blocked = config.clipboardPolicy === 'block';
+                    this.tampilkanClipboardToast(
+                        blocked
+                            ? 'Copy soal diblokir dan dihitung sebagai pelanggaran.'
+                            : 'Copy soal diblokir dan dicatat tanpa menambah pelanggaran.',
+                        blocked
+                    );
+                    this.kirimKejadian('copy_attempt');
+                    if (blocked) this.mulaiToleransi();
                 });
 
                 if (this.isFullscreen) {
@@ -501,6 +532,7 @@
             dashboardUrl: '{{ route('peserta.dashboard') }}',
             channel: '{{ $channel }}',
             durasiPeringatan: {{ $session->durasiPeringatan() }},
+            clipboardPolicy: @js($session->clipboard_policy ?? 'monitor'),
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
             pelanggaranUrl: '{{ route('peserta.session.pelanggaran', $session) }}'
         })"
@@ -596,7 +628,7 @@
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card" data-protected-question>
                     <span class="pill pill-brand">Pilihan ganda</span>
 
                     <h2 id="teks-soal-serempak" class="question-text mt-4 whitespace-pre-line" x-text="state.soal.teks"></h2>
@@ -674,6 +706,20 @@
         <form id="form-pelanggaran" method="POST" action="{{ route('peserta.session.pelanggaran', $session) }}" class="hidden">
             @csrf
         </form>
+
+        <div
+            x-show="clipboardToast"
+            x-cloak
+            class="fixed right-4 top-4 z-[80] w-[min(calc(100vw-2rem),24rem)] rounded-xl border bg-page p-4 shadow-xl"
+            x-bind:class="clipboardToastBlocked ? 'border-coral text-coral-deep' : 'border-brand text-ink'"
+            role="status"
+            aria-live="polite"
+        >
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm font-bold leading-relaxed" x-text="clipboardToast"></p>
+                <button type="button" class="btn btn-ghost min-h-10 px-2" x-on:click="clipboardToast = ''" aria-label="Tutup notifikasi copy dan paste">Tutup</button>
+            </div>
+        </div>
 
         <div x-show="pengumpulanPaksa" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-4"
             role="alertdialog" aria-modal="true" aria-labelledby="judul-pengumpulan-paksa-serempak">

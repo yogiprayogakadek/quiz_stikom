@@ -56,6 +56,7 @@ class TrialSessionTest extends TestCase
         $this->assertSame($session->max_pelanggaran, $trialSession->max_pelanggaran);
         $this->assertSame($session->pelanggaran_action, $trialSession->pelanggaran_action);
         $this->assertSame($session->pelanggaran_penalty_seconds, $trialSession->pelanggaran_penalty_seconds);
+        $this->assertSame($session->clipboard_policy, $trialSession->clipboard_policy);
         $this->assertSame($session->timing_mode, $trialSession->timing_mode);
         $this->assertSame([$selected->id], $trialSession->allowedParticipants()->pluck('users.id')->all());
         $this->assertFalse($trialSession->isUserAllowed($unselected));
@@ -288,6 +289,7 @@ class TrialSessionTest extends TestCase
             'durasi_peringatan' => 45,
             'pelanggaran_action' => 'reduce_time',
             'pelanggaran_penalty_seconds' => 90,
+            'clipboard_policy' => 'block',
             'jeda_detik' => 7,
             'durasi_total_detik' => 3600,
             'timing_mode' => 'duration',

@@ -121,7 +121,17 @@ class SessionMonitorTest extends TestCase
             ->getJson('/dashboard/state')
             ->assertOk()
             ->assertJsonPath('sesi_tersedia.0.id', $session->id)
+            ->assertJsonPath('sesi_tersedia.0.rules.clipboard_policy', 'monitor')
+            ->assertJsonPath('sesi_tersedia.0.rules.warning_seconds', 30)
             ->assertJsonPath('sesi_tersedia.0.attempt', null);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Periksa aturan ujian')
+            ->assertSee('bukaAturan(sesi', false)
+            ->assertSee('Saya sudah membaca aturan sesi dan siap mengikuti ujian.');
     }
 
     public function test_peserta_belum_gabung_tidak_bisa_masuk_sesi_serempak(): void
@@ -174,6 +184,7 @@ class SessionMonitorTest extends TestCase
             ->assertOk()
             ->assertSee('Peserta di sesi ini')
             ->assertSee('id="monitor-peserta"', false)
+            ->assertSee('m-auto max-h-[calc(100dvh-2rem)]', false)
             ->assertSee('Belum bergabung');
     }
 

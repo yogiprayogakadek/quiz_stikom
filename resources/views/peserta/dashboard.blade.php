@@ -6,6 +6,10 @@
             notifPesan: '',
             audioCtx: null,
             cari: '',
+            rulesSession: null,
+            rulesAction: '',
+            rulesUrl: '',
+            rulesAccepted: false,
 
             get filteredSesiList() {
                 if (!this.cari.trim()) return this.sesiList;
@@ -41,6 +45,58 @@
                 if (this.audioCtx && this.audioCtx.state === 'suspended') {
                     this.audioCtx.resume();
                 }
+            },
+
+            bukaAturan(sesi, action, url) {
+                this.rulesSession = sesi;
+                this.rulesAction = action;
+                this.rulesUrl = url;
+                this.rulesAccepted = false;
+                this.$nextTick(() => this.$refs.rulesDialog.showModal());
+            },
+
+            tutupAturan() {
+                this.$refs.rulesDialog.close();
+                this.rulesAccepted = false;
+            },
+
+            lanjutDariAturan() {
+                if (!this.rulesAccepted || !this.rulesUrl) return;
+                if (this.rulesAction === 'start') {
+                    this.$refs.rulesStartForm.submit();
+                    return;
+                }
+                window.location.assign(this.rulesUrl);
+            },
+
+            aturanWaktu(sesi) {
+                const rules = sesi?.rules ?? {};
+                if (rules.timing_mode === 'scheduled') {
+                    return 'Jadwal server: ' + rules.scheduled_start + ' sampai ' + rules.scheduled_end + ' (' + rules.timezone + ').';
+                }
+                if (sesi?.mode === 'serempak') return 'Waktu soal dikendalikan admin untuk seluruh peserta.';
+                return rules.duration_minutes
+                    ? 'Durasi pengerjaan ' + rules.duration_minutes + ' menit sejak Anda mulai.'
+                    : 'Durasi mengikuti total waktu soal dan dimulai saat Anda menekan mulai.';
+            },
+
+            aturanPelanggaran(sesi) {
+                const rules = sesi?.rules ?? {};
+                const batas = rules.max_violations;
+                const awal = batas
+                    ? 'Sanksi diterapkan setiap ' + batas + ' pelanggaran.'
+                    : 'Satu pelanggaran yang dihitung dapat memicu sanksi.';
+                const sanksi = rules.violation_action === 'reduce_time'
+                    ? ' Waktu dikurangi ' + rules.penalty_seconds + ' detik.'
+                    : ' Pekerjaan dikumpulkan dan akun dikeluarkan.';
+                return awal + ' Anda memiliki ' + rules.warning_seconds + ' detik untuk kembali ke ujian.' + sanksi;
+            },
+
+            aturanClipboard(sesi) {
+                const policy = sesi?.rules?.clipboard_policy ?? 'monitor';
+                if (policy === 'allow') return 'Copy soal dan paste jawaban diizinkan tanpa pencatatan.';
+                if (policy === 'block') return 'Copy soal dan paste jawaban diblokir serta dihitung sebagai pelanggaran.';
+                return 'Copy soal diblokir. Paste jawaban diizinkan. Keduanya dicatat tanpa menambah pelanggaran.';
             },
 
             bunyikanChime() {
@@ -374,25 +430,22 @@
                                 <template x-if="sesi.attempt">
                                     <div class="flex items-center gap-2">
                                         <template x-if="sesi.mode === 'acak' && sesi.attempt.status === 'menunggu'">
-                                            <form method="POST" :action="sesi.urls.start">
-                                                <input type="hidden" name="_token" :value="csrfToken">
-                                                <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition">
-                                                    <span>Mulai Ujian</span>
-                                                    <x-icon name="play" :size="16" />
-                                                </button>
-                                            </form>
+                                            <button type="button" x-on:click="bukaAturan(sesi, 'start', sesi.urls.start)" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition">
+                                                <span>Mulai Ujian</span>
+                                                <x-icon name="play" :size="16" />
+                                            </button>
                                         </template>
                                         <template x-if="sesi.mode === 'acak' && sesi.attempt.status === 'berjalan'">
-                                            <a :href="sesi.urls.show" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition">
+                                            <button type="button" x-on:click="bukaAturan(sesi, 'continue', sesi.urls.show)" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition">
                                                 <span>Lanjut Soal</span>
                                                 <x-icon name="play" :size="16" />
-                                            </a>
+                                            </button>
                                         </template>
                                         <template x-if="sesi.mode === 'serempak' && sesi.attempt.status !== 'selesai'">
-                                            <a :href="sesi.urls.play" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-xs transition">
+                                            <button type="button" x-on:click="bukaAturan(sesi, 'room', sesi.urls.play)" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-xs transition">
                                                 <span>Ruang Serempak</span>
                                                 <x-icon name="play" :size="16" />
-                                            </a>
+                                            </button>
                                         </template>
                                         <template x-if="sesi.attempt.status === 'selesai'">
                                             <a :href="sesi.urls.result" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-bold transition">
@@ -720,5 +773,59 @@
                 </div>
             </div>
         </div>
+
+        <dialog
+            x-ref="rulesDialog"
+            class="m-auto max-h-[calc(100dvh-2rem)] w-[min(94vw,42rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/60"
+            aria-labelledby="judul-aturan-ujian"
+            x-on:close="rulesAccepted = false"
+        >
+            <div class="p-5 sm:p-7">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <h2 id="judul-aturan-ujian" class="font-display text-2xl font-extrabold text-slate-950">Periksa aturan ujian</h2>
+                        <p class="mt-2 text-sm leading-relaxed text-slate-600">
+                            Baca aturan <span class="font-bold text-slate-900" x-text="rulesSession?.nama"></span> sebelum masuk.
+                        </p>
+                    </div>
+                    <button type="button" class="btn btn-ghost min-h-11 px-3" x-on:click="tutupAturan()" aria-label="Tutup aturan ujian">Tutup</button>
+                </div>
+
+                <dl class="mt-6 divide-y divide-slate-200 border-y border-slate-200">
+                    <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
+                        <dt class="text-sm font-bold text-slate-900">Mode dan waktu</dt>
+                        <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0" x-text="aturanWaktu(rulesSession)"></dd>
+                    </div>
+                    <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
+                        <dt class="text-sm font-bold text-slate-900">Pelanggaran</dt>
+                        <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0" x-text="aturanPelanggaran(rulesSession)"></dd>
+                    </div>
+                    <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
+                        <dt class="text-sm font-bold text-slate-900">Copy dan paste</dt>
+                        <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0" x-text="aturanClipboard(rulesSession)"></dd>
+                    </div>
+                    <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
+                        <dt class="text-sm font-bold text-slate-900">Saat mengerjakan</dt>
+                        <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0">Gunakan layar penuh. Jawaban disimpan otomatis dan ditahan di perangkat saat koneksi terputus.</dd>
+                    </div>
+                </dl>
+
+                <label class="mt-5 flex items-start gap-3 rounded-xl bg-blue-50 p-4 text-blue-950">
+                    <input type="checkbox" x-model="rulesAccepted" class="mt-0.5 h-5 w-5 shrink-0" required>
+                    <span class="text-sm font-bold leading-relaxed">Saya sudah membaca aturan sesi dan siap mengikuti ujian.</span>
+                </label>
+
+                <form x-ref="rulesStartForm" method="POST" x-bind:action="rulesUrl" class="hidden">
+                    <input type="hidden" name="_token" x-bind:value="csrfToken">
+                </form>
+
+                <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" class="btn btn-secondary" x-on:click="tutupAturan()">Batal</button>
+                    <button type="button" class="btn btn-primary" x-bind:disabled="!rulesAccepted" x-on:click="lanjutDariAturan()">
+                        <span x-text="rulesAction === 'start' ? 'Mulai ujian' : 'Masuk ke ujian'"></span>
+                    </button>
+                </div>
+            </div>
+        </dialog>
     </div>
 </x-layouts.peserta>

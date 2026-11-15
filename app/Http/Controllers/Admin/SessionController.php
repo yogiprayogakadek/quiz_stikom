@@ -83,6 +83,7 @@ class SessionController extends Controller
             'pelanggaran_penalty_seconds' => ($data['pelanggaran_action'] ?? 'submit') === 'reduce_time'
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
+            'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
             ...$this->timingData($data),
@@ -209,6 +210,7 @@ class SessionController extends Controller
                 'durasi_peringatan' => $sourceSession->durasi_peringatan,
                 'pelanggaran_action' => $sourceSession->pelanggaran_action,
                 'pelanggaran_penalty_seconds' => $sourceSession->pelanggaran_penalty_seconds,
+                'clipboard_policy' => $sourceSession->clipboard_policy,
                 'jeda_detik' => $sourceSession->jeda_detik,
                 'durasi_total_detik' => $sourceSession->durasi_total_detik,
                 'timing_mode' => $sourceSession->timing_mode,
@@ -357,6 +359,7 @@ class SessionController extends Controller
             'pelanggaran_penalty_seconds' => ($data['pelanggaran_action'] ?? 'submit') === 'reduce_time'
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
+            'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
             ...$this->timingData($data),

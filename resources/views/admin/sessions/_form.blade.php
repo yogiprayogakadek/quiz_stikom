@@ -10,6 +10,7 @@
     $maxPelanggaran = old('max_pelanggaran', $session?->max_pelanggaran);
     $durasiPeringatan = old('durasi_peringatan', $session?->durasi_peringatan ?? 30);
     $pelanggaranAction = old('pelanggaran_action', $session?->pelanggaran_action ?? 'submit');
+    $clipboardPolicy = old('clipboard_policy', $session?->clipboard_policy ?? 'monitor');
     $timingMode = old('timing_mode', $session?->timing_mode ?? 'duration');
     $scheduledStart = old('scheduled_start_at', $session?->scheduled_start_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
     $scheduledEnd = old('scheduled_end_at', $session?->scheduled_end_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
@@ -227,6 +228,17 @@
                 x-bind:disabled="pelanggaranAction !== 'reduce_time'" x-bind:required="pelanggaranAction === 'reduce_time'"
                 @error('pelanggaran_penalty_seconds') aria-invalid="true" @enderror>
             @error('pelanggaran_penalty_seconds') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <div class="mt-5">
+            <label for="clipboard_policy" class="label">Copy dan paste saat ujian</label>
+            <select id="clipboard_policy" name="clipboard_policy" class="input">
+                <option value="allow" @selected($clipboardPolicy === 'allow')>Izinkan tanpa pencatatan</option>
+                <option value="monitor" @selected($clipboardPolicy === 'monitor')>Pantau tanpa menghukum</option>
+                <option value="block" @selected($clipboardPolicy === 'block')>Blokir dan hitung sebagai pelanggaran</option>
+            </select>
+            <p class="help mt-2">Mode Pantau memblokir copy soal dan mencatat paste jawaban, tetapi tidak menambah hitungan pelanggaran.</p>
+            @error('clipboard_policy') <p class="field-error">{{ $message }}</p> @enderror
         </div>
     </fieldset>
 

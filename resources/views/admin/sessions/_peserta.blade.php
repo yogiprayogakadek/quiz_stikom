@@ -128,7 +128,7 @@
                                         x-on:click="document.getElementById('reset-attempt-{{ $attempt->id }}').showModal()">
                                         Ulangi attempt
                                     </button>
-                                    <dialog id="reset-attempt-{{ $attempt->id }}" class="w-[min(92vw,34rem)] rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40">
+                                    <dialog id="reset-attempt-{{ $attempt->id }}" class="m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,34rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40">
                                         <form method="POST" action="{{ route('admin.sessions.attempts.reset', [$session, $attempt]) }}"
                                             class="p-5 sm:p-6" x-data="{ resetMode: 'fresh' }" data-progress-message="Membuka ulang attempt peserta...">
                                             @csrf

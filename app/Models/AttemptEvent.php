@@ -12,6 +12,7 @@ class AttemptEvent extends Model
         'tab_hidden' => ['pesan' => 'Membuka tab lain / tab disembunyikan', 'level' => 'warning'],
         'blur_window' => ['pesan' => 'Berpindah ke jendela aplikasi lain', 'level' => 'warning'],
         'copy_attempt' => ['pesan' => 'Mencoba menyalin (copy) teks soal', 'level' => 'warning'],
+        'paste_attempt' => ['pesan' => 'Menempelkan (paste) teks ke jawaban', 'level' => 'warning'],
         'fullscreen_exit_timeout' => ['pesan' => 'Toleransi habis: pelanggaran tercatat', 'level' => 'danger'],
         'time_penalty' => ['pesan' => 'Waktu ujian dikurangi sebagai sanksi', 'level' => 'danger'],
     ];
