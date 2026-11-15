@@ -116,7 +116,7 @@ class User extends Authenticatable implements MustVerifyEmailContract
     public function organizations(): BelongsToMany
     {
         return $this->belongsToMany(Organization::class, 'organization_memberships')
-            ->withPivot(['role', 'status'])
+            ->withPivot(['role', 'status', 'last_seen_at'])
             ->withTimestamps();
     }
 

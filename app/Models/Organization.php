@@ -41,7 +41,7 @@ class Organization extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'organization_memberships')
-            ->withPivot(['role', 'status'])
+            ->withPivot(['role', 'status', 'last_seen_at'])
             ->withTimestamps();
     }
 

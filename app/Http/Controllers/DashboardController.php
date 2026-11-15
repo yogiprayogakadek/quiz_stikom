@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -79,7 +80,10 @@ class DashboardController extends Controller
         $loginHariIni = Attempt::whereHas('quizSession')
             ->where('created_at', '>=', now()->startOfDay())
             ->count();
-        $pesertaOnline = $this->getPesertaOnline();
+        $presence = $this->getPesertaOnline();
+        $pesertaOnline = $presence['peserta'];
+        $totalPesertaOnline = $presence['total'];
+        $presenceServerNow = now()->getTimestampMs();
         $aktivitasLogin = $this->getAktivitasLogin();
 
         return view('admin.dashboard', compact(
@@ -89,6 +93,9 @@ class DashboardController extends Controller
             'leaderboardTerbaru',
             'loginHariIni',
             'pesertaOnline',
+            'totalPesertaOnline',
+            'presenceServerNow',
+            'organizationId',
             'aktivitasLogin',
             'opsiKelas',
             'opsiKuis',
@@ -99,11 +106,11 @@ class DashboardController extends Controller
 
     public function pesertaOnline(): JsonResponse
     {
-        $peserta = $this->getPesertaOnline();
+        $presence = $this->getPesertaOnline();
 
         return response()->json([
-            'total' => count($peserta),
-            'peserta' => $peserta,
+            'total' => $presence['total'],
+            'peserta' => $presence['peserta'],
             'activities' => $this->getAktivitasLogin(),
             'server_now' => now()->getTimestampMs(),
         ]);
@@ -111,45 +118,35 @@ class DashboardController extends Controller
 
     private function getPesertaOnline(): array
     {
-        $threshold = now()->subMinutes(15)->timestamp;
+        $organizationId = app(OrganizationContext::class)->id();
+        abort_unless($organizationId !== null, 403);
 
-        try {
-            $organizationId = app(OrganizationContext::class)->id();
-            $query = DB::table('sessions')
-                ->join('users', 'sessions.user_id', '=', 'users.id')
-                ->where('users.role', 'peserta')
-                ->whereNotNull('users.current_session_token')
-                ->where('sessions.last_activity', '>=', $threshold);
+        $query = DB::table('organization_memberships')
+            ->join('users', 'organization_memberships.user_id', '=', 'users.id')
+            ->where('organization_memberships.organization_id', $organizationId)
+            ->where('organization_memberships.role', 'participant')
+            ->where('organization_memberships.status', 'active')
+            ->where('users.role', 'peserta')
+            ->whereNull('users.deleted_at')
+            ->where('organization_memberships.last_seen_at', '>=', now()->subMinutes(2));
 
-            if ($organizationId !== null) {
-                $query->join('organization_memberships', 'users.id', '=', 'organization_memberships.user_id')
-                    ->where('organization_memberships.organization_id', $organizationId)
-                    ->where('organization_memberships.status', 'active');
-            }
-
-            return $query
-                ->select(
-                    'users.id',
-                    'users.nama',
-                    'users.username',
-                    DB::raw('MAX(sessions.last_activity) as last_activity')
-                )
-                ->groupBy('users.id', 'users.nama', 'users.username')
-                ->orderByDesc('last_activity')
+        return [
+            'total' => (clone $query)->count(),
+            'peserta' => $query
+                ->select('users.id', 'users.nama', 'users.username', 'organization_memberships.last_seen_at')
+                ->orderByDesc('organization_memberships.last_seen_at')
                 ->limit(20)
                 ->get()
-                ->map(fn ($u) => [
-                    'id' => (int) $u->id,
-                    'nama' => $u->nama,
-                    'username' => $u->username,
-                    'inisial' => strtoupper(mb_substr($u->nama, 0, 1)),
-                    'last_activity_ms' => (int) $u->last_activity * 1000,
+                ->map(fn ($user) => [
+                    'id' => (int) $user->id,
+                    'nama' => $user->nama,
+                    'username' => $user->username,
+                    'inisial' => strtoupper(mb_substr($user->nama, 0, 1)),
+                    'last_activity_at' => Carbon::parse($user->last_seen_at)->toISOString(),
                     'status' => 'online',
                 ])
-                ->all();
-        } catch (\Throwable $e) {
-            return [];
-        }
+                ->all(),
+        ];
     }
 
     private function getAktivitasLogin(): array

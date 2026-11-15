@@ -14,6 +14,7 @@ class PesertaStatusLogin implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
+        public int $organizationId,
         public int $userId,
         public string $nama,
         public string $username,
@@ -24,6 +25,7 @@ class PesertaStatusLogin implements ShouldBroadcastNow
     ) {}
 
     public static function safeDispatch(
+        int $organizationId,
         int $userId,
         string $nama,
         string $username,
@@ -34,6 +36,7 @@ class PesertaStatusLogin implements ShouldBroadcastNow
     ): void {
         try {
             static::dispatch(
+                $organizationId,
                 $userId,
                 $nama,
                 $username,
@@ -49,7 +52,7 @@ class PesertaStatusLogin implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('admin-dashboard')];
+        return [new PrivateChannel('admin-dashboard.'.$this->organizationId)];
     }
 
     public function broadcastAs(): string
@@ -60,6 +63,7 @@ class PesertaStatusLogin implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
+            'organization_id' => $this->organizationId,
             'user_id' => $this->userId,
             'nama' => $this->nama,
             'username' => $this->username,

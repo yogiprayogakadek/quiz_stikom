@@ -211,7 +211,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('sessions.attempts.kick');
 });
 
-Route::middleware(['auth', 'role:peserta', 'organization_member'])->group(function () {
+Route::middleware(['auth', 'role:peserta', 'organization_member', 'participant_presence'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'peserta'])->name('peserta.dashboard');
     Route::get('/dashboard/state', [DashboardController::class, 'pesertaState'])->name('peserta.dashboard.state');
     Route::post('/dashboard/panduan-selesai', [DashboardController::class, 'selesaikanTour'])->name('peserta.tour.selesai');

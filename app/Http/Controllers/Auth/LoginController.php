@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\TrackParticipantPresence;
 use App\Http\Requests\LoginRequest;
 use App\Models\Organization;
 use App\Models\ParticipantLoginActivity;
@@ -109,6 +110,10 @@ class LoginController extends Controller
 
         if ($user->role === 'peserta') {
             ParticipantLoginActivity::recordAndBroadcast($user, 'login');
+            $organizationId = app(OrganizationContext::class)->id();
+            if ($organizationId !== null) {
+                $request->session()->put(TrackParticipantPresence::sessionKey($organizationId), now()->timestamp);
+            }
         }
 
         if ($user->wajibGantiPassword()) {

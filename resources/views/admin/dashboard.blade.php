@@ -45,6 +45,7 @@
 
         window.adminPesertaOnline = (config) => ({
             pesertaList: config.initial || [],
+            totalOnline: config.total || 0,
             aktivitasList: config.activities || [],
             notifikasiList: [],
             suaraAktif: true,
@@ -52,6 +53,8 @@
             statusKoneksi: 'connecting',
             sedangSinkron: false,
             gagalSinkron: false,
+            serverOffset: Date.now() - (config.serverNow || Date.now()),
+            terakhirSinkron: config.serverNow || Date.now(),
 
             get labelKoneksi() {
                 if (this.statusKoneksi === 'connected') return 'Realtime tersambung';
@@ -63,6 +66,17 @@
                 if (this.statusKoneksi === 'connected') return 'text-emerald-700';
                 if (this.gagalSinkron) return 'text-rose-700';
                 return 'text-amber-700';
+            },
+
+            get labelSinkron() {
+                const waktu = new Date(this.terakhirSinkron);
+                if (Number.isNaN(waktu.getTime())) return 'Belum tersinkron';
+
+                return 'Terakhir sinkron ' + new Intl.DateTimeFormat('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                }).format(waktu);
             },
 
             init() {
@@ -154,7 +168,7 @@
                         });
                     }
 
-                    echo.private('admin-dashboard')
+                    echo.private('admin-dashboard.' + config.organizationId)
                         .listen('.PesertaStatusLogin', (data) => {
                             if (data.status === 'login') {
                                 this.tambahPeserta(data);
@@ -162,6 +176,7 @@
                                 this.hapusPeserta(data);
                             }
                             this.tambahAktivitas(data);
+                            this.sinkronUlang();
                         });
                 } catch (e) {
                     this.statusKoneksi = 'polling';
@@ -197,6 +212,24 @@
                 }).format(tanggal);
             },
 
+            aktivitasTerakhir(waktu) {
+                const tanggal = new Date(waktu);
+                if (Number.isNaN(tanggal.getTime())) return 'Aktivitas belum tersedia';
+
+                const selisihDetik = Math.max(0, Math.floor(((Date.now() - this.serverOffset) - tanggal.getTime()) / 1000));
+                if (selisihDetik < 10) return 'Aktif sekarang';
+                if (selisihDetik < 60) return 'Aktif ' + selisihDetik + ' detik lalu';
+
+                return 'Aktif ' + Math.floor(selisihDetik / 60) + ' menit lalu';
+            },
+
+            labelAktivitas(aktivitas) {
+                if (aktivitas.status === 'login') return 'Masuk';
+                if (aktivitas.reason === 'fullscreen_violation') return 'Keluar karena pelanggaran';
+                if (aktivitas.reason === 'manual') return 'Keluar manual';
+                return 'Keluar';
+            },
+
             tambahNotifikasi(item) {
                 const id = 'notif-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
                 const notif = {
@@ -225,6 +258,7 @@
                     nama: data.nama,
                     username: data.username,
                     inisial: (data.nama || 'P').charAt(0).toUpperCase(),
+                    last_activity_at: data.waktu || new Date(Date.now() - this.serverOffset).toISOString(),
                     isNew: true,
                 };
                 this.pesertaList.unshift(itemBaru);
@@ -266,6 +300,11 @@
                     if (res.ok) {
                         const json = await res.json();
                         this.gagalSinkron = false;
+                        this.totalOnline = Number(json.total || 0);
+                        if (json.server_now) {
+                            this.serverOffset = Date.now() - json.server_now;
+                            this.terakhirSinkron = json.server_now;
+                        }
                         if (Array.isArray(json.peserta)) {
                             const currentIds = new Set(this.pesertaList.map(p => p.id));
                             const newlyLoggedIn = json.peserta.filter(p => !currentIds.has(p.id));
@@ -707,7 +746,10 @@
         <div
             x-data="adminPesertaOnline({
                 initial: @json($pesertaOnline),
+                total: {{ $totalPesertaOnline }},
                 activities: @json($aktivitasLogin),
+                organizationId: {{ $organizationId }},
+                serverNow: {{ $presenceServerNow }},
                 endpoint: '{{ route('admin.dashboard.peserta-online', [], false) }}'
             })"
             class="xl:col-span-4 space-y-6 xl:sticky xl:top-8"
@@ -721,6 +763,7 @@
                     <div>
                         <p class="text-[11px] font-bold text-slate-500">Koneksi dashboard</p>
                         <p class="text-sm font-extrabold" :class="kelasKoneksi" x-text="labelKoneksi"></p>
+                        <p class="mt-0.5 text-[10px] text-slate-500" x-text="labelSinkron"></p>
                     </div>
                 </div>
 
@@ -799,7 +842,7 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                            <span x-text="pesertaList.length"></span> Online
+                            <span x-text="totalOnline"></span>&nbsp;Online
                         </span>
                         <button
                             type="button"
@@ -839,6 +882,7 @@
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold text-slate-800 truncate" x-text="p.nama"></p>
                                     <p class="text-[10px] text-slate-400 truncate" x-text="'NIM: ' + p.username"></p>
+                                    <p class="mt-0.5 text-[10px] font-semibold text-emerald-700" x-text="aktivitasTerakhir(p.last_activity_at)"></p>
                                 </div>
                             </div>
                             <span
@@ -880,7 +924,7 @@
                                     <p class="truncate text-[11px] text-slate-500">
                                         <span x-text="aktivitas.username"></span>
                                         <span aria-hidden="true"> · </span>
-                                        <span x-text="aktivitas.status === 'login' ? 'Masuk' : 'Keluar'"></span>
+                                        <span x-text="labelAktivitas(aktivitas)"></span>
                                     </p>
                                 </div>
                                 <time class="shrink-0 text-[10px] font-semibold text-slate-500" :datetime="aktivitas.waktu" x-text="waktuAktivitas(aktivitas.waktu)"></time>

@@ -32,7 +32,14 @@ class ParticipantLoginActivity extends Model
             'reason' => $reason,
         ]);
 
+        OrganizationMembership::query()
+            ->where('organization_id', $activity->organization_id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->update(['last_seen_at' => $status === 'login' ? now() : null]);
+
         PesertaStatusLogin::safeDispatch(
+            (int) $activity->organization_id,
             $user->id,
             $user->nama,
             $user->username,

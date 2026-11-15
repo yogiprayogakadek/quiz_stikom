@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Middleware\EnsureOrganizationMember;
 use App\Http\Middleware\EnsureEmailVerifiedWhenPresent;
+use App\Http\Middleware\EnsureOrganizationMember;
 use App\Http\Middleware\EnsureOrganizationOwner;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePlatformAdmin;
@@ -9,6 +9,8 @@ use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureSingleSession;
 use App\Http\Middleware\PreventAccessDuringMaintenance;
 use App\Http\Middleware\SetOrganizationLocale;
+use App\Http\Middleware\TrackParticipantPresence;
+use App\Support\OrganizationContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,7 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
 
         $middleware->redirectGuestsTo(function () {
-            $organization = app(\App\Support\OrganizationContext::class)->current();
+            $organization = app(OrganizationContext::class)->current();
 
             return $organization ? route('organizations.login', $organization) : route('home');
         });
@@ -46,6 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform_admin' => EnsurePlatformAdmin::class,
             'organization_owner' => EnsureOrganizationOwner::class,
             'organization_member' => EnsureOrganizationMember::class,
+            'participant_presence' => TrackParticipantPresence::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
