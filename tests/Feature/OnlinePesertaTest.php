@@ -278,8 +278,25 @@ class OnlinePesertaTest extends TestCase
             'role' => 'admin',
             'current_session_token' => 'admin-tampilan-token',
         ]);
+        $peserta = User::create([
+            'nama' => 'O\'Connor "<& Peserta',
+            'username' => 'nim_"<&',
+            'password' => Hash::make('password'),
+            'role' => 'peserta',
+        ]);
+        DB::table('organization_memberships')
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $peserta->id)
+            ->update(['last_seen_at' => now()]);
+        ParticipantLoginActivity::create([
+            'user_id' => $peserta->id,
+            'organization_id' => $organization->id,
+            'nama' => $peserta->nama,
+            'username' => $peserta->username,
+            'status' => 'login',
+        ]);
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->withSession(['auth_token' => 'admin-tampilan-token', 'organization_id' => $organization->id])
             ->get(route('admin.dashboard'))
             ->assertOk()
@@ -287,6 +304,16 @@ class OnlinePesertaTest extends TestCase
             ->assertSee('Aktif sekarang')
             ->assertSee('admin-dashboard.\' + config.organizationId', false)
             ->assertSee('x-text="totalOnline"', false);
+
+        $html = $response->getContent();
+        $this->assertMatchesRegularExpression(
+            '/x-data="adminPesertaOnline\(JSON\.parse\(\'[^"\r\n]+\'\)\)"/',
+            $html
+        );
+        $this->assertStringContainsString('organizationId', $html);
+        $this->assertStringContainsString('activities', $html);
+        $this->assertStringContainsString('peserta-online', $html);
+        $this->assertStringNotContainsString('x-data="adminPesertaOnline({', $html);
     }
 
     public function test_peserta_tidak_bisa_mengakses_endpoint_peserta_online(): void

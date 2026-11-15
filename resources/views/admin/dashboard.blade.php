@@ -744,14 +744,14 @@
 
         {{-- RIGHT COLUMN WIDGETS (4 Columns on xl, Sticky on Desktop) --}}
         <div
-            x-data="adminPesertaOnline({
-                initial: @json($pesertaOnline),
-                total: {{ $totalPesertaOnline }},
-                activities: @json($aktivitasLogin),
-                organizationId: {{ $organizationId }},
-                serverNow: {{ $presenceServerNow }},
-                endpoint: '{{ route('admin.dashboard.peserta-online', [], false) }}'
-            })"
+            x-data="adminPesertaOnline(@js([
+                'initial' => $pesertaOnline,
+                'total' => $totalPesertaOnline,
+                'activities' => $aktivitasLogin,
+                'organizationId' => $organizationId,
+                'serverNow' => $presenceServerNow,
+                'endpoint' => route('admin.dashboard.peserta-online', [], false),
+            ]))"
             class="xl:col-span-4 space-y-6 xl:sticky xl:top-8"
         >
             {{-- Top Stats Counters (Server Status & Login Hari Ini) --}}
