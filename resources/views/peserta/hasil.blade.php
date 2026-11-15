@@ -145,9 +145,11 @@
                                         <div class="space-y-3">
                                             @foreach ($baris['sub_soal'] as $bagian)
                                                 <div>
-                                                    <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['label'] }}</p>
+                                                    <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['code'] }}</p>
                                                     <p class="text-sm text-ink-muted">{{ $bagian['teks'] }}</p>
-                                                    <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['label']] ?? 'Tidak dijawab' }}</p>
+                                                    @if ($bagian['is_leaf'])
+                                                        <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['key']] ?? 'Tidak dijawab' }}</p>
+                                                    @endif
                                                 </div>
                                             @endforeach
                                         </div>

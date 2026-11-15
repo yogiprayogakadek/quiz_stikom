@@ -188,6 +188,66 @@ class EssayTest extends TestCase
         ]);
     }
 
+    public function test_peserta_hanya_menyimpan_jawaban_pada_bagian_terakhir(): void
+    {
+        [, $peserta, , $attempt, , $essay] = $this->buatAcakBerjalan(false);
+
+        $essay->update([
+            'sub_soal_json' => [
+                ['key' => 'a', 'parent_key' => null, 'label' => 'A', 'teks' => 'Jelaskan kebutuhan.', 'petunjuk' => []],
+                ['key' => 'c', 'parent_key' => null, 'label' => 'C', 'teks' => 'Rancang solusi.', 'petunjuk' => []],
+                ['key' => 'c1', 'parent_key' => 'c', 'label' => '1', 'teks' => 'Pilih topologi.', 'petunjuk' => []],
+                ['key' => 'c2', 'parent_key' => 'c', 'label' => '2', 'teks' => 'Pilih media.', 'petunjuk' => []],
+                ['key' => 'c21', 'parent_key' => 'c2', 'label' => '1', 'teks' => 'Jelaskan alasannya.', 'petunjuk' => []],
+            ],
+        ]);
+
+        $this->assertStringContainsString('C.2.1. Jelaskan alasannya.', $essay->fresh()->teksUntukPenilaian());
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('Jelaskan alasannya.')
+            ->assertSee('bagian.is_leaf', false)
+            ->assertSee('bagianJawaban(current)', false);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'c',
+                'jawaban_teks' => 'Induk tidak boleh dijawab.',
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'c1',
+                'jawaban_teks' => 'Topologi star.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('jawaban_teks', "C.1:\nTopologi star.");
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->postJson(route('peserta.attempt.answer', $attempt), [
+                'question_id' => $essay->id,
+                'part_key' => 'c21',
+                'jawaban_teks' => 'Fiber optik lebih stabil.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('jawaban_teks', "C.1:\nTopologi star.\n\nC.2.1:\nFiber optik lebih stabil.");
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertSame([
+            'c1' => 'Topologi star.',
+            'c21' => 'Fiber optik lebih stabil.',
+        ], $answer->jawaban_parts_json);
+    }
+
     public function test_halaman_mengerjakan_menampilkan_sub_soal_dan_jawaban_tersimpan(): void
     {
         [$admin, $peserta, $session, $attempt, $pg, $essay] = $this->buatAcakBerjalan(false);
@@ -226,18 +286,20 @@ class EssayTest extends TestCase
 
         $essay->update([
             'sub_soal_json' => [
-                ['label' => 'A', 'teks' => 'Jelaskan topologi jaringan.', 'petunjuk' => []],
-                ['label' => 'B', 'teks' => 'Pilih media transmisi.', 'petunjuk' => ['Antargedung', 'Dalam lab']],
+                ['key' => 'a', 'parent_key' => null, 'label' => 'A', 'teks' => 'Jelaskan topologi jaringan.', 'petunjuk' => []],
+                ['key' => 'c', 'parent_key' => null, 'label' => 'C', 'teks' => 'Pilih media transmisi.', 'petunjuk' => ['Antargedung', 'Dalam lab']],
+                ['key' => 'c1', 'parent_key' => 'c', 'label' => '1', 'teks' => 'Berikan alasan pemilihan media.', 'petunjuk' => []],
             ],
         ]);
+        $session->update(['pembahasan_mode' => 'terbuka']);
 
         Answer::create([
             'attempt_id' => $attempt->id,
             'question_id' => $essay->id,
-            'jawaban_teks' => "A:\nTopologi star.\n\nB:\nFiber optik.",
+            'jawaban_teks' => "A:\nTopologi star.\n\nC.1:\nFiber optik.",
             'jawaban_parts_json' => [
-                'A' => 'Topologi star.',
-                'B' => 'Fiber optik.',
+                'a' => 'Topologi star.',
+                'c1' => 'Fiber optik.',
             ],
             'waktu_jawab_ms' => 2000,
             'skor' => 0,
@@ -253,6 +315,15 @@ class EssayTest extends TestCase
             ->assertSee('Jelaskan topologi jaringan.')
             ->assertSee('Topologi star.')
             ->assertSee('Pilih media transmisi.')
+            ->assertSee('Berikan alasan pemilihan media.')
+            ->assertSee('Fiber optik.');
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('Pilih media transmisi.')
+            ->assertSee('Berikan alasan pemilihan media.')
             ->assertSee('Fiber optik.');
     }
 

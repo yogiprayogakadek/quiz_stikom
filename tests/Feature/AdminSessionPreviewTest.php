@@ -64,14 +64,17 @@ class AdminSessionPreviewTest extends TestCase
             ->assertSee('Bagian A')
             ->assertSee('Sebutkan bahan fotosintesis.')
             ->assertSee('Gunakan istilah ilmiah.')
-            ->assertSee('Bagian B')
-            ->assertSee('Jelaskan hasil prosesnya.')
+            ->assertSee('Bagian C.1')
+            ->assertSee('Sebutkan hasil utama fotosintesis.')
+            ->assertSee('Bagian C.2.1')
+            ->assertSee('Jelaskan fungsi hasil fotosintesis.')
             ->assertSee('disabled', false)
             ->assertSee('Daftar mengikuti kuis.');
 
         $participantPanel = Str::after($response->getContent(), 'id="panel-peserta"');
 
         $this->assertStringContainsString('<button', $participantPanel);
+        $this->assertSame(3, substr_count($participantPanel, '<textarea id="preview-jawaban-'));
         $this->assertStringNotContainsString('Kunci essay rahasia', $participantPanel);
         $this->assertStringNotContainsString('Ketepatan penjelasan', $participantPanel);
         $this->assertDatabaseCount('attempts', 0);
@@ -197,13 +200,38 @@ class AdminSessionPreviewTest extends TestCase
             'petunjuk_json' => ['Jelaskan bahan yang diperlukan.'],
             'sub_soal_json' => [
                 [
+                    'key' => 'a',
+                    'parent_key' => null,
                     'label' => 'A',
                     'teks' => 'Sebutkan bahan fotosintesis.',
                     'petunjuk' => ['Gunakan istilah ilmiah.'],
                 ],
                 [
-                    'label' => 'B',
-                    'teks' => 'Jelaskan hasil prosesnya.',
+                    'key' => 'c',
+                    'parent_key' => null,
+                    'label' => 'C',
+                    'teks' => 'Uraikan hasil fotosintesis.',
+                    'petunjuk' => [],
+                ],
+                [
+                    'key' => 'c1',
+                    'parent_key' => 'c',
+                    'label' => '1',
+                    'teks' => 'Sebutkan hasil utama fotosintesis.',
+                    'petunjuk' => [],
+                ],
+                [
+                    'key' => 'c2',
+                    'parent_key' => 'c',
+                    'label' => '2',
+                    'teks' => 'Jelaskan pemanfaatan hasil fotosintesis.',
+                    'petunjuk' => [],
+                ],
+                [
+                    'key' => 'c21',
+                    'parent_key' => 'c2',
+                    'label' => '1',
+                    'teks' => 'Jelaskan fungsi hasil fotosintesis.',
                     'petunjuk' => [],
                 ],
             ],

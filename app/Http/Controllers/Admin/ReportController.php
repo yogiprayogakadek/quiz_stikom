@@ -132,7 +132,7 @@ class ReportController extends Controller
                 'bobot' => $question->bobot,
                 'teks' => $question->teks,
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->sub_soal_json ?? [],
+                'sub_soal' => $question->subSoalTerstruktur(),
                 'jawaban_parts' => $essay ? ($answer?->jawaban_parts_json ?? []) : [],
                 'jawaban_saya' => $essay ? $answer?->jawaban_teks : $answer?->option?->teks,
                 'jawaban_benar' => $essay ? null : $question->correctOption()?->teks,

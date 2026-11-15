@@ -214,11 +214,15 @@ class QuizQuestionScopedTest extends TestCase
         $this->assertSame(['Topologi jaringan', 'Media transmisi'], $question->petunjuk_json);
         $this->assertSame([
             [
+                'key' => 'legacy-0',
+                'parent_key' => null,
                 'label' => 'A',
                 'teks' => 'Jelaskan perbedaan topologi bus, star, dan ring.',
                 'petunjuk' => ['Kelebihan', 'Kekurangan'],
             ],
             [
+                'key' => 'legacy-1',
+                'parent_key' => null,
                 'label' => 'B',
                 'teks' => 'Pilih topologi dan media untuk kampus.',
                 'petunjuk' => ['Topologi', 'Media', 'Alasan'],
@@ -237,7 +241,117 @@ class QuizQuestionScopedTest extends TestCase
                     ['label' => 'A', 'teks' => 'Pertanyaan kedua.'],
                 ],
             ])
-            ->assertSessionHasErrors('sub_soal.0.label');
+            ->assertSessionHasErrors('sub_soal');
+    }
+
+    public function test_admin_dapat_menyimpan_dan_memperbarui_sub_soal_bertingkat(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Pohon Soal',
+            'username' => 'admin-pohon-soal',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-pohon-soal-token',
+        ]);
+        $quiz = Quiz::create(['judul' => 'Kuis Bertingkat', 'created_by' => $admin->id]);
+        $payload = [
+            'teks' => 'Analisis rancangan jaringan.',
+            'tipe' => 'essay',
+            'bobot' => 20,
+            'durasi_detik' => 120,
+            'sub_soal' => [
+                ['key' => 'a', 'parent_key' => null, 'label' => 'A', 'teks' => 'Jelaskan kebutuhan jaringan.'],
+                ['key' => 'c', 'parent_key' => null, 'label' => 'C', 'teks' => 'Rancang solusi jaringan.'],
+                ['key' => 'c1', 'parent_key' => 'c', 'label' => '1', 'teks' => 'Pilih topologi.'],
+                ['key' => 'c2', 'parent_key' => 'c', 'label' => '2', 'teks' => 'Pilih media.'],
+                ['key' => 'c21', 'parent_key' => 'c2', 'label' => '1', 'teks' => 'Jelaskan alasan pemilihan media.'],
+            ],
+        ];
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->get(route('admin.quizzes.questions.create', $quiz))
+            ->assertOk()
+            ->assertSee('Tambah turunan')
+            ->assertSee('kodeBagian(bagian)', false);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), $payload)
+            ->assertRedirect();
+
+        $question = Question::where('teks', $payload['teks'])->firstOrFail();
+        $this->assertSame(['A', 'C', 'C.1', 'C.2', 'C.2.1'], collect($question->subSoalTerstruktur())->pluck('code')->all());
+        $this->assertSame(['A', 'C.1', 'C.2.1'], collect($question->subSoalJawaban())->pluck('code')->all());
+
+        $payload['sub_soal'][4]['teks'] = 'Berikan alasan teknis pemilihan media.';
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->put(route('admin.quizzes.questions.update', [$quiz, $question]), $payload)
+            ->assertRedirect();
+
+        $this->assertSame('Berikan alasan teknis pemilihan media.', $question->fresh()->sub_soal_json[4]['teks']);
+    }
+
+    public function test_validasi_sub_soal_menolak_parent_hilang_siklus_dan_lebih_dari_sepuluh_anak(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Validasi Pohon',
+            'username' => 'admin-validasi-pohon',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'admin-validasi-pohon-token',
+        ]);
+        $quiz = Quiz::create(['judul' => 'Kuis Validasi Pohon', 'created_by' => $admin->id]);
+        $base = [
+            'teks' => 'Validasi struktur.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 120,
+        ];
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->from(route('admin.quizzes.questions.create', $quiz))
+            ->post(route('admin.quizzes.questions.store', $quiz), $base + [
+                'sub_soal' => [['key' => 'a', 'parent_key' => 'hilang', 'label' => 'A', 'teks' => 'Bagian A']],
+            ])
+            ->assertSessionHasErrors('sub_soal.0.parent_key');
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), $base + [
+                'sub_soal' => [
+                    ['key' => 'a', 'parent_key' => 'b', 'label' => 'A', 'teks' => 'Bagian A'],
+                    ['key' => 'b', 'parent_key' => 'a', 'label' => 'B', 'teks' => 'Bagian B'],
+                ],
+            ])
+            ->assertSessionHasErrors(['sub_soal.0.parent_key', 'sub_soal.1.parent_key']);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), $base + [
+                'sub_soal' => collect(range(1, 11))->map(fn ($nomor) => [
+                    'key' => 'bagian-'.$nomor,
+                    'parent_key' => null,
+                    'label' => (string) $nomor,
+                    'teks' => 'Bagian '.$nomor,
+                ])->all(),
+            ])
+            ->assertSessionHasErrors('sub_soal');
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.quizzes.questions.store', $quiz), $base + [
+                'sub_soal' => collect(range(1, 51))->map(fn ($nomor) => [
+                    'key' => 'rantai-'.$nomor,
+                    'parent_key' => $nomor === 1 ? null : 'rantai-'.($nomor - 1),
+                    'label' => (string) $nomor,
+                    'teks' => 'Rantai '.$nomor,
+                ])->all(),
+            ])
+            ->assertSessionHasErrors('sub_soal');
     }
 
     public function test_deleting_quiz_cascades_to_its_questions(): void

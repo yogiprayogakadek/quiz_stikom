@@ -97,7 +97,7 @@ class AttemptController extends Controller
                 'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
                 'jawaban_parts' => $jawaban->get($question->id)?->jawaban_parts_json ?? [],
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->sub_soal_json ?? [],
+                'sub_soal' => $question->subSoalTerstruktur(),
                 'ragu_ragu' => (bool) $aq->ragu_ragu,
                 'highlight_soal' => (bool) $aq->highlight_soal,
                 'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
@@ -113,8 +113,8 @@ class AttemptController extends Controller
             if ($lengkap && $question['tipe'] === 'essay' && $question['sub_soal'] !== []) {
                 $parts = $answer->jawaban_parts_json ?? [];
 
-                foreach ($question['sub_soal'] as $bagian) {
-                    if (trim((string) ($parts[$bagian['label']] ?? '')) === '') {
+                foreach (array_filter($question['sub_soal'], fn (array $bagian) => $bagian['is_leaf']) as $bagian) {
+                    if (trim((string) ($parts[$bagian['key']] ?? '')) === '') {
                         $lengkap = false;
                         break;
                     }
@@ -185,7 +185,8 @@ class AttemptController extends Controller
                 return response()->json(['message' => 'Soal essay tidak memakai opsi jawaban.'], 422);
             }
 
-            $subSoal = $question->sub_soal_json ?? [];
+            $subSoal = $question->subSoalTerstruktur();
+            $bagianJawaban = array_values(array_filter($subSoal, fn (array $bagian) => $bagian['is_leaf']));
             $partKey = trim((string) $request->input('part_key', ''));
             $teks = trim((string) $request->input('jawaban_teks', ''));
 
@@ -193,7 +194,7 @@ class AttemptController extends Controller
                 return response()->json(['message' => 'Jawaban soal ini harus dikirim per bagian.'], 422);
             }
 
-            if ($partKey !== '' && ! collect($subSoal)->pluck('label')->contains($partKey)) {
+            if ($partKey !== '' && ! collect($bagianJawaban)->pluck('key')->contains($partKey)) {
                 return response()->json(['message' => 'Bagian soal tidak dikenali.'], 422);
             }
 
@@ -209,9 +210,9 @@ class AttemptController extends Controller
                     $parts[$partKey] = $teks;
                 }
 
-                $labelValid = collect($subSoal)->pluck('label')->map(fn ($label) => (string) $label)->all();
+                $labelValid = collect($bagianJawaban)->pluck('key')->map(fn ($key) => (string) $key)->all();
                 $parts = array_intersect_key($parts, array_flip($labelValid));
-                $teks = $this->gabungkanJawabanParts($subSoal, $parts);
+                $teks = $this->gabungkanJawabanParts($bagianJawaban, $parts);
             }
 
             if ($teks === '') {
@@ -391,7 +392,7 @@ class AttemptController extends Controller
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->sub_soal_json ?? [],
+                'sub_soal' => $question->subSoalTerstruktur(),
                 'jawaban_parts' => $essay ? ($jawabanSaya?->jawaban_parts_json ?? []) : [],
                 'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $jawabanSaya?->option?->teks,
                 'jawaban_benar' => $essay
@@ -521,8 +522,9 @@ class AttemptController extends Controller
         $bagian = [];
 
         foreach ($subSoal as $soal) {
-            $label = (string) ($soal['label'] ?? '');
-            $teks = trim((string) ($parts[$label] ?? ''));
+            $key = (string) ($soal['key'] ?? '');
+            $label = (string) ($soal['code'] ?? $soal['label'] ?? '');
+            $teks = trim((string) ($parts[$key] ?? ''));
 
             if ($teks !== '') {
                 $bagian[] = $label.":\n".$teks;

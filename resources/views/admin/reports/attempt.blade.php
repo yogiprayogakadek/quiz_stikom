@@ -126,8 +126,10 @@
                                         <div class="space-y-3">
                                             @foreach ($baris['sub_soal'] as $bagian)
                                                 <div>
-                                                    <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['label'] }}. {{ $bagian['teks'] }}</p>
-                                                    <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['label']] ?? 'Tidak dijawab' }}</p>
+                                                    <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['code'] }}. {{ $bagian['teks'] }}</p>
+                                                    @if ($bagian['is_leaf'])
+                                                        <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['key']] ?? 'Tidak dijawab' }}</p>
+                                                    @endif
                                                 </div>
                                             @endforeach
                                         </div>
@@ -202,8 +204,12 @@
                             <div class="mt-3 space-y-3">
                                 @foreach ($baris['sub_soal'] as $bagian)
                                     <div class="rounded-xl border border-outline bg-page p-3">
-                                        <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['label'] }}. {{ $bagian['teks'] }}</p>
-                                        <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['label']] ?? 'Tidak dijawab' }}</p>
+                                        <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['code'] }}. {{ $bagian['teks'] }}</p>
+                                        @if ($bagian['is_leaf'])
+                                            <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['key']] ?? 'Tidak dijawab' }}</p>
+                                        @else
+                                            <p class="mt-1 text-sm text-ink-muted">Jawaban tersedia pada bagian turunannya.</p>
+                                        @endif
                                     </div>
                                 @endforeach
                             </div>

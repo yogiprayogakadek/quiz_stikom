@@ -226,6 +226,8 @@ class QuestionController extends Controller
     {
         return collect($subSoal)
             ->map(fn (array $bagian) => [
+                'key' => trim((string) ($bagian['key'] ?? '')),
+                'parent_key' => filled($bagian['parent_key'] ?? null) ? trim((string) $bagian['parent_key']) : null,
                 'label' => trim((string) ($bagian['label'] ?? '')),
                 'teks' => trim((string) ($bagian['teks'] ?? '')),
                 'petunjuk' => $this->normalisasiPetunjuk($bagian['petunjuk'] ?? null),

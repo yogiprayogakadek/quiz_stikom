@@ -188,9 +188,9 @@
 
                         @if ($item->isEssay() && ! empty($item->sub_soal_json))
                             <div class="mt-4 space-y-3">
-                                @foreach ($item->sub_soal_json as $bagian)
+                                @foreach ($item->subSoalTerstruktur() as $bagian)
                                     <div class="rounded-xl border border-outline bg-page p-3">
-                                        <p class="text-sm font-bold text-ink">Bagian {{ $bagian['label'] ?? '' }}</p>
+                                        <p class="text-sm font-bold text-ink">Bagian {{ $bagian['code'] }}</p>
                                         <p class="mt-1 whitespace-pre-line text-base text-ink">{{ $bagian['teks'] ?? '' }}</p>
                                         @if (! empty($bagian['petunjuk']))
                                             <ul class="mt-2 space-y-1 text-sm text-ink-muted">
@@ -295,9 +295,9 @@
 
                                         @if ($item->isEssay() && ! empty($item->sub_soal_json))
                                             <div class="mt-5 space-y-5">
-                                                @foreach ($item->sub_soal_json as $bagian)
+                                                @foreach ($item->subSoalTerstruktur() as $bagian)
                                                     <div @class(['border-t border-outline pt-5' => ! $loop->first])>
-                                                        <h4 class="text-lg font-bold text-ink">Bagian {{ $bagian['label'] ?? $loop->iteration }}</h4>
+                                                        <h4 class="text-lg font-bold text-ink">Bagian {{ $bagian['code'] }}</h4>
                                                         <p class="mt-1 whitespace-pre-line text-base text-ink-muted">{{ $bagian['teks'] ?? '' }}</p>
                                                         @if (! empty($bagian['petunjuk']))
                                                             <ul class="mt-2 space-y-1 text-sm text-ink-muted">
@@ -309,8 +309,12 @@
                                                                 @endforeach
                                                             </ul>
                                                         @endif
-                                                        <label class="label mt-3" for="preview-jawaban-{{ $item->id }}-{{ $loop->index }}">Jawaban {{ $bagian['label'] ?? $loop->iteration }}</label>
-                                                        <textarea id="preview-jawaban-{{ $item->id }}-{{ $loop->index }}" class="input min-h-28 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                                        @if ($bagian['is_leaf'])
+                                                            <label class="label mt-3" for="preview-jawaban-{{ $item->id }}-{{ $loop->index }}">Jawaban {{ $bagian['code'] }}</label>
+                                                            <textarea id="preview-jawaban-{{ $item->id }}-{{ $loop->index }}" class="input min-h-28 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                                        @else
+                                                            <p class="mt-2 text-sm font-semibold text-ink-muted">Jawab melalui bagian turunannya.</p>
+                                                        @endif
                                                     </div>
                                                 @endforeach
                                             </div>

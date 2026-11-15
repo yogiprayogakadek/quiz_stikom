@@ -5,12 +5,14 @@
     $bobotAwal = (int) old('bobot', $question?->bobot ?? ($tipeAwal === 'essay' ? 10 : 1));
     $rubrikAwal = array_values(old('rubrik_essay', $question?->rubrik_essay ?? []));
     $petunjukAwal = old('petunjuk', implode("\n", (array) ($question?->petunjuk_json ?? [])));
-    $subSoalAwal = collect(old('sub_soal', $question?->sub_soal_json ?? []))
-        ->map(function ($bagian) {
+    $subSoalAwal = collect(old('sub_soal', $question?->subSoalTerstruktur() ?? []))
+        ->map(function ($bagian, $index) {
             $bagian = is_array($bagian) ? $bagian : [];
             $petunjuk = $bagian['petunjuk'] ?? [];
 
             return [
+                'key' => ($bagian['legacy'] ?? false) ? 'legacy-'.$index : ($bagian['key'] ?? 'legacy-'.$index),
+                'parent_key' => $bagian['parent_key'] ?? null,
                 'label' => $bagian['label'] ?? '',
                 'teks' => $bagian['teks'] ?? '',
                 'petunjuk' => is_array($petunjuk) ? implode("\n", $petunjuk) : (string) $petunjuk,
@@ -52,17 +54,63 @@
         hapusKriteria(index) {
             this.rubrik.splice(index, 1);
         },
-        tambahSubSoal() {
-            if (this.subSoal.length < 10) {
+        keyBaru() {
+            return globalThis.crypto?.randomUUID?.() ?? ('part_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+        },
+        anak(parentKey) {
+            return this.subSoal.filter((bagian) => (bagian.parent_key ?? null) === parentKey);
+        },
+        labelBaru(parentKey) {
+            const terpakai = new Set(this.anak(parentKey).map((bagian) => String(bagian.label).toLowerCase()));
+            if (parentKey === null) {
                 let kode = 65;
-                while (this.subSoal.some((bagian) => bagian.label === String.fromCharCode(kode))) {
-                    kode++;
-                }
-                this.subSoal.push({ label: String.fromCharCode(kode), teks: '', petunjuk: '' });
+                while (terpakai.has(String.fromCharCode(kode).toLowerCase())) kode++;
+                return String.fromCharCode(kode);
             }
+            let nomor = 1;
+            while (terpakai.has(String(nomor))) nomor++;
+            return String(nomor);
+        },
+        turunanDari(bagian, parentKey) {
+            let key = bagian.parent_key;
+            const dilihat = new Set();
+            while (key && !dilihat.has(key)) {
+                if (key === parentKey) return true;
+                dilihat.add(key);
+                key = this.subSoal.find((item) => item.key === key)?.parent_key;
+            }
+            return false;
+        },
+        kodeBagian(bagian) {
+            const label = [];
+            let saatIni = bagian;
+            const dilihat = new Set();
+            while (saatIni && !dilihat.has(saatIni.key)) {
+                label.unshift(saatIni.label);
+                dilihat.add(saatIni.key);
+                saatIni = this.subSoal.find((item) => item.key === saatIni.parent_key);
+            }
+            return label.join('.');
+        },
+        punyaAnak(key) {
+            return this.subSoal.some((bagian) => bagian.parent_key === key);
+        },
+        tambahSubSoal(parentKey = null) {
+            if (this.subSoal.length >= 50 || this.anak(parentKey).length >= 10) return;
+            const bagian = { key: this.keyBaru(), parent_key: parentKey, label: this.labelBaru(parentKey), teks: '', petunjuk: '' };
+            if (parentKey === null) {
+                this.subSoal.push(bagian);
+                return;
+            }
+            let posisi = this.subSoal.findIndex((item) => item.key === parentKey) + 1;
+            while (posisi < this.subSoal.length && this.turunanDari(this.subSoal[posisi], parentKey)) posisi++;
+            this.subSoal.splice(posisi, 0, bagian);
         },
         hapusSubSoal(index) {
-            this.subSoal.splice(index, 1);
+            const key = this.subSoal[index].key;
+            const jumlah = this.subSoal.filter((bagian) => bagian.key === key || this.turunanDari(bagian, key)).length;
+            if (jumlah > 1 && !window.confirm('Hapus bagian ini beserta ' + (jumlah - 1) + ' turunannya?')) return;
+            this.subSoal = this.subSoal.filter((bagian) => bagian.key !== key && !this.turunanDari(bagian, key));
         }
     }"
     class="space-y-6"
@@ -206,18 +254,35 @@
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <p id="sub-soal-label" class="label">Sub-soal (opsional)</p>
-                    <p class="help">Isi kalau soal punya bagian A, B, C. Peserta mendapat satu kotak jawaban per sub-soal.</p>
+                    <p class="help">Bagian dapat memiliki turunan. Peserta mendapat satu kotak jawaban untuk setiap bagian terakhir.</p>
                 </div>
-                <button type="button" class="btn btn-secondary" x-on:click="tambahSubSoal()" x-bind:disabled="tipe !== 'essay' || subSoal.length >= 10">
+                <button type="button" class="btn btn-secondary" x-on:click="tambahSubSoal()" x-bind:disabled="tipe !== 'essay' || subSoal.length >= 50 || anak(null).length >= 10">
                     <x-icon name="plus" :size="18" />
                     Tambah sub-soal
                 </button>
             </div>
 
             <div class="mt-3 space-y-3">
-                <template x-for="(bagian, index) in subSoal" :key="index">
+                <template x-for="(bagian, index) in subSoal" :key="bagian.key">
                     <div class="space-y-3 rounded-xl border border-outline p-4">
-                        <div class="grid gap-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-start">
+                        <input type="hidden" x-bind:name="'sub_soal[' + index + '][key]'" x-bind:value="bagian.key">
+                        <input type="hidden" x-bind:name="'sub_soal[' + index + '][parent_key]'" x-bind:value="bagian.parent_key ?? ''">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-outline pb-3">
+                            <div>
+                                <p class="font-bold text-ink">Bagian <span x-text="kodeBagian(bagian)"></span></p>
+                                <p class="text-sm text-ink-muted" x-text="punyaAnak(bagian.key) ? 'Kelompok soal; jawaban diisi pada turunannya.' : 'Bagian terakhir; peserta mengisi satu jawaban.'"></p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahSubSoal(bagian.key)" x-bind:disabled="tipe !== 'essay' || subSoal.length >= 50 || anak(bagian.key).length >= 10">
+                                    <x-icon name="plus" :size="18" />
+                                    Tambah turunan
+                                </button>
+                                <button type="button" class="btn btn-ghost min-h-11 min-w-11 px-3 text-coral-deep" x-on:click="hapusSubSoal(index)" x-bind:disabled="tipe !== 'essay'" x-bind:aria-label="'Hapus bagian ' + kodeBagian(bagian)">
+                                    <x-icon name="x" :size="18" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-start">
                             <div>
                                 <label class="label" x-bind:for="'sub-label-' + index">Label</label>
                                 <input type="text" x-bind:id="'sub-label-' + index" x-bind:name="'sub_soal[' + index + '][label]'" x-model="bagian.label" class="input" maxlength="10" placeholder="A" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'">
@@ -226,9 +291,6 @@
                                 <label class="label" x-bind:for="'sub-teks-' + index">Teks sub-soal</label>
                                 <textarea x-bind:id="'sub-teks-' + index" x-bind:name="'sub_soal[' + index + '][teks]'" x-model="bagian.teks" rows="3" class="input" maxlength="2000" x-bind:required="tipe === 'essay'" x-bind:disabled="tipe !== 'essay'"></textarea>
                             </div>
-                            <button type="button" class="btn btn-ghost min-h-11 min-w-11 justify-self-start px-3 text-coral-deep" x-on:click="hapusSubSoal(index)" x-bind:disabled="tipe !== 'essay'" x-bind:aria-label="'Hapus sub-soal ' + (index + 1)">
-                                <x-icon name="x" :size="18" />
-                            </button>
                         </div>
                         <div>
                             <label class="label" x-bind:for="'sub-petunjuk-' + index">Poin yang harus dijawab (opsional)</label>
@@ -240,6 +302,8 @@
                 <p x-show="subSoal.length === 0" class="text-sm text-ink-muted">Belum ada sub-soal. Soal essay biasa tetap memakai satu kotak jawaban.</p>
             </div>
             @error('sub_soal') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.key') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.parent_key') <p class="field-error">{{ $message }}</p> @enderror
             @error('sub_soal.*.label') <p class="field-error">{{ $message }}</p> @enderror
             @error('sub_soal.*.teks') <p class="field-error">{{ $message }}</p> @enderror
             @error('sub_soal.*.petunjuk') <p class="field-error">{{ $message }}</p> @enderror

@@ -55,7 +55,7 @@
                 }
 
                 if (this.current.sub_soal?.length) {
-                    const status = this.current.sub_soal.map((bagian) => this.statusBagian(this.current, bagian));
+                    const status = this.bagianJawaban(this.current).map((bagian) => this.statusBagian(this.current, bagian));
                     if (status.includes('menyimpan')) return 'Menyimpan...';
                     if (status.includes('menunggu')) return 'Menunggu disimpan';
                     if (status.includes('offline')) return 'Tersimpan lokal (offline)';
@@ -84,7 +84,7 @@
                     }
 
                     if (soal.sub_soal?.length) {
-                        for (const bagian of soal.sub_soal) {
+                        for (const bagian of this.bagianJawaban(soal)) {
                             if (!this.bagianTerjawab(soal, bagian)) {
                                 hasil.push(this.kodeBagian(soal, bagian));
                             }
@@ -102,7 +102,7 @@
             sudahDijawab(soal) {
                 if (soal.tipe === 'essay') {
                     if (soal.sub_soal?.length) {
-                        return soal.sub_soal.every((bagian) => this.bagianTerjawab(soal, bagian));
+                        return this.bagianJawaban(soal).every((bagian) => this.bagianTerjawab(soal, bagian));
                     }
 
                     return (this.jawabanTeks[soal.id] ?? '').trim() !== '';
@@ -115,10 +115,13 @@
                     return false;
                 }
 
-                return soal.sub_soal.some((bagian) => this.bagianTerjawab(soal, bagian)) && !this.sudahDijawab(soal);
+                return this.bagianJawaban(soal).some((bagian) => this.bagianTerjawab(soal, bagian)) && !this.sudahDijawab(soal);
+            },
+            bagianJawaban(soal) {
+                return soal.sub_soal?.filter((bagian) => bagian.is_leaf) ?? [];
             },
             kunciBagian(soal, bagian) {
-                return soal.id + ':' + bagian.label;
+                return soal.id + ':' + bagian.key;
             },
             statusBagian(soal, bagian) {
                 const status = this.statusParts[this.kunciBagian(soal, bagian)];
@@ -133,16 +136,16 @@
                     }[status] ?? '';
                 }
 
-                return (this.partsTersimpan[soal.id]?.[bagian.label] ?? '').trim() !== '' ? 'Tersimpan otomatis' : '';
+                return (this.partsTersimpan[soal.id]?.[bagian.key] ?? '').trim() !== '' ? 'Tersimpan otomatis' : '';
             },
             bagianTerjawab(soal, bagian) {
-                return (this.jawabanParts[soal.id]?.[bagian.label] ?? '').trim() !== '';
+                return (this.jawabanParts[soal.id]?.[bagian.key] ?? '').trim() !== '';
             },
             kodeBagian(soal, bagian) {
-                return (this.questions.indexOf(soal) + 1) + (bagian.label ?? '');
+                return (this.questions.indexOf(soal) + 1) + (bagian.code ?? bagian.label ?? '');
             },
             keBagian(soal, bagian) {
-                const index = soal.sub_soal.findIndex((item) => item.label === bagian.label);
+                const index = soal.sub_soal.findIndex((item) => item.key === bagian.key);
                 this.$nextTick(() => document.getElementById('bagian-' + soal.id + '-' + index)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             },
             pindah(nomor) {
@@ -607,7 +610,7 @@
                 if (!this.jawabanParts[soal.id]) {
                     this.jawabanParts[soal.id] = {};
                 }
-                this.jawabanParts[soal.id][bagian.label] = nilai;
+                this.jawabanParts[soal.id][bagian.key] = nilai;
 
                 const key = this.kunciBagian(soal, bagian);
                 this.statusParts[key] = 'menunggu';
@@ -624,14 +627,14 @@
                 if (this.janjiParts[key]) {
                     await this.janjiParts[key];
 
-                    if ((this.jawabanParts[soal.id]?.[bagian.label] ?? '') === (this.partsTersimpan[soal.id]?.[bagian.label] ?? '')) {
+                    if ((this.jawabanParts[soal.id]?.[bagian.key] ?? '') === (this.partsTersimpan[soal.id]?.[bagian.key] ?? '')) {
                         return true;
                     }
                 }
 
-                const nilai = this.jawabanParts[soal.id]?.[bagian.label] ?? '';
+                const nilai = this.jawabanParts[soal.id]?.[bagian.key] ?? '';
 
-                if (nilai === (this.partsTersimpan[soal.id]?.[bagian.label] ?? '')) {
+                if (nilai === (this.partsTersimpan[soal.id]?.[bagian.key] ?? '')) {
                     this.statusParts[key] = nilai === '' ? '' : 'tersimpan';
                     return true;
                 }
@@ -640,7 +643,7 @@
                     this.statusParts[key] = 'offline';
                     this.tambahAntrean({
                         question_id: soal.id,
-                        part_key: bagian.label,
+                        part_key: bagian.key,
                         jawaban_teks: nilai,
                         tipe: 'essay',
                         waktu: Date.now()
@@ -654,7 +657,7 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, part_key: bagian.label, jawaban_teks: nilai },
+                        body: { question_id: soal.id, part_key: bagian.key, jawaban_teks: nilai },
                         progress: denganProgress,
                         progressMessage: 'Menyimpan jawaban...'
                     });
@@ -665,7 +668,7 @@
                     this.statusParts[key] = 'offline';
                     this.tambahAntrean({
                         question_id: soal.id,
-                        part_key: bagian.label,
+                        part_key: bagian.key,
                         jawaban_teks: nilai,
                         tipe: 'essay',
                         waktu: Date.now()
@@ -705,7 +708,7 @@
                 this.statusParts[key] = 'offline';
                 this.tambahAntrean({
                     question_id: soal.id,
-                    part_key: bagian.label,
+                    part_key: bagian.key,
                     jawaban_teks: nilai,
                     tipe: 'essay',
                     waktu: Date.now()
@@ -716,7 +719,7 @@
             async simpanSemuaTeks() {
                 for (const soal of this.questions.filter((item) => item.tipe === 'essay')) {
                     if (soal.sub_soal?.length) {
-                        for (const bagian of soal.sub_soal) {
+                        for (const bagian of this.bagianJawaban(soal)) {
                             clearTimeout(this.timerParts[this.kunciBagian(soal, bagian)]);
 
                             if (!(await this.simpanBagian(soal, bagian, true))) {
@@ -1225,7 +1228,7 @@
                     <div class="mt-5 space-y-6">
                         <div class="flex flex-wrap items-center gap-2 border-b border-outline pb-3">
                             <span class="text-sm font-bold text-ink-muted">Bagian:</span>
-                            <template x-for="bagian in current.sub_soal" :key="bagian.label">
+                            <template x-for="bagian in bagianJawaban(current)" :key="bagian.key">
                                 <button
                                     type="button"
                                     class="pill inline-flex min-h-11 items-center gap-1.5 px-3"
@@ -1251,7 +1254,7 @@
                             </template>
                         </div>
 
-                        <template x-for="(bagian, bagianIndex) in current.sub_soal" :key="bagian.label">
+                        <template x-for="(bagian, bagianIndex) in current.sub_soal" :key="bagian.key">
                             <div
                                 class="scroll-mt-32"
                                 x-bind:class="bagianIndex > 0 ? 'border-t border-outline pt-5' : ''"
@@ -1271,21 +1274,26 @@
                                         </template>
                                     </ul>
                                 </template>
-                                <label class="label mt-3" x-bind:for="'jawaban-' + current.id + '-' + bagianIndex">Jawaban <span x-text="kodeBagian(current, bagian)"></span></label>
-                                <textarea
-                                    class="input min-h-[9rem] resize-y"
-                                    maxlength="5000"
-                                    x-bind:id="'jawaban-' + current.id + '-' + bagianIndex"
-                                    x-bind:disabled="berhenti"
-                                    x-bind:value="(jawabanParts[current.id] ?? {})[bagian.label] ?? ''"
-                                    x-on:input="ubahBagian(current, bagian, $event.target.value)"
-                                    x-on:blur="simpanBagian(current, bagian)"
-                                    x-bind:placeholder="'Tulis jawaban ' + kodeBagian(current, bagian) + ' di sini'"
-                                ></textarea>
-                                <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">
-                                    <span x-text="(((jawabanParts[current.id] ?? {})[bagian.label] ?? '').length) + ' / 5000 karakter'"></span>
-                                    <span x-text="statusBagian(current, bagian)"></span>
-                                </div>
+                                <p x-show="bagian.has_children" class="mt-2 text-sm font-semibold text-ink-muted">Jawab melalui bagian turunannya.</p>
+                                <template x-if="bagian.is_leaf">
+                                    <div class="mt-3">
+                                        <label class="label" x-bind:for="'jawaban-' + current.id + '-' + bagianIndex">Jawaban <span x-text="kodeBagian(current, bagian)"></span></label>
+                                        <textarea
+                                            class="input min-h-[9rem] resize-y"
+                                            maxlength="5000"
+                                            x-bind:id="'jawaban-' + current.id + '-' + bagianIndex"
+                                            x-bind:disabled="berhenti"
+                                            x-bind:value="(jawabanParts[current.id] ?? {})[bagian.key] ?? ''"
+                                            x-on:input="ubahBagian(current, bagian, $event.target.value)"
+                                            x-on:blur="simpanBagian(current, bagian)"
+                                            x-bind:placeholder="'Tulis jawaban ' + kodeBagian(current, bagian) + ' di sini'"
+                                        ></textarea>
+                                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">
+                                            <span x-text="(((jawabanParts[current.id] ?? {})[bagian.key] ?? '').length) + ' / 5000 karakter'"></span>
+                                            <span x-text="statusBagian(current, bagian)"></span>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
                         </template>
                     </div>

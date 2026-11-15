@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\SubQuestionTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -50,8 +51,8 @@ class Question extends Model
     {
         $teks = (string) $this->teks;
 
-        foreach ($this->sub_soal_json ?? [] as $bagian) {
-            $label = trim((string) ($bagian['label'] ?? ''));
+        foreach ($this->subSoalTerstruktur() as $bagian) {
+            $label = $bagian['code'];
             $isi = trim((string) ($bagian['teks'] ?? ''));
 
             if ($isi === '') {
@@ -62,6 +63,16 @@ class Question extends Model
         }
 
         return $teks;
+    }
+
+    public function subSoalTerstruktur(): array
+    {
+        return SubQuestionTree::decorate($this->sub_soal_json ?? []);
+    }
+
+    public function subSoalJawaban(): array
+    {
+        return SubQuestionTree::leaves($this->sub_soal_json ?? []);
     }
 
     public function quiz(): BelongsTo
