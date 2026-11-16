@@ -107,6 +107,51 @@ class PesanPengajarTest extends TestCase
         $this->assertSame(0, SessionMessage::count());
     }
 
+    public function test_peserta_menutup_pesannya_sendiri_dan_idempoten(): void
+    {
+        [, , $attempts] = $this->sesiBerjalan(1);
+        $attempt = $attempts[0];
+        $pesan = SessionMessage::create([
+            'quiz_session_id' => $attempt->quiz_session_id,
+            'attempt_id' => $attempt->id,
+            'user_id' => $attempt->user_id,
+            'teks' => 'Halo',
+            'tipe' => 'info',
+        ]);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->postJson(route('peserta.pesan.tutup', $pesan))
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $this->assertNotNull($pesan->fresh()->ditutup_at);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->postJson(route('peserta.pesan.tutup', $pesan))
+            ->assertOk();
+    }
+
+    public function test_peserta_lain_tidak_bisa_menutup_pesan_orang(): void
+    {
+        [, , $attempts] = $this->sesiBerjalan(2);
+        $attempt = $attempts[0];
+        $pesan = SessionMessage::create([
+            'quiz_session_id' => $attempt->quiz_session_id,
+            'attempt_id' => $attempt->id,
+            'user_id' => $attempt->user_id,
+            'teks' => 'Halo',
+            'tipe' => 'info',
+        ]);
+        $lain = User::whereKeyNot($attempt->user_id)->where('role', 'peserta')->firstOrFail();
+
+        $this->actingAs($lain)
+            ->withSession(['auth_token' => $lain->current_session_token])
+            ->postJson(route('peserta.pesan.tutup', $pesan))
+            ->assertForbidden();
+    }
+
     /**
      * Organisasi, admin, sesi acak berjalan, dan attempt pesertanya.
      *

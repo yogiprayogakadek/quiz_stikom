@@ -34,6 +34,7 @@ use App\Http\Controllers\Peserta\FeedbackController as PesertaFeedbackController
 use App\Http\Controllers\Peserta\HistoryController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
+use App\Http\Controllers\Peserta\SessionMessageController as PesertaSessionMessageController;
 use App\Http\Controllers\QuestionMediaController;
 use Illuminate\Support\Facades\Route;
 
@@ -246,6 +247,7 @@ Route::middleware(['auth', 'role:peserta', 'organization_member', 'participant_p
         ->middleware('throttle:answers')
         ->name('peserta.attempt.answer');
     Route::post('/attempt/{attempt}/selesai', [AttemptController::class, 'finish'])->name('peserta.attempt.finish');
+    Route::post('/pesan/{message}/tutup', [PesertaSessionMessageController::class, 'tutup'])->name('peserta.pesan.tutup');
     Route::get('/attempt/{attempt}/status', [AttemptController::class, 'status'])->name('peserta.attempt.status');
     Route::post('/attempt/{attempt}/pelanggaran', [AttemptController::class, 'pelanggaran'])->name('peserta.attempt.pelanggaran');
     Route::get('/attempt/{attempt}/hasil', [AttemptController::class, 'result'])->name('peserta.attempt.result');
