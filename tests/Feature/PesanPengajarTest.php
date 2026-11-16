@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\PesanPengajar;
 use App\Models\Attempt;
 use App\Models\Kelas;
 use App\Models\Organization;
@@ -17,6 +18,15 @@ use Tests\TestCase;
 class PesanPengajarTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_event_pesan_disiarakan_ke_kanal_peserta(): void
+    {
+        $event = new PesanPengajar(9, 42, ['id' => 1, 'teks' => 'Halo', 'tipe' => 'info', 'waktu' => '10:15']);
+
+        $this->assertSame('session-user.9.42', $event->broadcastOn()[0]->name);
+        $this->assertSame('PesanPengajar', $event->broadcastAs());
+        $this->assertSame('Halo', $event->broadcastWith()['teks']);
+    }
 
     public function test_pesan_aktif_hanya_yang_belum_ditutup(): void
     {
