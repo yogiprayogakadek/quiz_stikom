@@ -152,6 +152,26 @@ class PesanPengajarTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_panel_admin_menampilkan_composer_pesan_saat_sesi_berjalan(): void
+    {
+        [$admin, $session, , $organization] = $this->sesiBerjalan(1);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('admin.sessions.show', $session))
+            ->assertOk()
+            ->assertSee('Kirim pesan')
+            ->assertSee('name="teks"', false);
+
+        $session->update(['status' => 'selesai']);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->get(route('admin.sessions.show', $session))
+            ->assertOk()
+            ->assertDontSee('Kirim pesan');
+    }
+
     /**
      * Organisasi, admin, sesi acak berjalan, dan attempt pesertanya.
      *

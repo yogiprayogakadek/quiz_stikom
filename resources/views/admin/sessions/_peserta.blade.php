@@ -2,6 +2,7 @@
     $bisaTambahWaktu = $session->mode === 'acak' && ! $session->isTerjadwal() && $session->status === 'berjalan';
     $adaBerjalan = $attempts->contains(fn ($attempt) => $attempt->status === 'berjalan');
     $tampilkanPilihan = $bisaTambahWaktu && $adaBerjalan;
+    $pesertaAktif = $attempts->where('status', 'berjalan');
 @endphp
 
 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -28,6 +29,10 @@
         <p class="help mt-2">Centang peserta yang masih mengerjakan di tabel. Pilihan tetap tersimpan saat status diperbarui.</p>
         @error('attempt_ids') <p class="field-error">{{ $message }}</p> @enderror
     </form>
+@endif
+
+@if ($session->status === 'berjalan' && $pesertaAktif->isNotEmpty())
+    @include('admin.sessions._pesan', ['pesertaAktif' => $pesertaAktif])
 @endif
 
 @if ($attempts->isEmpty())
