@@ -262,6 +262,16 @@ document.addEventListener('submit', (event) => {
 
     const submitter = event.submitter;
     if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+        if (submitter.name) {
+            // Tombol yang dinonaktifkan tidak ikut terkirim; salin name/value-nya
+            // agar aksi yang dipilih (mis. after_save=next) tetap sampai ke server.
+            const salinan = document.createElement('input');
+            salinan.type = 'hidden';
+            salinan.name = submitter.name;
+            salinan.value = submitter.value;
+            salinan.dataset.progressSubmitter = submitter.name;
+            form.append(salinan);
+        }
         submitter.disabled = true;
         submitter.dataset.progressDisabled = 'true';
     }
@@ -279,4 +289,5 @@ window.addEventListener('pageshow', () => {
         button.disabled = false;
         delete button.dataset.progressDisabled;
     });
+    document.querySelectorAll('input[data-progress-submitter]').forEach(input => input.remove());
 });
