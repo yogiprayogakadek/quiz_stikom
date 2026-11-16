@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attempt;
 use App\Models\Kelas;
 use App\Models\Option;
 use App\Models\Organization;
@@ -243,6 +244,75 @@ class TrialSessionTest extends TestCase
         $this->assertDatabaseHas('quizzes', ['id' => $quiz->id]);
         $this->assertDatabaseMissing('quizzes', ['id' => $trialQuizId]);
         $this->assertDatabaseMissing('quiz_sessions', ['id' => $trialSession->id]);
+    }
+
+    public function test_sesi_nyata_dengan_attempt_peserta_tidak_dapat_dihapus(): void
+    {
+        [$organization, $admin, $selected, , , $session] = $this->scenario();
+        $attempt = Attempt::create([
+            'organization_id' => $organization->id,
+            'quiz_session_id' => $session->id,
+            'user_id' => $selected->id,
+            'status' => 'selesai',
+            'bergabung_at' => now(),
+            'mulai_at' => now()->subMinutes(30)->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->delete(route('admin.sessions.destroy', $session))
+            ->assertSessionHasErrors([
+                'hapus' => 'Sesi ini menjadi bagian dari riwayat peserta dan harus dipertahankan.',
+            ]);
+
+        $this->assertDatabaseHas('quiz_sessions', ['id' => $session->id]);
+        $this->assertDatabaseHas('attempts', ['id' => $attempt->id]);
+    }
+
+    public function test_sesi_nyata_tanpa_attempt_peserta_tetap_dapat_dihapus(): void
+    {
+        [$organization, $admin, , , , $session] = $this->scenario();
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->delete(route('admin.sessions.destroy', $session))
+            ->assertRedirect(route('admin.sessions.index'));
+
+        $this->assertDatabaseMissing('quiz_sessions', ['id' => $session->id]);
+    }
+
+    public function test_simulasi_dengan_attempt_tetap_dapat_dihapus_dan_sumbernya_utuh(): void
+    {
+        [$organization, $admin, $selected, , $quiz, $session] = $this->scenario();
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->post(route('admin.sessions.trial', $session), [
+                'trial_participant_ids' => [$selected->id],
+            ]);
+
+        $trialSession = QuizSession::query()->whereKeyNot($session->id)->firstOrFail();
+        $trialQuizId = $trialSession->quiz_id;
+        $attempt = Attempt::create([
+            'organization_id' => $organization->id,
+            'quiz_session_id' => $trialSession->id,
+            'user_id' => $selected->id,
+            'status' => 'selesai',
+            'bergabung_at' => now(),
+            'mulai_at' => now()->subMinutes(10)->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->delete(route('admin.sessions.destroy', $trialSession))
+            ->assertRedirect(route('admin.sessions.index'));
+
+        $this->assertDatabaseMissing('quiz_sessions', ['id' => $trialSession->id]);
+        $this->assertDatabaseMissing('attempts', ['id' => $attempt->id]);
+        $this->assertDatabaseHas('quizzes', ['id' => $quiz->id]);
+        $this->assertDatabaseMissing('quizzes', ['id' => $trialQuizId]);
     }
 
     private function scenario(): array

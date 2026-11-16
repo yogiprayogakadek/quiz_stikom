@@ -30,6 +30,7 @@ use App\Http\Controllers\Master\WorkspaceRequestController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\FeedbackController as PesertaFeedbackController;
+use App\Http\Controllers\Peserta\HistoryController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
 use App\Http\Controllers\QuestionMediaController;
@@ -226,6 +227,8 @@ Route::middleware(['auth', 'role:peserta', 'organization_member', 'participant_p
     Route::post('/kelas/{kelas}/masuk', [PesertaKelasController::class, 'masuk'])
         ->middleware('throttle:10,1')
         ->name('peserta.kelas.masuk');
+
+    Route::get('/riwayat-kuis', HistoryController::class)->name('peserta.history.index');
 
     Route::post('/sesi/{session}/gabung', [PesertaSessionController::class, 'join'])->name('peserta.session.join');
     Route::get('/sesi/{session}/kerjakan', [PesertaSessionController::class, 'play'])->name('peserta.session.play');

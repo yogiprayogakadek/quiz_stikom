@@ -88,6 +88,13 @@
                     <x-icon name="kelas" :size="20" class="{{ request()->routeIs('peserta.kelas.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                     <span>Kelas Saya</span>
                 </a>
+                <a
+                    href="{{ route('peserta.history.index') }}"
+                    class="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold transition {{ request()->routeIs('peserta.history.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                >
+                    <x-icon name="clock" :size="20" class="{{ request()->routeIs('peserta.history.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                    <span>Riwayat Kuis</span>
+                </a>
                 <button
                     type="button"
                     @click="mobileNav = false; setTimeout(() => window.mulaiTourPeserta?.(), 250)"
@@ -167,6 +174,15 @@
                     >
                         <x-icon name="kelas" :size="20" class="{{ request()->routeIs('peserta.kelas.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
                         <span x-show="!sidebarCollapsed" x-cloak>Kelas Saya</span>
+                    </a>
+                    <a
+                        href="{{ route('peserta.history.index') }}"
+                        class="flex items-center rounded-2xl text-sm font-bold transition {{ request()->routeIs('peserta.history.*') ? 'bg-[#e6f0fd] text-[#1e6ffb] shadow-xs' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}"
+                        :class="sidebarCollapsed ? 'lg:justify-center lg:px-0 lg:py-3.5' : 'px-4 py-3 gap-3.5'"
+                        :title="sidebarCollapsed ? 'Riwayat Kuis' : ''"
+                    >
+                        <x-icon name="clock" :size="20" class="{{ request()->routeIs('peserta.history.*') ? 'text-[#1e6ffb]' : 'text-slate-400' }}" />
+                        <span x-show="!sidebarCollapsed" x-cloak>Riwayat Kuis</span>
                     </a>
                     <button
                         type="button"
