@@ -26,6 +26,46 @@ class CatatanPengajarTest extends TestCase
         $this->assertSame('Struktur argumen sudah tepat.', $answer->fresh()->catatan_pengajar);
     }
 
+    public function test_admin_menyimpan_nilai_dan_catatan_sekaligus(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$answer->question_id => 7],
+                'catatan' => [$answer->question_id => 'Kesimpulan kurang tajam.'],
+            ])
+            ->assertRedirect();
+
+        $answer->refresh();
+        $this->assertSame(7, $answer->skor);
+        $this->assertSame('Kesimpulan kurang tajam.', $answer->catatan_pengajar);
+    }
+
+    public function test_auto_grade_tidak_menghapus_catatan_guru(): void
+    {
+        [, , $answer] = $this->jawabanEssay();
+        $answer->update(['catatan_pengajar' => 'Catatan guru.']);
+
+        app(\App\Services\EssayGrader::class)->applyFinal($answer, 5, null, true);
+
+        $this->assertSame('Catatan guru.', $answer->fresh()->catatan_pengajar);
+    }
+
+    public function test_catatan_lebih_dari_2000_karakter_ditolak(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$answer->question_id => 5],
+                'catatan' => [$answer->question_id => str_repeat('a', 2001)],
+            ])
+            ->assertSessionHasErrors('catatan.'.$answer->question_id);
+    }
+
     /**
      * Attempt selesai mode acak dengan satu soal essay yang sudah dijawab.
      *

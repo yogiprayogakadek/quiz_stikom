@@ -151,6 +151,7 @@ class ReportController extends Controller
                 'benar' => $essay ? null : ($answer?->option?->is_correct === true),
                 'dinilai_at' => $answer?->dinilai_at,
                 'skor' => $answer?->skor ?? 0,
+                'catatan_pengajar' => $answer?->catatan_pengajar,
                 'dijawab' => $dijawab,
                 'status' => ! $essay ? null : ($answer?->dinilai_at ? 'graded' : ($dijawab ? 'pending' : 'unanswered')),
                 'ai_suggested_score' => $answer?->ai_suggested_score,
@@ -231,12 +232,16 @@ class ReportController extends Controller
         $data = $request->validate([
             'nilai' => ['required', 'array'],
             'nilai.*' => ['nullable', 'integer', 'min:0'],
+            'catatan' => ['nullable', 'array'],
+            'catatan.*' => ['nullable', 'string', 'max:2000'],
             'after_save' => ['nullable', 'in:stay,next'],
             'focus_question_id' => ['nullable', 'integer'],
         ], [
             'nilai.required' => 'Isi minimal satu nilai essay.',
             'nilai.*.integer' => 'Nilai essay harus berupa angka bulat.',
             'nilai.*.min' => 'Nilai essay tidak boleh negatif.',
+            'catatan.*.string' => 'Catatan harus berupa teks.',
+            'catatan.*.max' => 'Catatan maksimal 2000 karakter.',
             'after_save.in' => 'Arah setelah menyimpan nilai tidak valid.',
         ]);
 
@@ -277,7 +282,12 @@ class ReportController extends Controller
                 continue;
             }
 
-            $grader->applyFinal($answer, (int) $nilai, $request->user()->id);
+            $grader->applyFinal(
+                $answer,
+                (int) $nilai,
+                $request->user()->id,
+                catatan: $data['catatan'][$questionId] ?? null,
+            );
         }
 
         if ($errors !== []) {

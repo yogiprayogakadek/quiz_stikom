@@ -83,6 +83,7 @@ class EssayGrader
         ?int $userId = null,
         bool $auto = false,
         bool $onlyIfUnscored = false,
+        ?string $catatan = null,
     ): bool {
         $answer->loadMissing(['question', 'attempt']);
 
@@ -95,14 +96,20 @@ class EssayGrader
         $score = max(0, min((int) $question->bobot, $score));
         $previousScore = $answer->dinilai_at ? $answer->skor : null;
 
+        $perubahan = [
+            'skor' => $score,
+            'dinilai_at' => now(),
+            'dinilai_oleh' => $userId,
+        ];
+
+        if ($catatan !== null) {
+            $perubahan['catatan_pengajar'] = trim($catatan) === '' ? null : trim($catatan);
+        }
+
         $updated = Answer::query()
             ->whereKey($answer->id)
             ->when($onlyIfUnscored, fn ($query) => $query->whereNull('dinilai_at'))
-            ->update([
-                'skor' => $score,
-                'dinilai_at' => now(),
-                'dinilai_oleh' => $userId,
-            ]);
+            ->update($perubahan);
 
         if ($updated === 0) {
             return false;
