@@ -502,15 +502,31 @@ class AttemptController extends Controller
                 'benar' => $essay ? null : ($jawabanSaya?->option?->is_correct === true),
                 'dinilai_at' => $essay ? $jawabanSaya?->dinilai_at : null,
                 'skor' => $jawabanSaya?->skor ?? 0,
+                'catatan_pengajar' => $essay ? $jawabanSaya?->catatan_pengajar : null,
                 'urutan' => $aq->urutan,
             ];
         });
+
+        $catatanPengajar = $rincian
+            ->filter(fn (array $baris) => $baris['tipe'] === 'essay' && filled($baris['catatan_pengajar']))
+            ->map(fn (array $baris) => [
+                'urutan' => $baris['urutan'],
+                'skor' => $baris['skor'],
+                'bobot' => $baris['bobot'],
+                'catatan' => $baris['catatan_pengajar'],
+            ])->values();
+
+        $essayBelumDinilai = $rincian->filter(fn (array $baris) => $baris['tipe'] === 'essay'
+            && filled($baris['jawaban_saya'])
+            && $baris['dinilai_at'] === null)->count();
 
         return view('peserta.hasil', [
             'attempt' => $attempt,
             'session' => $session,
             'rincian' => $rincian,
             'tampilkan' => $tampilkan,
+            'catatanPengajar' => $catatanPengajar,
+            'catatanTampil' => $catatanPengajar->isNotEmpty() && $essayBelumDinilai === 0,
             'total_soal' => $attemptQuestions->count(),
             'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
             'tampilkanFeedback' => $attempt->needsFeedbackPrompt() && ! session('feedback_ditunda'),

@@ -304,6 +304,8 @@ class SessionController extends Controller
             'session' => $session,
             'rincian' => $rincian,
             'tampilkan' => $tampilkan,
+            'catatanPengajar' => collect(),
+            'catatanTampil' => false,
             'total_soal' => $attemptQuestions->count(),
             'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
         ]);

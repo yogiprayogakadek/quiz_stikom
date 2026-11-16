@@ -78,6 +78,59 @@ class CatatanPengajarTest extends TestCase
             ->assertSee('Catatan untuk peserta');
     }
 
+    public function test_catatan_tersembunyi_selama_masih_ada_essay_belum_dinilai(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+        $this->tambahEssayKedua($attempt);
+        app(\App\Services\EssayGrader::class)->applyFinal($answer, 8, $admin->id, catatan: 'Baik.');
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertDontSee('Catatan pengajar');
+    }
+
+    public function test_catatan_tampil_setelah_semua_essay_dinilai_walau_pembahasan_tertutup(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay(['pembahasan_mode' => 'tersembunyi']);
+        app(\App\Services\EssayGrader::class)->applyFinal($answer, 8, $admin->id, catatan: 'Argumen kuat, contoh kurang.');
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('Catatan pengajar')
+            ->assertSee('Argumen kuat, contoh kurang.');
+    }
+
+    private function tambahEssayKedua(Attempt $attempt): void
+    {
+        $essay = Question::create([
+            'quiz_id' => $attempt->quizSession->quiz_id,
+            'teks' => 'Soal essay kedua catatan.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+
+        AttemptQuestion::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay->id,
+            'urutan' => 2,
+            'urutan_opsi_json' => [],
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay->id,
+            'jawaban_teks' => 'Jawaban kedua yang belum dinilai.',
+            'waktu_jawab_ms' => 1000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+    }
+
     /**
      * Attempt selesai mode acak dengan satu soal essay yang sudah dijawab.
      *

@@ -125,6 +125,22 @@
         </section>
     @endif
 
+    @if ($catatanTampil)
+        <section class="mt-6 card" aria-labelledby="catatan-pengajar">
+            <h2 id="catatan-pengajar" class="text-2xl">Catatan pengajar</h2>
+            <p class="mt-1 text-base text-ink-muted">Ditulis per soal setelah seluruh jawaban essay dinilai.</p>
+            <ul class="mt-4 space-y-4">
+                @foreach ($catatanPengajar as $baris)
+                    <li class="rounded-xl border border-outline bg-page p-4">
+                        <p class="text-sm font-bold text-ink">Soal {{ $baris['urutan'] }} · Nilai {{ $baris['skor'] }} / {{ $baris['bobot'] }}</p>
+                        <p class="mt-1 whitespace-pre-line text-base text-ink">{{ $baris['catatan'] }}</p>
+                    </li>
+                @endforeach
+            </ul>
+            <p class="mt-4 text-sm text-ink-muted">Catatan ini bukan kunci jawaban. Kunci dan pembahasan tetap mengikuti pengaturan sesi.</p>
+        </section>
+    @endif
+
     @if ($tampilkan)
         <section class="mt-6 card" aria-labelledby="rincian-hasil">
             <h2 id="rincian-hasil" class="text-2xl">Rincian jawaban</h2>
