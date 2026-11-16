@@ -10,6 +10,7 @@ use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
 use App\Models\QuizGrade;
+use App\Models\SessionMessage;
 use App\Services\ProctoringService;
 use App\Services\QuizEngine;
 use App\Support\QuestionContent;
@@ -153,6 +154,7 @@ class AttemptController extends Controller
             'questions' => $questions,
             'mulai_index' => $mulaiIndex,
             'server_now' => now()->getTimestampMs(),
+            'pesanAktif' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ];
 
         return view('peserta.attempt.show', $data);
@@ -455,6 +457,7 @@ class AttemptController extends Controller
             'server_now' => now()->getTimestampMs(),
             'proctoring_action' => $outcome['action'] ?? 'none',
             'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
+            'pesan' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ]);
     }
 

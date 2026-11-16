@@ -172,6 +172,40 @@ class PesanPengajarTest extends TestCase
             ->assertDontSee('Kirim pesan');
     }
 
+    public function test_halaman_ujian_dan_polling_membawa_pesan_aktif(): void
+    {
+        [, , $attempts] = $this->sesiBerjalan(1);
+        $attempt = $attempts[0];
+        $pesan = SessionMessage::create([
+            'quiz_session_id' => $attempt->quiz_session_id,
+            'attempt_id' => $attempt->id,
+            'user_id' => $attempt->user_id,
+            'teks' => 'Tetap fokus, sisa 10 menit.',
+            'tipe' => 'info',
+        ]);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('Tetap fokus, sisa 10 menit.');
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->getJson(route('peserta.attempt.status', $attempt))
+            ->assertOk()
+            ->assertJsonPath('pesan.0.id', $pesan->id)
+            ->assertJsonPath('pesan.0.teks', 'Tetap fokus, sisa 10 menit.');
+
+        $pesan->update(['ditutup_at' => now()]);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->getJson(route('peserta.attempt.status', $attempt))
+            ->assertOk()
+            ->assertJsonPath('pesan', []);
+    }
+
     /**
      * Organisasi, admin, sesi acak berjalan, dan attempt pesertanya.
      *

@@ -45,6 +45,7 @@
             clipboardToast: '',
             clipboardToastBlocked: false,
             clipboardToastTimer: null,
+            pesanMasuk: @js($pesanAktif),
             clipboardPolicy: config.clipboardPolicy,
             audioCtx: null,
             notifWaktu300: false,
@@ -351,7 +352,23 @@
                         this.notifWaktu60 = false;
                         this.notifWaktu300 = false;
                         this.pesan = 'Waktu ujian ditambah ' + data.minutes + ' menit.';
+                    })
+                    .listen('.PesanPengajar', (data) => {
+                        this.gabungPesan([data]);
+                        this.bunyikanAlert(640, 0.15);
                     });
+            },
+            gabungPesan(daftar) {
+                if (!Array.isArray(daftar)) return;
+                for (const pesan of daftar) {
+                    if (!this.pesanMasuk.some((item) => item.id === pesan.id)) this.pesanMasuk.push(pesan);
+                }
+            },
+            async tutupPesan(id) {
+                this.pesanMasuk = this.pesanMasuk.filter((item) => item.id !== id);
+                try {
+                    await window.kuisFetch(config.tutupUrlPesan.replace('__ID__', id), { method: 'POST', progress: false });
+                } catch (e) {}
             },
             muatAntreanLokal() {
                 try {
@@ -970,6 +987,8 @@
                     return;
                 }
 
+                this.gabungPesan(hasil.data?.pesan ?? []);
+
                 const batas = Number(hasil.data?.batas_akhir_at ?? 0);
                 const serverNow = Number(hasil.data?.server_now ?? 0);
 
@@ -1271,6 +1290,7 @@
             markUrl: '{{ route('peserta.attempt.tandai', $attempt) }}',
             pelanggaranUrl: '{{ route('peserta.attempt.pelanggaran', $attempt) }}',
             statusUrl: '{{ route('peserta.attempt.status', $attempt) }}',
+            tutupUrlPesan: '{{ route('peserta.pesan.tutup', ['message' => '__ID__']) }}',
             dashboardUrl: '{{ route('peserta.dashboard') }}',
             resultUrl: '{{ route('peserta.attempt.result', $attempt) }}'
         })"
@@ -1644,17 +1664,31 @@
             @csrf
         </form>
 
-        <div
-            x-show="clipboardToast"
-            x-cloak
-            class="fixed right-4 top-4 z-[80] w-[min(calc(100vw-2rem),24rem)] rounded-xl border bg-page p-4 shadow-xl"
-            x-bind:class="clipboardToastBlocked ? 'border-coral text-coral-deep' : 'border-brand text-ink'"
-            role="status"
-            aria-live="polite"
-        >
-            <div class="flex items-start justify-between gap-3">
-                <p class="text-sm font-bold leading-relaxed" x-text="clipboardToast"></p>
-                <button type="button" class="btn btn-ghost min-h-10 px-2" x-on:click="clipboardToast = ''" aria-label="Tutup notifikasi copy dan paste">Tutup</button>
+        <div class="fixed right-4 top-4 z-[85] flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-3">
+            <template x-for="pesan in pesanMasuk" :key="pesan.id">
+                <div class="rounded-xl border-2 border-brand bg-page p-4 shadow-xl" role="status" aria-live="polite" x-cloak>
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-ink-muted">Pesan pengajar <span x-text="pesan.waktu"></span></p>
+                            <p class="mt-1 text-sm font-bold leading-relaxed text-ink" x-text="pesan.teks"></p>
+                        </div>
+                        <button type="button" class="btn btn-ghost min-h-11 px-3" x-on:click="tutupPesan(pesan.id)" x-bind:aria-label="'Tutup pesan: ' + pesan.teks">Tutup</button>
+                    </div>
+                </div>
+            </template>
+
+            <div
+                x-show="clipboardToast"
+                x-cloak
+                class="rounded-xl border bg-page p-4 shadow-xl"
+                x-bind:class="clipboardToastBlocked ? 'border-coral text-coral-deep' : 'border-brand text-ink'"
+                role="status"
+                aria-live="polite"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <p class="text-sm font-bold leading-relaxed" x-text="clipboardToast"></p>
+                    <button type="button" class="btn btn-ghost min-h-10 px-2" x-on:click="clipboardToast = ''" aria-label="Tutup notifikasi copy dan paste">Tutup</button>
+                </div>
             </div>
         </div>
 
