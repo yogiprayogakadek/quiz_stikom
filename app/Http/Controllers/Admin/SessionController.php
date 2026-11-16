@@ -40,18 +40,24 @@ class SessionController extends Controller
         $status = $request->query('status');
         $status = in_array($status, ['draft', 'lobby', 'berjalan', 'selesai'], true) ? $status : null;
         $kelasFilter = (int) $request->query('kelas', 0);
+        $jenis = $request->query('jenis');
+        $jenis = in_array($jenis, ['real', 'simulasi'], true) ? $jenis : null;
 
         $sessions = QuizSession::with('quiz', 'remidi', 'kelas')
             ->withCount('attempts')
             ->when($status !== null, fn ($q) => $q->where('status', $status))
             ->when($kelasFilter > 0, fn ($q) => $q->where('kelas_id', $kelasFilter))
+            ->when($jenis !== null, fn ($q) => $q->whereHas(
+                'quiz',
+                fn ($quiz) => $quiz->where('is_percobaan', $jenis === 'simulasi')
+            ))
             ->orderByRaw("CASE status WHEN 'berjalan' THEN 0 WHEN 'lobby' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END")
             ->orderByDesc('updated_at')
             ->get();
 
         $kelasList = Kelas::orderBy('nama')->get();
 
-        return view('admin.sessions.index', compact('sessions', 'status', 'kelasList', 'kelasFilter'));
+        return view('admin.sessions.index', compact('sessions', 'status', 'jenis', 'kelasList', 'kelasFilter'));
     }
 
     public function create(): View

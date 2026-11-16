@@ -105,7 +105,7 @@ class ReportController extends Controller
         ));
     }
 
-    public function attempt(Attempt $attempt): View
+    public function attempt(Request $request, Attempt $attempt): View
     {
         $attempt->load(['user', 'quizSession.quiz', 'events']);
 
@@ -125,6 +125,7 @@ class ReportController extends Controller
             $question = $aq->question;
             $answer = $jawaban->get($question->id);
             $essay = $question->isEssay();
+            $dijawab = $essay ? filled($answer?->jawaban_teks) : $answer !== null;
 
             return [
                 'question_id' => $question->id,
@@ -150,6 +151,8 @@ class ReportController extends Controller
                 'benar' => $essay ? null : ($answer?->option?->is_correct === true),
                 'dinilai_at' => $answer?->dinilai_at,
                 'skor' => $answer?->skor ?? 0,
+                'dijawab' => $dijawab,
+                'status' => ! $essay ? null : ($answer?->dinilai_at ? 'graded' : ($dijawab ? 'pending' : 'unanswered')),
                 'ai_suggested_score' => $answer?->ai_suggested_score,
                 'ai_confidence' => $answer?->ai_confidence,
                 'ai_feedback' => $answer?->ai_feedback,
@@ -158,7 +161,64 @@ class ReportController extends Controller
             ];
         });
 
-        return view('admin.reports.attempt', compact('attempt', 'rincian'));
+        $essayRincian = $rincian->where('tipe', 'essay')->values();
+
+        $progresEssay = [
+            'graded' => $essayRincian->where('status', 'graded')->count(),
+            'pending' => $essayRincian->where('status', 'pending')->count(),
+            'unanswered' => $essayRincian->where('status', 'unanswered')->count(),
+        ];
+        $progresEssay['total'] = $essayRincian->count();
+        $progresEssay['persen'] = $progresEssay['total'] > 0
+            ? (int) round($progresEssay['graded'] / $progresEssay['total'] * 100)
+            : 0;
+
+        $ruangPenilaian = $attempt->status === 'selesai'
+            && $attempt->quizSession->mode === 'acak'
+            && $essayRincian->isNotEmpty();
+
+        $soalDiminta = filter_var($request->query('soal'), FILTER_VALIDATE_INT);
+        $aktifEssay = ($soalDiminta !== false ? $essayRincian->firstWhere('question_id', $soalDiminta) : null)
+            ?? $essayRincian->firstWhere('status', 'pending')
+            ?? $essayRincian->first();
+
+        $indeksAktif = $aktifEssay === null
+            ? false
+            : $essayRincian->search(fn (array $baris) => $baris['question_id'] === $aktifEssay['question_id']);
+
+        $essaySebelumnya = $indeksAktif !== false && $indeksAktif > 0
+            ? $essayRincian[$indeksAktif - 1]
+            : null;
+
+        $essayBerikutnya = $indeksAktif !== false
+            ? $essayRincian->get($indeksAktif + 1)
+            : null;
+
+        $pesertaBerikutnya = $ruangPenilaian
+            ? Attempt::query()
+                ->where('quiz_session_id', $attempt->quiz_session_id)
+                ->whereKeyNot($attempt->id)
+                ->where('status', 'selesai')
+                ->whereHas('answers', fn ($query) => $query
+                    ->whereNotNull('jawaban_teks')
+                    ->where('jawaban_teks', '!=', '')
+                    ->whereNull('dinilai_at')
+                    ->whereHas('question', fn ($soal) => $soal->where('tipe', 'essay')))
+                ->orderBy('id')
+                ->first()
+            : null;
+
+        return view('admin.reports.attempt', compact(
+            'attempt',
+            'rincian',
+            'essayRincian',
+            'progresEssay',
+            'ruangPenilaian',
+            'aktifEssay',
+            'essaySebelumnya',
+            'essayBerikutnya',
+            'pesertaBerikutnya',
+        ));
     }
 
     public function nilaiEssay(Request $request, Attempt $attempt, QuizEngine $engine, EssayGrader $grader): RedirectResponse
@@ -171,17 +231,20 @@ class ReportController extends Controller
         $data = $request->validate([
             'nilai' => ['required', 'array'],
             'nilai.*' => ['nullable', 'integer', 'min:0'],
+            'after_save' => ['nullable', 'in:stay,next'],
+            'focus_question_id' => ['nullable', 'integer'],
         ], [
             'nilai.required' => 'Isi minimal satu nilai essay.',
             'nilai.*.integer' => 'Nilai essay harus berupa angka bulat.',
             'nilai.*.min' => 'Nilai essay tidak boleh negatif.',
+            'after_save.in' => 'Arah setelah menyimpan nilai tidak valid.',
         ]);
 
-        $questions = $attempt->attemptQuestions()
+        $attemptQuestions = $attempt->attemptQuestions()
             ->with('question')
-            ->get()
-            ->pluck('question', 'question_id');
+            ->get();
 
+        $questions = $attemptQuestions->pluck('question', 'question_id');
         $answers = $attempt->answers()->get()->keyBy('question_id');
         $errors = [];
 
@@ -241,6 +304,40 @@ class ReportController extends Controller
             'attempt_id' => $attempt->id,
         ]);
 
+        $essayIds = $attemptQuestions
+            ->filter(fn (AttemptQuestion $aq) => $aq->question?->isEssay())
+            ->pluck('question_id')
+            ->values();
+
+        $focusId = (int) ($data['focus_question_id'] ?? 0);
+
+        if (! $essayIds->contains($focusId)) {
+            $focusId = (int) $essayIds->first();
+        }
+
+        $answersTerbaru = $attempt->answers()
+            ->whereIn('question_id', $essayIds)
+            ->get()
+            ->keyBy('question_id');
+
+        $pendingIds = $essayIds->filter(fn ($questionId) => filled($answersTerbaru->get($questionId)?->jawaban_teks)
+            && $answersTerbaru->get($questionId)?->dinilai_at === null)->values();
+
+        $tujuan = $focusId;
+        $pesan = 'Nilai essay disimpan dan skor attempt diperbarui.';
+
+        if (($data['after_save'] ?? 'stay') === 'next') {
+            $posisi = $essayIds->search($focusId);
+            $berikutnya = $posisi !== false ? $essayIds->get($posisi + 1) : null;
+            $berikutnya ??= $pendingIds->first();
+
+            if ($berikutnya !== null) {
+                $tujuan = (int) $berikutnya;
+            } else {
+                $pesan = 'Seluruh jawaban essay terisi sudah dinilai.';
+            }
+        }
+
         Log::notice('Admin menilai jawaban essay.', [
             'admin_id' => $request->user()->id,
             'admin_username' => $request->user()->username,
@@ -248,7 +345,9 @@ class ReportController extends Controller
             'nilai' => $data['nilai'],
         ]);
 
-        return back()->with('sukses', 'Nilai essay disimpan dan skor attempt diperbarui.');
+        return redirect()
+            ->to(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $tujuan]).'#penilaian-essay')
+            ->with('sukses', $pesan);
     }
 
     public function saranNilaiEssay(Answer $answer, EssayGrader $grader): RedirectResponse

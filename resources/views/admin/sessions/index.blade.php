@@ -6,30 +6,56 @@
         </a>
     </x-slot:aksi>
 
-    <nav aria-label="Filter status sesi" class="flex flex-wrap gap-2">
-        @php
-            $tab = [
-                null => 'Semua',
-                'lobby' => 'Lobby',
-                'berjalan' => 'Berjalan',
-                'draft' => 'Draft',
-                'selesai' => 'Selesai',
-            ];
-        @endphp
-        @foreach ($tab as $nilai => $label)
-            <a
-                href="{{ route('admin.sessions.index', array_filter(['status' => $nilai, 'kelas' => $kelasFilter ?: null])) }}"
-                class="btn {{ $status === $nilai ? 'btn-primary' : 'btn-secondary' }}"
-                @if ($status === $nilai) aria-current="page" @endif
-            >
-                {{ $label }}
-            </a>
-        @endforeach
-    </nav>
+    <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <nav aria-label="Filter status sesi" class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-bold text-ink-muted">Status</span>
+            @php
+                $tab = [
+                    null => 'Semua',
+                    'lobby' => 'Lobby',
+                    'berjalan' => 'Berjalan',
+                    'draft' => 'Draft',
+                    'selesai' => 'Selesai',
+                ];
+            @endphp
+            @foreach ($tab as $nilai => $label)
+                <a
+                    href="{{ route('admin.sessions.index', array_filter(['status' => $nilai, 'kelas' => $kelasFilter ?: null, 'jenis' => $jenis])) }}"
+                    class="btn {{ $status === $nilai ? 'btn-primary' : 'btn-secondary' }}"
+                    @if ($status === $nilai) aria-current="page" @endif
+                >
+                    {{ $label }}
+                </a>
+            @endforeach
+        </nav>
+
+        <nav aria-label="Filter jenis sesi" class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-bold text-ink-muted">Jenis</span>
+            @php
+                $jenisTab = [
+                    null => 'Semua',
+                    'real' => 'Ujian nyata',
+                    'simulasi' => 'Simulasi',
+                ];
+            @endphp
+            @foreach ($jenisTab as $nilai => $label)
+                <a
+                    href="{{ route('admin.sessions.index', array_filter(['status' => $status, 'kelas' => $kelasFilter ?: null, 'jenis' => $nilai])) }}"
+                    class="btn {{ $jenis === $nilai ? 'btn-primary' : 'btn-secondary' }}"
+                    @if ($jenis === $nilai) aria-current="page" @endif
+                >
+                    {{ $label }}
+                </a>
+            @endforeach
+        </nav>
+    </div>
 
     <form method="GET" action="{{ route('admin.sessions.index') }}" class="mt-4 mb-5 flex flex-wrap items-end gap-3">
         @if ($status)
             <input type="hidden" name="status" value="{{ $status }}">
+        @endif
+        @if ($jenis)
+            <input type="hidden" name="jenis" value="{{ $jenis }}">
         @endif
         <div>
             <label for="kelas" class="label text-sm">Kelas</label>
@@ -44,19 +70,36 @@
             <button type="submit" class="btn btn-secondary">Terapkan</button>
         </noscript>
         @if ($kelasFilter > 0)
-            <a href="{{ route('admin.sessions.index', array_filter(['status' => $status])) }}" class="btn btn-ghost">Reset kelas</a>
+            <a href="{{ route('admin.sessions.index', array_filter(['status' => $status, 'jenis' => $jenis])) }}" class="btn btn-ghost">Reset kelas</a>
         @endif
     </form>
 
     @if ($sessions->isEmpty())
-        <x-empty-state
-            class="mt-6"
-            :judul="$kelasFilter > 0 ? 'Tidak ada sesi di kelas ini' : 'Belum ada sesi di filter ini'"
-            :keterangan="$kelasFilter > 0 ? 'Pilih kelas lain, ganti status, atau reset filter kelas.' : 'Buat sesi dari kuis yang sudah disiapkan, lalu buka lobby untuk peserta.'"
-        >
+        @php
+            $keteranganJenis = match ($jenis) {
+                'real' => 'Filter jenis ujian nyata sedang aktif.',
+                'simulasi' => 'Filter jenis simulasi sedang aktif.',
+                default => null,
+            };
+            $judulKosong = match (true) {
+                $kelasFilter > 0 => 'Tidak ada sesi di kelas ini',
+                $jenis === 'real' => 'Tidak ada sesi ujian nyata',
+                $jenis === 'simulasi' => 'Tidak ada sesi simulasi',
+                default => 'Belum ada sesi di filter ini',
+            };
+            $keteranganKosong = $kelasFilter > 0
+                ? 'Pilih kelas lain, ganti status, atau reset filter kelas.'
+                : 'Buat sesi dari kuis yang sudah disiapkan, lalu buka lobby untuk peserta.';
+            $keteranganKosong = trim(($keteranganJenis ?? '').' '.$keteranganKosong);
+        @endphp
+        <x-empty-state class="mt-6" :judul="$judulKosong" :keterangan="$keteranganKosong">
             @if ($kelasFilter > 0)
-                <a href="{{ route('admin.sessions.index', array_filter(['status' => $status])) }}" class="btn btn-secondary mt-2">Reset filter kelas</a>
-            @else
+                <a href="{{ route('admin.sessions.index', array_filter(['status' => $status, 'jenis' => $jenis])) }}" class="btn btn-secondary mt-2">Reset filter kelas</a>
+            @endif
+            @if ($jenis !== null)
+                <a href="{{ route('admin.sessions.index', array_filter(['status' => $status, 'kelas' => $kelasFilter ?: null])) }}" class="btn btn-ghost mt-2">Reset filter jenis</a>
+            @endif
+            @if ($kelasFilter === 0 && $jenis === null)
                 <a href="{{ route('admin.sessions.create') }}" class="btn btn-primary mt-2">Buat sesi</a>
             @endif
         </x-empty-state>
@@ -72,14 +115,14 @@
                     <article
                         data-item
                         data-item-key="sesi-{{ $sesi->id }}"
-                        data-search="{{ strtolower($sesi->nama.' '.$sesi->quiz->judul.' '.($sesi->kelas?->nama ?? '').' '.$sesi->status.' '.$sesi->mode) }}"
+                        data-search="{{ strtolower($sesi->nama.' '.$sesi->quiz->judul.' '.($sesi->kelas?->nama ?? '').' '.$sesi->status.' '.$sesi->mode.' '.($sesi->quiz->is_percobaan ? 'simulasi' : 'ujian nyata')) }}"
                         class="card card-hover flex flex-col"
                     >
                         <div class="flex flex-wrap items-center gap-2">
                             <x-status-badge :status="$sesi->status" />
                             <x-mode-badge :mode="$sesi->mode" />
                             @if ($sesi->quiz->is_percobaan)
-                                <span class="pill pill-neutral text-xs">Percobaan</span>
+                                <span class="pill pill-neutral text-xs">Simulasi</span>
                             @endif
                             @if ($sesi->kelas)
                                 <span class="pill pill-brand font-bold">{{ $sesi->kelas->nama }}</span>

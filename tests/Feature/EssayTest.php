@@ -923,6 +923,421 @@ class EssayTest extends TestCase
             ->assertDontSee('Saran AI 7 poin');
     }
 
+    public function test_ruang_penilaian_hanya_memuat_soal_essay_dengan_status_navigator(): void
+    {
+        [$admin, $attempt, $essay1, $essay2, $essay3, $pg] = $this->buatRuangPenilaian();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('data-essay-nav', false)
+            ->assertSee('data-essay-soal="'.$essay1->id.'"', false)
+            ->assertSee('data-essay-soal="'.$essay2->id.'"', false)
+            ->assertSee('data-essay-soal="'.$essay3->id.'"', false)
+            ->assertDontSee('data-essay-soal="'.$pg->id.'"', false)
+            ->assertSee('data-essay-status="graded"', false)
+            ->assertSee('data-essay-status="pending"', false)
+            ->assertSee('data-essay-status="unanswered"', false)
+            ->assertSee('data-hitung-dinilai="1"', false)
+            ->assertSee('data-hitung-pending="1"', false)
+            ->assertSee('data-hitung-kosong="1"', false)
+            ->assertSee('data-active-essay="'.$essay2->id.'"', false)
+            ->assertSee('data-nav-sebelumnya="'.$essay1->id.'"', false)
+            ->assertSee('aria-current="page"', false);
+    }
+
+    public function test_soal_aktif_mengikuti_query_soal_dan_mengabaikan_query_asing(): void
+    {
+        [$admin, $attempt, $essay1, $essay2, $essay3, $pg] = $this->buatRuangPenilaian();
+
+        $pesertaLain = User::create([
+            'nama' => 'Peserta Lain',
+            'username' => 'peserta-lain-ruang',
+            'password' => Hash::make('rahasia'),
+            'role' => 'peserta',
+        ]);
+
+        $soalAttemptLain = Question::create([
+            'quiz_id' => $attempt->quizSession->quiz_id,
+            'teks' => 'Soal milik attempt lain.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+        ]);
+
+        $attemptLain = Attempt::create([
+            'user_id' => $pesertaLain->id,
+            'quiz_session_id' => $attempt->quiz_session_id,
+            'status' => 'selesai',
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        AttemptQuestion::create([
+            'attempt_id' => $attemptLain->id,
+            'question_id' => $soalAttemptLain->id,
+            'urutan' => 1,
+            'urutan_opsi_json' => [],
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay3->id]))
+            ->assertOk()
+            ->assertSee('data-active-essay="'.$essay3->id.'"', false)
+            ->assertDontSee('data-active-essay="'.$essay2->id.'"', false);
+
+        foreach ([$pg->id, 999999, $soalAttemptLain->id] as $soalAsing) {
+            $this->actingAs($admin)
+                ->withSession(['auth_token' => 'token-ruang'])
+                ->get(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $soalAsing]))
+                ->assertOk()
+                ->assertSee('data-active-essay="'.$essay2->id.'"', false)
+                ->assertDontSee('data-active-essay="'.$essay3->id.'"', false);
+        }
+    }
+
+    public function test_input_nilai_kosong_untuk_soal_belum_dinilai_dan_nol_tetap_tampil(): void
+    {
+        [$admin, $attempt, $essay1, $essay2, $essay3] = $this->buatRuangPenilaian();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertSee('name="nilai['.$essay2->id.']" type="number" min="0" max="10" value=""', false);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay1->id]))
+            ->assertSee('name="nilai['.$essay1->id.']" type="number" min="0" max="10" value="0"', false);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay3->id]))
+            ->assertSee('name="nilai['.$essay3->id.']" type="number" min="0" max="10" value=""', false)
+            ->assertSee('disabled', false);
+    }
+
+    public function test_menyimpan_satu_soal_tidak_menyentuh_nilai_dan_audit_soal_lain(): void
+    {
+        [$admin, $attempt, $essay1, $essay2, $essay3] = $this->buatRuangPenilaian();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay2->id => 7],
+                'focus_question_id' => $essay2->id,
+                'after_save' => 'stay',
+            ])
+            ->assertRedirect(
+                route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay2->id]).'#penilaian-essay'
+            );
+
+        $jawabanSatu = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay1->id)->firstOrFail();
+        $this->assertSame(0, $jawabanSatu->skor);
+        $this->assertNull($jawabanSatu->dinilai_oleh);
+        $this->assertSame(0, AuditLog::where('action', 'essay_score_changed')->where('subject_id', $jawabanSatu->id)->count());
+
+        $jawabanDua = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay2->id)->firstOrFail();
+        $this->assertSame(7, $jawabanDua->skor);
+        $this->assertNotNull($jawabanDua->dinilai_at);
+        $this->assertSame(1, AuditLog::where('action', 'essay_score_changed')->where('subject_id', $jawabanDua->id)->count());
+
+        $this->assertDatabaseMissing('answers', [
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay3->id,
+        ]);
+    }
+
+    public function test_simpan_dan_berikutnya_menuju_soal_berikutnya_dan_melewati_batas_akhir(): void
+    {
+        [$admin, $attempt, $essay1, $essay2, $essay3] = $this->buatRuangPenilaian();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay1->id => 5],
+                'focus_question_id' => $essay1->id,
+                'after_save' => 'next',
+            ])
+            ->assertRedirect(
+                route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay2->id]).'#penilaian-essay'
+            );
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay3->id,
+            'jawaban_teks' => 'Jawaban ketiga.',
+            'waktu_jawab_ms' => 3000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay3->id => 4],
+                'focus_question_id' => $essay3->id,
+                'after_save' => 'next',
+            ])
+            ->assertRedirect(
+                route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay2->id]).'#penilaian-essay'
+            );
+    }
+
+    public function test_simpan_dan_berikutnya_saat_semua_soal_terisi_dinilai_tetap_di_soal_terakhir(): void
+    {
+        [$admin, $attempt, , , $essay3] = $this->buatRuangPenilaian(true);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$essay3->id => null],
+                'focus_question_id' => $essay3->id,
+                'after_save' => 'next',
+            ])
+            ->assertRedirect(
+                route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essay3->id]).'#penilaian-essay'
+            )
+            ->assertSessionHas('sukses', 'Seluruh jawaban essay terisi sudah dinilai.');
+    }
+
+    public function test_peserta_berikutnya_hanya_dari_sesi_dan_workspace_yang_sama(): void
+    {
+        [$admin, $attempt, $essay1] = $this->buatRuangPenilaian(true);
+
+        $pesertaLain = User::create([
+            'nama' => 'Peserta Berikutnya',
+            'username' => 'peserta-berikutnya',
+            'password' => Hash::make('rahasia'),
+            'role' => 'peserta',
+        ]);
+
+        $attemptBerikutnya = Attempt::create([
+            'user_id' => $pesertaLain->id,
+            'quiz_session_id' => $attempt->quiz_session_id,
+            'status' => 'selesai',
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attemptBerikutnya->id,
+            'question_id' => $essay1->id,
+            'jawaban_teks' => 'Jawaban belum dinilai.',
+            'waktu_jawab_ms' => 1000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        $sesiLain = QuizSession::create([
+            'quiz_id' => $attempt->quizSession->quiz_id,
+            'nama' => 'Sesi Lain',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-sesi-lain',
+            'created_by' => $admin->id,
+        ]);
+
+        $attemptSesiLain = Attempt::create([
+            'user_id' => $pesertaLain->id,
+            'quiz_session_id' => $sesiLain->id,
+            'status' => 'selesai',
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attemptSesiLain->id,
+            'question_id' => $essay1->id,
+            'jawaban_teks' => 'Jawaban sesi lain.',
+            'waktu_jawab_ms' => 1000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        $organisasiLain = Organization::create([
+            'name' => 'Workspace Lain',
+            'slug' => 'workspace-lain',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'is_active' => true,
+        ]);
+
+        $quizAsing = Quiz::create([
+            'judul' => 'Kuis Workspace Lain',
+            'organization_id' => $organisasiLain->id,
+            'created_by' => $admin->id,
+        ]);
+
+        $sesiAsing = QuizSession::create([
+            'quiz_id' => $quizAsing->id,
+            'organization_id' => $organisasiLain->id,
+            'nama' => 'Sesi Workspace Lain',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-sesi-asing',
+            'created_by' => $admin->id,
+        ]);
+
+        $attemptAsing = Attempt::create([
+            'user_id' => $pesertaLain->id,
+            'organization_id' => $organisasiLain->id,
+            'quiz_session_id' => $sesiAsing->id,
+            'status' => 'selesai',
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attemptAsing->id,
+            'question_id' => $essay1->id,
+            'jawaban_teks' => 'Jawaban workspace lain.',
+            'waktu_jawab_ms' => 1000,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('data-peserta-berikutnya="'.$attemptBerikutnya->id.'"', false)
+            ->assertDontSee('data-peserta-berikutnya="'.$attemptSesiLain->id.'"', false)
+            ->assertDontSee('data-peserta-berikutnya="'.$attemptAsing->id.'"', false);
+    }
+
+    /**
+     * Attempt selesai dengan tiga essay berurutan dan satu pilihan ganda.
+     * Essay pertama sudah dinilai dengan nilai 0, essay kedua menunggu,
+     * essay ketiga tidak dijawab.
+     *
+     * @return array{0: User, 1: Attempt, 2: Question, 3: Question, 4: Question, 5: Question}
+     */
+    private function buatRuangPenilaian(bool $semuaEssayTerisiDinilai = false): array
+    {
+        $admin = User::create([
+            'nama' => 'Admin Ruang',
+            'username' => 'admin-ruang',
+            'password' => Hash::make('rahasia'),
+            'role' => 'admin',
+            'current_session_token' => 'token-ruang',
+        ]);
+
+        $peserta = User::create([
+            'nama' => 'Peserta Ruang',
+            'username' => 'peserta-ruang',
+            'password' => Hash::make('rahasia'),
+            'role' => 'peserta',
+            'current_session_token' => 'token-ruang-peserta',
+        ]);
+
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Ruang Nilai',
+            'created_by' => $admin->id,
+        ]);
+
+        $pg = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal pilihan ganda ruang nilai.',
+            'tipe' => 'pilihan_ganda',
+            'bobot' => 2,
+            'durasi_detik' => 60,
+        ]);
+
+        $benar = Option::create([
+            'question_id' => $pg->id,
+            'teks' => 'Jawaban benar',
+            'is_correct' => true,
+        ]);
+
+        $essay1 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal essay pertama ruang nilai.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+            'kunci_essay' => 'Kunci essay pertama.',
+        ]);
+
+        $essay2 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal essay kedua ruang nilai.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+            'kunci_essay' => 'Kunci essay kedua.',
+        ]);
+
+        $essay3 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Soal essay ketiga ruang nilai.',
+            'tipe' => 'essay',
+            'bobot' => 10,
+            'durasi_detik' => 60,
+            'kunci_essay' => 'Kunci essay ketiga.',
+        ]);
+
+        $session = QuizSession::create([
+            'quiz_id' => $quiz->id,
+            'nama' => 'Sesi Ruang Nilai',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-ruang-nilai',
+            'created_by' => $admin->id,
+        ]);
+
+        $attempt = Attempt::create([
+            'user_id' => $peserta->id,
+            'quiz_session_id' => $session->id,
+            'status' => 'selesai',
+            'mulai_at' => now()->getTimestampMs(),
+            'selesai_at' => now()->getTimestampMs(),
+            'bergabung_at' => now(),
+        ]);
+
+        foreach ([[$essay1, 1], [$pg, 2], [$essay2, 3], [$essay3, 4]] as [$soal, $urutan]) {
+            AttemptQuestion::create([
+                'attempt_id' => $attempt->id,
+                'question_id' => $soal->id,
+                'urutan' => $urutan,
+                'urutan_opsi_json' => [],
+            ]);
+        }
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $pg->id,
+            'option_id' => $benar->id,
+            'waktu_jawab_ms' => 500,
+            'skor' => 0,
+            'answered_at' => now(),
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay1->id,
+            'jawaban_teks' => 'Jawaban essay pertama.',
+            'waktu_jawab_ms' => 1000,
+            'skor' => 0,
+            'dinilai_at' => now(),
+            'answered_at' => now(),
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay2->id,
+            'jawaban_teks' => 'Jawaban essay kedua.',
+            'waktu_jawab_ms' => 2000,
+            'skor' => $semuaEssayTerisiDinilai ? 6 : 0,
+            'dinilai_at' => $semuaEssayTerisiDinilai ? now() : null,
+            'answered_at' => now(),
+        ]);
+
+        return [$admin, $attempt, $essay1, $essay2, $essay3, $pg];
+    }
+
     private function buatAcakBerjalan(bool $denganJawaban = true, bool $autoGrade = false): array
     {
         $admin = User::create([
