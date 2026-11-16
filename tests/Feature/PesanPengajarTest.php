@@ -11,6 +11,7 @@ use App\Models\QuizSession;
 use App\Models\SessionMessage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -53,6 +54,57 @@ class PesanPengajarTest extends TestCase
         $this->assertCount(1, $hasil);
         $this->assertSame($aktif->id, $hasil->first()->id);
         $this->assertSame(['id', 'teks', 'tipe', 'waktu'], array_keys($hasil->first()->untukPeserta()));
+    }
+
+    public function test_blast_mengirim_ke_semua_peserta_yang_sedang_mengerjakan(): void
+    {
+        Event::fake([PesanPengajar::class]);
+        [$admin, $session, , $organization] = $this->sesiBerjalan(2);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('admin.sessions.pesan', $session), ['teks' => 'Sisa waktu 10 menit.', 'target' => 'semua'])
+            ->assertRedirect();
+
+        $this->assertSame(2, SessionMessage::where('quiz_session_id', $session->id)->count());
+        Event::assertDispatchedTimes(PesanPengajar::class, 2);
+    }
+
+    public function test_pilih_peserta_hanya_mengirim_ke_attempt_terpilih(): void
+    {
+        Event::fake([PesanPengajar::class]);
+        [$admin, $session, $attempts, $organization] = $this->sesiBerjalan(2);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('admin.sessions.pesan', $session), [
+                'teks' => 'Periksa soal nomor 3.',
+                'target' => 'terpilih',
+                'attempt_ids' => [$attempts[0]->id],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(1, SessionMessage::count());
+        $this->assertSame($attempts[0]->id, SessionMessage::first()->attempt_id);
+    }
+
+    public function test_pesan_kosong_dan_sesi_selesai_ditolak(): void
+    {
+        [$admin, $session, , $organization] = $this->sesiBerjalan(1);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('admin.sessions.pesan', $session), ['teks' => '  ', 'target' => 'semua'])
+            ->assertSessionHasErrors('teks');
+
+        $session->update(['status' => 'selesai']);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token, 'organization_id' => $organization->id])
+            ->post(route('admin.sessions.pesan', $session), ['teks' => 'Halo', 'target' => 'semua'])
+            ->assertSessionHasErrors('teks');
+
+        $this->assertSame(0, SessionMessage::count());
     }
 
     /**

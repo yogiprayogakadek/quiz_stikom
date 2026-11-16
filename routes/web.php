@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\RemedialController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SessionController as AdminSessionController;
+use App\Http\Controllers\Admin\SessionMessageController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\WorkspaceController;
@@ -215,6 +216,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('sessions.attempts.reset');
     Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
         ->name('sessions.attempts.kick');
+    Route::post('sessions/{session}/pesan', [SessionMessageController::class, 'store'])->name('sessions.pesan');
 });
 
 Route::middleware(['auth', 'role:peserta', 'organization_member', 'participant_presence'])->group(function () {
