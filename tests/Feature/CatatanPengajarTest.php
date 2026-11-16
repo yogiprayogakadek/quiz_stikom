@@ -66,6 +66,18 @@ class CatatanPengajarTest extends TestCase
             ->assertSessionHasErrors('catatan.'.$answer->question_id);
     }
 
+    public function test_ruang_penilaian_menampilkan_isian_catatan(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->get(route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $answer->question_id]))
+            ->assertOk()
+            ->assertSee('name="catatan['.$answer->question_id.']"', false)
+            ->assertSee('Catatan untuk peserta');
+    }
+
     /**
      * Attempt selesai mode acak dengan satu soal essay yang sudah dijawab.
      *

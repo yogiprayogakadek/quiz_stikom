@@ -101,6 +101,7 @@
             ];
             $statusAktif = $statusEssay[$aktifEssay['status']];
             $nilaiAwal = old('nilai.'.$aktifEssay['question_id'], $aktifEssay['dinilai_at'] ? $aktifEssay['skor'] : '');
+            $catatanAwal = old('catatan.'.$aktifEssay['question_id'], $aktifEssay['catatan_pengajar']);
             $labelPersen = $progresEssay['total'] - $progresEssay['unanswered'];
         @endphp
 
@@ -364,6 +365,22 @@
                                 @if (! $aktifEssay['dijawab'])
                                     <p class="help mt-1">Peserta tidak menjawab soal ini. Nilai tidak diperlukan.</p>
                                 @endif
+                            </div>
+
+                            <div class="mt-4">
+                                <label for="catatan-{{ $aktifEssay['question_id'] }}" class="label">Catatan untuk peserta</label>
+                                <textarea
+                                    id="catatan-{{ $aktifEssay['question_id'] }}"
+                                    name="catatan[{{ $aktifEssay['question_id'] }}]"
+                                    rows="3"
+                                    maxlength="2000"
+                                    class="input"
+                                    aria-describedby="bantuan-catatan-{{ $aktifEssay['question_id'] }}"
+                                    @disabled(! $aktifEssay['dijawab'])
+                                    @error('catatan.'.$aktifEssay['question_id']) aria-invalid="true" @enderror
+                                >{{ $catatanAwal }}</textarea>
+                                <p id="bantuan-catatan-{{ $aktifEssay['question_id'] }}" class="help mt-1">Tampil ke peserta setelah semua essay dinilai. Kosongkan untuk menghapus.</p>
+                                @error('catatan.'.$aktifEssay['question_id']) <p class="field-error">{{ $message }}</p> @enderror
                             </div>
 
                             <div class="mt-5 flex flex-wrap items-center gap-2" data-nav-sebelumnya="{{ $essaySebelumnya['question_id'] ?? 'tidak-ada' }}">
