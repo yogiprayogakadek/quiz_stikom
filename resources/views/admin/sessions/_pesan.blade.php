@@ -1,9 +1,7 @@
 @php
-    $daftarPeserta = $pesertaAktif->map(fn ($attempt) => [
-        'id' => $attempt->id,
-        'nama' => $attempt->user?->nama ?? '(peserta dihapus)',
-        'username' => $attempt->user?->username ?? '-',
-    ])->values();
+    $targetAwal = old('target', 'semua');
+    $terpilihAwal = array_map('intval', (array) old('attempt_ids', []));
+    $teksAwal = old('teks', '');
 @endphp
 
 <div class="mt-4 rounded-2xl border border-outline bg-page p-4">
@@ -24,7 +22,7 @@
     id="dialog-pesan"
     class="m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,38rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40"
     aria-labelledby="judul-dialog-pesan"
-    x-data="{ target: '{{ old('target', 'semua') }}', terpilih: @js(array_map('intval', old('attempt_ids', []))), cari: '', teks: @js(old('teks', '')), daftar: @js($daftarPeserta) }"
+    x-data="{ target: '{{ $targetAwal }}', terpilih: @json($terpilihAwal), cari: '', jumlahTeks: {{ mb_strlen($teksAwal) }} }"
     @if ($errors->has('teks') || $errors->has('attempt_ids'))
         x-init="$el.showModal()"
     @endif
@@ -55,12 +53,12 @@
                 required
                 autofocus
                 class="input"
-                x-model="teks"
+                x-on:input="jumlahTeks = $event.target.value.length"
                 @error('teks') aria-invalid="true" @enderror
-            >{{ old('teks') }}</textarea>
+            >{{ $teksAwal }}</textarea>
             <div class="mt-1 flex items-start justify-between gap-3">
                 <p class="help">Maksimal 500 karakter.</p>
-                <p class="text-xs font-bold text-ink-muted" x-text="teks.length + ' / 500'"></p>
+                <p class="text-xs font-bold text-ink-muted" x-text="jumlahTeks + ' / 500'"></p>
             </div>
             @error('teks') <p class="field-error">{{ $message }}</p> @enderror
         </div>
@@ -70,13 +68,13 @@
             <div class="space-y-2">
                 <label class="block rounded-xl border-2 border-outline p-4 has-[:checked]:border-brand">
                     <span class="flex items-start gap-3">
-                        <input type="radio" name="target" value="semua" x-model="target" class="mt-1 h-5 w-5" @checked(old('target', 'semua') === 'semua')>
-                        <span><span class="block font-bold">Semua peserta yang sedang mengerjakan</span><span class="mt-1 block text-sm text-ink-muted">{{ $daftarPeserta->count() }} peserta aktif.</span></span>
+                        <input type="radio" name="target" value="semua" x-model="target" class="mt-1 h-5 w-5" @checked($targetAwal === 'semua')>
+                        <span><span class="block font-bold">Semua peserta yang sedang mengerjakan</span><span class="mt-1 block text-sm text-ink-muted">{{ $pesertaAktif->count() }} peserta aktif.</span></span>
                     </span>
                 </label>
                 <label class="block rounded-xl border-2 border-outline p-4 has-[:checked]:border-brand">
                     <span class="flex items-start gap-3">
-                        <input type="radio" name="target" value="terpilih" x-model="target" class="mt-1 h-5 w-5" @checked(old('target') === 'terpilih')>
+                        <input type="radio" name="target" value="terpilih" x-model="target" class="mt-1 h-5 w-5" @checked($targetAwal === 'terpilih')>
                         <span><span class="block font-bold">Peserta terpilih</span><span class="mt-1 block text-sm text-ink-muted">Kirim hanya ke peserta yang dicentang.</span></span>
                     </span>
                 </label>
@@ -99,16 +97,19 @@
                     <span x-text="terpilih.length"></span> peserta dipilih
                 </legend>
                 <div class="mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-2xl border border-outline bg-page p-2 sm:grid-cols-2">
-                    <template x-for="item in daftar.filter((peserta) => peserta.nama.toLowerCase().includes(cari.toLowerCase()) || peserta.username.toLowerCase().includes(cari.toLowerCase()))" :key="item.id">
-                        <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border p-3 transition" :class="terpilih.includes(item.id) ? 'border-brand bg-brand-soft' : 'border-outline bg-surface hover:border-outline-strong'">
-                            <input type="checkbox" name="attempt_ids[]" x-model="terpilih" :value="item.id" class="h-5 w-5 shrink-0 rounded border-outline text-brand focus:ring-brand">
+                    @foreach ($pesertaAktif as $attempt)
+                        <label
+                            class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline bg-surface p-3 transition hover:border-outline-strong has-[:checked]:border-brand has-[:checked]:bg-brand-soft"
+                            data-cari="{{ \Illuminate\Support\Str::lower(($attempt->user?->nama ?? '').' '.($attempt->user?->username ?? '')) }}"
+                            x-show="cari === '' || $el.dataset.cari.includes(cari.toLowerCase())"
+                        >
+                            <input type="checkbox" name="attempt_ids[]" value="{{ $attempt->id }}" x-model="terpilih" class="h-5 w-5 shrink-0 rounded border-outline text-brand focus:ring-brand">
                             <span class="min-w-0">
-                                <span class="block truncate text-sm font-bold" x-text="item.nama"></span>
-                                <span class="block truncate text-xs text-ink-muted" x-text="item.username"></span>
+                                <span class="block truncate text-sm font-bold">{{ $attempt->user?->nama ?? '(peserta dihapus)' }}</span>
+                                <span class="block truncate text-xs text-ink-muted">{{ $attempt->user?->username ?? '-' }}</span>
                             </span>
                         </label>
-                    </template>
-                    <p x-show="daftar.filter((peserta) => peserta.nama.toLowerCase().includes(cari.toLowerCase()) || peserta.username.toLowerCase().includes(cari.toLowerCase())).length === 0" class="py-6 text-center text-sm text-ink-muted sm:col-span-2">Tidak ada peserta yang cocok.</p>
+                    @endforeach
                 </div>
             </fieldset>
             @error('attempt_ids') <p class="field-error">{{ $message }}</p> @enderror
