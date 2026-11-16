@@ -206,12 +206,38 @@ class PesanPengajarTest extends TestCase
             ->assertJsonPath('pesan', []);
     }
 
+    public function test_state_sesi_serempak_membawa_pesan_aktif(): void
+    {
+        [, $session, $attempt] = $this->sesiSerempakBerjalan();
+        $pesan = SessionMessage::create([
+            'quiz_session_id' => $session->id,
+            'attempt_id' => $attempt->id,
+            'user_id' => $attempt->user_id,
+            'teks' => 'Jangan lupa cek kembali jawaban.',
+            'tipe' => 'info',
+        ]);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->getJson(route('peserta.session.state', $session))
+            ->assertOk()
+            ->assertJsonPath('pesan_pengajar.0.id', $pesan->id);
+
+        $pesan->update(['ditutup_at' => now()]);
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->getJson(route('peserta.session.state', $session))
+            ->assertOk()
+            ->assertJsonPath('pesan_pengajar', []);
+    }
+
     /**
      * Organisasi, admin, sesi acak berjalan, dan attempt pesertanya.
      *
      * @return array{0: User, 1: QuizSession, 2: \Illuminate\Support\Collection<int, Attempt>, 3: Organization}
      */
-    private function sesiBerjalan(int $jumlahPeserta = 2): array
+    private function sesiBerjalan(int $jumlahPeserta = 2, array $sessionOverrides = []): array
     {
         $slug = 'pesan-'.Str::lower(Str::random(6));
 
@@ -249,7 +275,7 @@ class PesanPengajarTest extends TestCase
             'created_by' => $admin->id,
         ]);
 
-        $session = QuizSession::create([
+        $session = QuizSession::create(array_merge([
             'organization_id' => $organization->id,
             'quiz_id' => $quiz->id,
             'kelas_id' => $kelas->id,
@@ -258,7 +284,7 @@ class PesanPengajarTest extends TestCase
             'status' => 'berjalan',
             'display_token' => 'display-'.$slug,
             'created_by' => $admin->id,
-        ]);
+        ], $sessionOverrides));
 
         $attempts = collect();
 
@@ -286,5 +312,18 @@ class PesanPengajarTest extends TestCase
         }
 
         return [$admin, $session, $attempts->sortBy('id')->values(), $organization];
+    }
+
+    /**
+     * @return array{0: User, 1: QuizSession, 2: Attempt}
+     */
+    private function sesiSerempakBerjalan(): array
+    {
+        [$admin, $session, $attempts] = $this->sesiBerjalan(1, [
+            'mode' => 'serempak',
+            'fase' => 'soal_terbuka',
+        ]);
+
+        return [$admin, $session, $attempts[0]];
     }
 }

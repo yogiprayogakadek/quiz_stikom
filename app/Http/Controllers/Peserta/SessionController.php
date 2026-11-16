@@ -11,6 +11,7 @@ use App\Models\Attempt;
 use App\Models\AttemptQuestion;
 use App\Models\QuizGrade;
 use App\Models\QuizSession;
+use App\Models\SessionMessage;
 use App\Services\ProctoringService;
 use App\Services\QuizEngine;
 use App\Support\QuestionContent;
@@ -62,6 +63,7 @@ class SessionController extends Controller
             'answerUrl' => route('peserta.session.answer', $session),
             'resultUrl' => route('peserta.session.result', $session),
             'channel' => 'session.'.$session->id,
+            'pesanAwal' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ]);
     }
 
@@ -113,6 +115,7 @@ class SessionController extends Controller
             'result_url' => route('peserta.session.result', $session),
             'proctoring_action' => $outcome['action'] ?? 'none',
             'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
+            'pesan_pengajar' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ];
 
         if ($session->status === 'lobby') {
