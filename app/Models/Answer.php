@@ -18,6 +18,7 @@ class Answer extends Model
         'jawaban_data_json',
         'waktu_jawab_ms',
         'skor',
+        'catatan_pengajar',
         'ai_suggested_score',
         'ai_confidence',
         'ai_feedback',
