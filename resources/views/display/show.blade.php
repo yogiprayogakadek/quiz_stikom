@@ -635,6 +635,7 @@
                                     <li>
                                         <div class="flex items-start justify-between gap-4">
                                             <p class="text-xl font-bold text-ink" x-text="soal.teks"></p>
+                                            <div x-show="soal.content_html" x-html="soal.content_html" class="mt-3 space-y-4"></div>
                                             <p class="font-mono text-xl font-bold text-ink" x-text="soal.persen + '%'"></p>
                                         </div>
                                         <div class="progress mt-2">

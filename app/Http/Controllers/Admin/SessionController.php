@@ -18,6 +18,7 @@ use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\AttemptResetService;
+use App\Services\QuestionMediaService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use Illuminate\Database\Eloquent\Collection;
@@ -130,7 +131,7 @@ class SessionController extends Controller
         ));
     }
 
-    public function trial(Request $request, QuizSession $session): RedirectResponse
+    public function trial(Request $request, QuizSession $session, QuestionMediaService $mediaService): RedirectResponse
     {
         $eligibleIds = User::query()
             ->where('role', 'peserta')
@@ -163,68 +164,98 @@ class SessionController extends Controller
             ]);
         }
 
-        $trialSession = DB::transaction(function () use ($request, $session, $participantIds) {
-            $sourceSession = QuizSession::query()
-                ->with(['quiz.questions' => fn ($query) => $query->with('options')->orderBy('id')])
-                ->lockForUpdate()
-                ->findOrFail($session->id);
+        $storedPaths = [];
+        try {
+            $trialSession = DB::transaction(function () use ($request, $session, $participantIds, $mediaService, &$storedPaths) {
+                $sourceSession = QuizSession::query()
+                    ->with(['quiz.questions' => fn ($query) => $query->with(['options', 'media'])->orderBy('id')])
+                    ->lockForUpdate()
+                    ->findOrFail($session->id);
 
-            if ($sourceSession->status !== 'draft' || $sourceSession->quiz->is_percobaan) {
-                throw ValidationException::withMessages(['trial' => 'Sesi sumber berubah dan tidak lagi dapat dibuatkan simulasi.']);
-            }
-
-            $sourceQuiz = $sourceSession->quiz;
-            $trialQuiz = $sourceQuiz->replicate(['id', 'created_at', 'updated_at']);
-            $trialQuiz->fill([
-                'source_quiz_id' => $sourceQuiz->id,
-                'judul' => Str::limit($sourceQuiz->judul.' — Simulasi', 255, ''),
-                'is_percobaan' => true,
-                'created_by' => $request->user()->id,
-            ]);
-            $trialQuiz->save();
-
-            foreach ($sourceQuiz->questions as $question) {
-                $trialQuestion = $question->replicate(['id', 'quiz_id', 'created_at', 'updated_at', 'deleted_at']);
-                $trialQuestion->quiz_id = $trialQuiz->id;
-                $trialQuestion->save();
-
-                foreach ($question->options as $option) {
-                    $trialOption = $option->replicate(['id', 'question_id']);
-                    $trialOption->question_id = $trialQuestion->id;
-                    $trialOption->save();
+                if ($sourceSession->status !== 'draft' || $sourceSession->quiz->is_percobaan) {
+                    throw ValidationException::withMessages(['trial' => 'Sesi sumber berubah dan tidak lagi dapat dibuatkan simulasi.']);
                 }
-            }
 
-            $trialSession = QuizSession::create([
-                'quiz_id' => $trialQuiz->id,
-                'kelas_id' => null,
-                'nama' => Str::limit($sourceSession->nama.' — Simulasi', 160, ''),
-                'mode' => $sourceSession->mode,
-                'jenis' => 'utama',
-                'acak_opsi' => $sourceSession->acak_opsi,
-                'tampilkan_pembahasan' => $sourceSession->tampilkan_pembahasan,
-                'pembahasan_mode' => $sourceSession->pembahasan_mode,
-                'leaderboard_live' => $sourceSession->leaderboard_live,
-                'max_peserta' => $sourceSession->max_peserta,
-                'max_pelanggaran' => $sourceSession->max_pelanggaran,
-                'durasi_peringatan' => $sourceSession->durasi_peringatan,
-                'pelanggaran_action' => $sourceSession->pelanggaran_action,
-                'pelanggaran_penalty_seconds' => $sourceSession->pelanggaran_penalty_seconds,
-                'clipboard_policy' => $sourceSession->clipboard_policy,
-                'jeda_detik' => $sourceSession->jeda_detik,
-                'durasi_total_detik' => $sourceSession->durasi_total_detik,
-                'timing_mode' => $sourceSession->timing_mode,
-                'scheduled_start_at' => $sourceSession->scheduled_start_at,
-                'scheduled_end_at' => $sourceSession->scheduled_end_at,
-                'status' => 'draft',
-                'display_token' => Str::random(48),
-                'created_by' => $request->user()->id,
-            ]);
+                $sourceQuiz = $sourceSession->quiz;
+                $trialQuiz = $sourceQuiz->replicate(['id', 'created_at', 'updated_at']);
+                $trialQuiz->fill([
+                    'source_quiz_id' => $sourceQuiz->id,
+                    'judul' => Str::limit($sourceQuiz->judul.' — Simulasi', 255, ''),
+                    'is_percobaan' => true,
+                    'created_by' => $request->user()->id,
+                ]);
+                $trialQuiz->save();
 
-            $trialSession->allowedParticipants()->sync($participantIds);
+                foreach ($sourceQuiz->questions as $question) {
+                    $trialQuestion = $question->replicate(['id', 'quiz_id', 'created_at', 'updated_at', 'deleted_at']);
+                    $trialQuestion->quiz_id = $trialQuiz->id;
+                    $trialQuestion->save();
 
-            return $trialSession;
-        });
+                    $contentBlocks = $mediaService->cloneBlocks(
+                        $question,
+                        $trialQuestion,
+                        $question->content_blocks_json ?? [],
+                        $storedPaths,
+                    );
+                    $subQuestions = collect($question->sub_soal_json ?? [])->map(function (array $part) use ($question, $trialQuestion, $mediaService, &$storedPaths) {
+                        $blocks = $mediaService->cloneBlocks(
+                            $question,
+                            $trialQuestion,
+                            $part['content_blocks'] ?? [],
+                            $storedPaths,
+                        );
+                        if ($blocks !== [] || array_key_exists('content_blocks', $part)) {
+                            $part['content_blocks'] = $blocks;
+                        }
+
+                        return $part;
+                    })->all();
+                    $trialQuestion->update([
+                        'content_blocks_json' => $contentBlocks,
+                        'sub_soal_json' => $subQuestions,
+                    ]);
+
+                    foreach ($question->options as $option) {
+                        $trialOption = $option->replicate(['id', 'question_id']);
+                        $trialOption->question_id = $trialQuestion->id;
+                        $trialOption->save();
+                    }
+                }
+
+                $trialSession = QuizSession::create([
+                    'quiz_id' => $trialQuiz->id,
+                    'kelas_id' => null,
+                    'nama' => Str::limit($sourceSession->nama.' — Simulasi', 160, ''),
+                    'mode' => $sourceSession->mode,
+                    'jenis' => 'utama',
+                    'acak_opsi' => $sourceSession->acak_opsi,
+                    'tampilkan_pembahasan' => $sourceSession->tampilkan_pembahasan,
+                    'pembahasan_mode' => $sourceSession->pembahasan_mode,
+                    'leaderboard_live' => $sourceSession->leaderboard_live,
+                    'max_peserta' => $sourceSession->max_peserta,
+                    'max_pelanggaran' => $sourceSession->max_pelanggaran,
+                    'durasi_peringatan' => $sourceSession->durasi_peringatan,
+                    'pelanggaran_action' => $sourceSession->pelanggaran_action,
+                    'pelanggaran_penalty_seconds' => $sourceSession->pelanggaran_penalty_seconds,
+                    'clipboard_policy' => $sourceSession->clipboard_policy,
+                    'jeda_detik' => $sourceSession->jeda_detik,
+                    'durasi_total_detik' => $sourceSession->durasi_total_detik,
+                    'timing_mode' => $sourceSession->timing_mode,
+                    'scheduled_start_at' => $sourceSession->scheduled_start_at,
+                    'scheduled_end_at' => $sourceSession->scheduled_end_at,
+                    'status' => 'draft',
+                    'display_token' => Str::random(48),
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $trialSession->allowedParticipants()->sync($participantIds);
+
+                return $trialSession;
+            });
+        } catch (\Throwable $exception) {
+            $mediaService->cleanupPaths($storedPaths);
+            throw $exception;
+        }
 
         return redirect()
             ->route('admin.sessions.show', $trialSession)

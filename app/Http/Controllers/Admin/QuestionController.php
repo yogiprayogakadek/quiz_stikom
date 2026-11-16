@@ -11,6 +11,8 @@ use App\Models\Question;
 use App\Models\Quiz;
 use App\Services\AiQuestionService;
 use App\Services\OrganizationUsage;
+use App\Services\QuestionMediaService;
+use App\Support\QuestionContent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,28 +44,47 @@ class QuestionController extends Controller
         return view('admin.questions.create', compact('quiz'));
     }
 
-    public function store(StoreQuestionRequest $request, ?Quiz $quiz = null): RedirectResponse
+    public function store(StoreQuestionRequest $request, QuestionMediaService $mediaService, ?Quiz $quiz = null): RedirectResponse
     {
         $data = $request->validated();
+        $storedPaths = [];
+        $question = null;
 
-        DB::transaction(function () use ($data, $quiz) {
-            $question = Question::create([
-                'quiz_id' => $quiz?->id,
-                'teks' => $data['teks'],
-                'tipe' => $data['tipe'],
-                'bobot' => $data['bobot'],
-                'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
-                'pembahasan' => $data['pembahasan'] ?? null,
-                'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
-                'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
-                'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
-                'sub_soal_json' => $data['tipe'] === 'essay' ? $this->normalisasiSubSoal($data['sub_soal'] ?? []) : null,
-            ]);
+        try {
+            DB::transaction(function () use ($data, $quiz, $mediaService, &$storedPaths, &$question) {
+                $question = Question::create([
+                    'quiz_id' => $quiz?->id,
+                    'teks' => $data['teks'],
+                    'tipe' => $data['tipe'],
+                    'bobot' => $data['bobot'],
+                    'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
+                    'pembahasan' => $data['pembahasan'] ?? null,
+                    'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
+                    'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
+                    'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
+                    'answer_format' => $data['tipe'] === 'essay' ? ($data['answer_format'] ?? 'rich_text') : 'rich_text',
+                    'answer_config_json' => $data['tipe'] === 'essay'
+                        ? QuestionContent::normalizeAnswerConfig($data['answer_format'] ?? 'rich_text', $data['answer_config'] ?? [])
+                        : null,
+                ]);
 
-            if ($data['tipe'] === 'pilihan_ganda') {
-                $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
-            }
-        });
+                $question->update([
+                    'content_blocks_json' => $mediaService->persistBlocks($question, $data['content_blocks'] ?? [], $storedPaths),
+                    'sub_soal_json' => $data['tipe'] === 'essay'
+                        ? $this->normalisasiSubSoal($data['sub_soal'] ?? [], $question, $mediaService, $storedPaths)
+                        : null,
+                ]);
+
+                if ($data['tipe'] === 'pilihan_ganda') {
+                    $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+                }
+            });
+        } catch (\Throwable $exception) {
+            $mediaService->cleanupPaths($storedPaths);
+            throw $exception;
+        }
+
+        $mediaService->pruneUnused($question);
 
         if ($quiz) {
             return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal kuis ditambahkan.');
@@ -95,7 +116,7 @@ class QuestionController extends Controller
         return view('admin.questions.edit', compact('question', 'quiz'));
     }
 
-    public function update(UpdateQuestionRequest $request, ?Quiz $quiz, Question $question): RedirectResponse
+    public function update(UpdateQuestionRequest $request, QuestionMediaService $mediaService, ?Quiz $quiz, Question $question): RedirectResponse
     {
         if ($question->id === null && $quiz instanceof Question) {
             $question = $quiz;
@@ -113,26 +134,41 @@ class QuestionController extends Controller
         }
 
         $data = $request->validated();
+        $storedPaths = [];
 
-        DB::transaction(function () use ($question, $data) {
-            $question->update([
-                'teks' => $data['teks'],
-                'tipe' => $data['tipe'],
-                'bobot' => $data['bobot'],
-                'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
-                'pembahasan' => $data['pembahasan'] ?? null,
-                'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
-                'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
-                'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
-                'sub_soal_json' => $data['tipe'] === 'essay' ? $this->normalisasiSubSoal($data['sub_soal'] ?? []) : null,
-            ]);
+        try {
+            DB::transaction(function () use ($question, $data, $mediaService, &$storedPaths) {
+                $question->update([
+                    'teks' => $data['teks'],
+                    'tipe' => $data['tipe'],
+                    'bobot' => $data['bobot'],
+                    'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
+                    'pembahasan' => $data['pembahasan'] ?? null,
+                    'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
+                    'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
+                    'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
+                    'content_blocks_json' => $mediaService->persistBlocks($question, $data['content_blocks'] ?? [], $storedPaths),
+                    'answer_format' => $data['tipe'] === 'essay' ? ($data['answer_format'] ?? 'rich_text') : 'rich_text',
+                    'answer_config_json' => $data['tipe'] === 'essay'
+                        ? QuestionContent::normalizeAnswerConfig($data['answer_format'] ?? 'rich_text', $data['answer_config'] ?? [])
+                        : null,
+                    'sub_soal_json' => $data['tipe'] === 'essay'
+                        ? $this->normalisasiSubSoal($data['sub_soal'] ?? [], $question, $mediaService, $storedPaths)
+                        : null,
+                ]);
 
-            $question->options()->delete();
+                $question->options()->delete();
 
-            if ($data['tipe'] === 'pilihan_ganda') {
-                $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
-            }
-        });
+                if ($data['tipe'] === 'pilihan_ganda') {
+                    $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
+                }
+            });
+        } catch (\Throwable $exception) {
+            $mediaService->cleanupPaths($storedPaths);
+            throw $exception;
+        }
+
+        $mediaService->pruneUnused($question->fresh());
 
         if ($quiz) {
             return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal diperbarui.');
@@ -222,16 +258,37 @@ class QuestionController extends Controller
             ->all();
     }
 
-    private function normalisasiSubSoal(array $subSoal): array
-    {
+    private function normalisasiSubSoal(
+        array $subSoal,
+        Question $question,
+        QuestionMediaService $mediaService,
+        array &$storedPaths,
+    ): array {
         return collect($subSoal)
-            ->map(fn (array $bagian) => [
-                'key' => trim((string) ($bagian['key'] ?? '')),
-                'parent_key' => filled($bagian['parent_key'] ?? null) ? trim((string) $bagian['parent_key']) : null,
-                'label' => trim((string) ($bagian['label'] ?? '')),
-                'teks' => trim((string) ($bagian['teks'] ?? '')),
-                'petunjuk' => $this->normalisasiPetunjuk($bagian['petunjuk'] ?? null),
-            ])
+            ->map(function (array $bagian) use ($question, $mediaService, &$storedPaths) {
+                $format = in_array($bagian['answer_format'] ?? null, QuestionContent::FORMATS, true)
+                    ? $bagian['answer_format']
+                    : 'rich_text';
+
+                $normalized = [
+                    'key' => trim((string) ($bagian['key'] ?? '')),
+                    'parent_key' => filled($bagian['parent_key'] ?? null) ? trim((string) $bagian['parent_key']) : null,
+                    'label' => trim((string) ($bagian['label'] ?? '')),
+                    'teks' => trim((string) ($bagian['teks'] ?? '')),
+                    'petunjuk' => $this->normalisasiPetunjuk($bagian['petunjuk'] ?? null),
+                ];
+                $blocks = $mediaService->persistBlocks($question, $bagian['content_blocks'] ?? [], $storedPaths);
+                if ($blocks !== []) {
+                    $normalized['content_blocks'] = $blocks;
+                }
+                $answerConfig = QuestionContent::normalizeAnswerConfig($format, $bagian['answer_config'] ?? []);
+                if ($format !== 'rich_text' || $answerConfig !== []) {
+                    $normalized['answer_format'] = $format;
+                    $normalized['answer_config'] = $answerConfig;
+                }
+
+                return $normalized;
+            })
             ->filter(fn (array $bagian) => $bagian['label'] !== '' && $bagian['teks'] !== '')
             ->values()
             ->all();

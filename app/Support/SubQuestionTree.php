@@ -32,6 +32,14 @@ class SubQuestionTree
                     array_map(fn ($point) => trim((string) $point), (array) ($item['petunjuk'] ?? [])),
                     fn (string $point) => $point !== '',
                 )),
+                'content_blocks' => QuestionContent::normalizeBlocks((array) ($item['content_blocks'] ?? [])),
+                'answer_format' => in_array($item['answer_format'] ?? null, QuestionContent::FORMATS, true)
+                    ? $item['answer_format']
+                    : 'rich_text',
+                'answer_config' => QuestionContent::normalizeAnswerConfig(
+                    in_array($item['answer_format'] ?? null, QuestionContent::FORMATS, true) ? $item['answer_format'] : 'rich_text',
+                    (array) ($item['answer_config'] ?? []),
+                ),
                 'legacy' => $storedKey === '',
             ];
         }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\QuestionContent;
 use App\Support\SubQuestionTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Question extends Model
 {
@@ -28,6 +30,9 @@ class Question extends Model
         'rubrik_essay',
         'petunjuk_json',
         'sub_soal_json',
+        'content_blocks_json',
+        'answer_format',
+        'answer_config_json',
     ];
 
     protected function casts(): array
@@ -39,6 +44,8 @@ class Question extends Model
             'rubrik_essay' => 'array',
             'petunjuk_json' => 'array',
             'sub_soal_json' => 'array',
+            'content_blocks_json' => 'array',
+            'answer_config_json' => 'array',
         ];
     }
 
@@ -50,6 +57,10 @@ class Question extends Model
     public function teksUntukPenilaian(): string
     {
         $teks = (string) $this->teks;
+        $konten = QuestionContent::forGrading($this->content_blocks_json ?? []);
+        if ($konten !== '') {
+            $teks .= "\n\n".$konten;
+        }
 
         foreach ($this->subSoalTerstruktur() as $bagian) {
             $label = $bagian['code'];
@@ -60,6 +71,10 @@ class Question extends Model
             }
 
             $teks .= "\n\n".($label !== '' ? $label.'. ' : '').$isi;
+            $kontenBagian = QuestionContent::forGrading($bagian['content_blocks'] ?? []);
+            if ($kontenBagian !== '') {
+                $teks .= "\n".$kontenBagian;
+            }
         }
 
         return $teks;
@@ -83,6 +98,21 @@ class Question extends Model
     public function options(): HasMany
     {
         return $this->hasMany(Option::class);
+    }
+
+    public function media(): HasMany
+    {
+        return $this->hasMany(QuestionMedia::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Question $question) {
+            $question->media()->get()->each(function (QuestionMedia $media) {
+                Storage::disk('local')->delete($media->path);
+                $media->delete();
+            });
+        });
     }
 
     public function correctOption(): ?Option

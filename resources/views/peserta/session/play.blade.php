@@ -26,6 +26,7 @@
             clipboardToast: '',
             clipboardToastBlocked: false,
             clipboardToastTimer: null,
+            clipboardPolicy: config.clipboardPolicy,
             audioCtx: null,
             terakhirBipDetik: null,
             isOnline: navigator.onLine ?? true,
@@ -537,6 +538,13 @@
             pelanggaranUrl: '{{ route('peserta.session.pelanggaran', $session) }}'
         })"
         class="space-y-5"
+        x-bind:data-clipboard-policy="clipboardPolicy"
+        x-on:kuis-code-copy-attempt.window="
+            const blocked = $event.detail.policy === 'block';
+            tampilkanClipboardToast(blocked ? 'Copy kode diblokir dan dihitung sebagai pelanggaran.' : 'Copy kode diblokir dan dicatat tanpa menambah pelanggaran.', blocked);
+            kirimKejadian('copy_attempt');
+            if (blocked) mulaiToleransi();
+        "
     >
         <div x-show="error" x-cloak class="alert alert-error flex items-center justify-between gap-3" role="alert">
             <p x-text="error"></p>
@@ -632,6 +640,7 @@
                     <span class="pill pill-brand">Pilihan ganda</span>
 
                     <h2 id="teks-soal-serempak" class="question-text mt-4 whitespace-pre-line" x-text="state.soal.teks"></h2>
+                    <div x-show="state.soal.content_html" x-html="state.soal.content_html" class="mt-4 space-y-4"></div>
 
                     <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
                         <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">

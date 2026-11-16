@@ -422,6 +422,7 @@
         <section class="mt-6 card" aria-labelledby="soal-aktif">
             <h2 id="soal-aktif" class="text-2xl">Soal aktif</h2>
             <p class="mt-3 whitespace-pre-line text-lg text-ink">{{ $soalAktif->question->teks }}</p>
+            {!! \App\Support\QuestionContent::renderBlocks($soalAktif->question->content_blocks_json ?? []) !!}
             <p class="mt-2 text-base text-ink-muted">Durasi {{ $soalAktif->question->durasi_detik }} detik. Jawaban benar tidak ditampilkan di sini agar layar admin tetap aman saat dibagikan.</p>
         </section>
     @endif

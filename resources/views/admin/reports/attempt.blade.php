@@ -117,6 +117,7 @@
                                 <td class="font-mono">{{ $baris['urutan'] }}</td>
                                 <td>
                                     <p class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 140) }}</p>
+                                    {!! $baris['content_html'] ?? '' !!}
                                     <p class="mt-1 text-sm text-ink-muted">
                                         {{ $baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda' }} · Bobot {{ $baris['bobot'] }}
                                     </p>
@@ -127,14 +128,23 @@
                                             @foreach ($baris['sub_soal'] as $bagian)
                                                 <div>
                                                     <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['code'] }}. {{ $bagian['teks'] }}</p>
+                                                    {!! $bagian['content_html'] ?? '' !!}
                                                     @if ($bagian['is_leaf'])
-                                                        <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['key']] ?? 'Tidak dijawab' }}</p>
+                                                        @if (isset($baris['jawaban_data'][$bagian['key']]) || filled($baris['jawaban_parts'][$bagian['key']] ?? null))
+                                                            {!! \App\Support\QuestionContent::renderAnswer($bagian['answer_format'], $bagian['answer_config'], $baris['jawaban_data'][$bagian['key']] ?? null, $baris['jawaban_parts'][$bagian['key']] ?? null) !!}
+                                                        @else
+                                                            <p class="mt-1 text-ink-muted">Tidak dijawab</p>
+                                                        @endif
                                                     @endif
                                                 </div>
                                             @endforeach
                                         </div>
                                     @elseif ($baris['tipe'] === 'essay')
-                                        <p class="whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
+                                        @if (filled($baris['jawaban_saya']))
+                                            {!! \App\Support\QuestionContent::renderAnswer($baris['answer_format'], $baris['answer_config'], $baris['jawaban_data']['__main'] ?? null, $baris['jawaban_saya']) !!}
+                                        @else
+                                            <p class="text-ink-muted">Tidak dijawab</p>
+                                        @endif
                                     @else
                                         {{ $baris['jawaban_saya'] ?? 'Tidak dijawab' }}
                                     @endif
@@ -199,14 +209,20 @@
                             @endif
                         </div>
                         <p class="mt-1 text-base text-ink-muted whitespace-pre-line">{{ \Illuminate\Support\Str::limit($baris['teks'], 240) }}</p>
+                        {!! $baris['content_html'] ?? '' !!}
 
                         @if (! empty($baris['sub_soal']))
                             <div class="mt-3 space-y-3">
                                 @foreach ($baris['sub_soal'] as $bagian)
                                     <div class="rounded-xl border border-outline bg-page p-3">
                                         <p class="text-sm font-bold text-ink">{{ $baris['urutan'] }}{{ $bagian['code'] }}. {{ $bagian['teks'] }}</p>
+                                        {!! $bagian['content_html'] ?? '' !!}
                                         @if ($bagian['is_leaf'])
-                                            <p class="mt-1 whitespace-pre-line">{{ $baris['jawaban_parts'][$bagian['key']] ?? 'Tidak dijawab' }}</p>
+                                            @if (isset($baris['jawaban_data'][$bagian['key']]) || filled($baris['jawaban_parts'][$bagian['key']] ?? null))
+                                                {!! \App\Support\QuestionContent::renderAnswer($bagian['answer_format'], $bagian['answer_config'], $baris['jawaban_data'][$bagian['key']] ?? null, $baris['jawaban_parts'][$bagian['key']] ?? null) !!}
+                                            @else
+                                                <p class="mt-1 text-ink-muted">Tidak dijawab</p>
+                                            @endif
                                         @else
                                             <p class="mt-1 text-sm text-ink-muted">Jawaban tersedia pada bagian turunannya.</p>
                                         @endif
@@ -214,7 +230,11 @@
                                 @endforeach
                             </div>
                         @else
-                            <p class="mt-3 whitespace-pre-line">{{ $baris['jawaban_saya'] ?: 'Tidak dijawab' }}</p>
+                            @if (filled($baris['jawaban_saya']))
+                                {!! \App\Support\QuestionContent::renderAnswer($baris['answer_format'], $baris['answer_config'], $baris['jawaban_data']['__main'] ?? null, $baris['jawaban_saya']) !!}
+                            @else
+                                <p class="mt-3 text-ink-muted">Tidak dijawab</p>
+                            @endif
                         @endif
 
                         @if ($baris['rubrik_essay'] !== [])

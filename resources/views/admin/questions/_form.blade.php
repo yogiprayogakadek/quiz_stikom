@@ -5,6 +5,17 @@
     $bobotAwal = (int) old('bobot', $question?->bobot ?? ($tipeAwal === 'essay' ? 10 : 1));
     $rubrikAwal = array_values(old('rubrik_essay', $question?->rubrik_essay ?? []));
     $petunjukAwal = old('petunjuk', implode("\n", (array) ($question?->petunjuk_json ?? [])));
+    $blokAwal = collect(old('content_blocks', $question?->content_blocks_json ?? []))
+        ->map(function ($blok) {
+            $blok = is_array($blok) ? $blok : [];
+            $blok['client_key'] = $blok['client_key'] ?? (string) \Illuminate\Support\Str::uuid();
+            if (($blok['type'] ?? null) === 'image' && ! empty($blok['media_id'])) {
+                $blok['media_url'] = route('question-media.show', $blok['media_id']);
+            }
+            return $blok;
+        })->values()->all();
+    $formatJawabanAwal = old('answer_format', $question?->answer_format ?? 'rich_text');
+    $konfigurasiJawabanAwal = old('answer_config', $question?->answer_config_json ?? []);
     $subSoalAwal = collect(old('sub_soal', $question?->subSoalTerstruktur() ?? []))
         ->map(function ($bagian, $index) {
             $bagian = is_array($bagian) ? $bagian : [];
@@ -16,6 +27,15 @@
                 'label' => $bagian['label'] ?? '',
                 'teks' => $bagian['teks'] ?? '',
                 'petunjuk' => is_array($petunjuk) ? implode("\n", $petunjuk) : (string) $petunjuk,
+                'content_blocks' => collect($bagian['content_blocks'] ?? [])->map(function ($blok) {
+                    $blok['client_key'] = $blok['client_key'] ?? (string) \Illuminate\Support\Str::uuid();
+                    if (($blok['type'] ?? null) === 'image' && ! empty($blok['media_id'])) {
+                        $blok['media_url'] = route('question-media.show', $blok['media_id']);
+                    }
+                    return $blok;
+                })->values()->all(),
+                'answer_format' => $bagian['answer_format'] ?? 'rich_text',
+                'answer_config' => $bagian['answer_config'] ?? [],
             ];
         })
         ->values()
@@ -29,6 +49,9 @@
         opsi: {{ Illuminate\Support\Js::from(array_values($opsiAwal)) }},
         rubrik: {{ Illuminate\Support\Js::from($rubrikAwal) }},
         petunjuk: {{ Illuminate\Support\Js::from($petunjukAwal) }},
+        contentBlocks: {{ Illuminate\Support\Js::from($blokAwal) }},
+        answerFormat: {{ Illuminate\Support\Js::from($formatJawabanAwal) }},
+        answerConfig: {{ Illuminate\Support\Js::from($konfigurasiJawabanAwal) }},
         subSoal: {{ Illuminate\Support\Js::from($subSoalAwal) }},
         correct: {{ $benarAwal }},
         tambah() {
@@ -95,9 +118,60 @@
         punyaAnak(key) {
             return this.subSoal.some((bagian) => bagian.parent_key === key);
         },
+        blokBaru(type) {
+            const client_key = this.keyBaru();
+            if (type === 'image') return { type, client_key, media_id: null, alt: '', caption: '', ai_context: '' };
+            if (type === 'table') return { type, client_key, caption: '', headers: ['Kolom 1', 'Kolom 2'], rows: [['', '']] };
+            if (type === 'code') return { type, client_key, language: 'text', caption: '', code: '' };
+            return { type: 'text', client_key, text: '' };
+        },
+        tambahBlok(target, type) {
+            if (target.length < 20) target.push(this.blokBaru(type));
+        },
+        geserBlok(target, index, arah) {
+            const tujuan = index + arah;
+            if (tujuan < 0 || tujuan >= target.length) return;
+            [target[index], target[tujuan]] = [target[tujuan], target[index]];
+        },
+        tambahKolom(block) {
+            if (block.headers.length >= 10) return;
+            block.headers.push('Kolom ' + (block.headers.length + 1));
+            block.rows.forEach((row) => row.push(''));
+        },
+        hapusKolom(block, index) {
+            if (block.headers.length <= 1) return;
+            block.headers.splice(index, 1);
+            block.rows.forEach((row) => row.splice(index, 1));
+        },
+        tambahBaris(block) {
+            if (block.rows.length < 20) block.rows.push(Array(block.headers.length).fill(''));
+        },
+        hapusBaris(block, index) {
+            if (block.rows.length > 1) block.rows.splice(index, 1);
+        },
+        pastikanConfig(target, format) {
+            if (format === 'code') return { language: target?.language || 'text' };
+            if (format === 'table') return {
+                columns: target?.columns?.length ? target.columns : ['Kolom 1', 'Kolom 2'],
+                rows: target?.rows?.length ? target.rows : ['Baris 1']
+            };
+            return {};
+        },
+        ubahFormatUtama() {
+            this.answerConfig = this.pastikanConfig(this.answerConfig, this.answerFormat);
+        },
+        ubahFormatBagian(bagian) {
+            bagian.answer_config = this.pastikanConfig(bagian.answer_config, bagian.answer_format);
+        },
+        tambahKolomJawaban(config) {
+            if (config.columns.length < 10) config.columns.push('Kolom ' + (config.columns.length + 1));
+        },
+        tambahBarisJawaban(config) {
+            if (config.rows.length < 20) config.rows.push('Baris ' + (config.rows.length + 1));
+        },
         tambahSubSoal(parentKey = null) {
             if (this.subSoal.length >= 50 || this.anak(parentKey).length >= 10) return;
-            const bagian = { key: this.keyBaru(), parent_key: parentKey, label: this.labelBaru(parentKey), teks: '', petunjuk: '' };
+            const bagian = { key: this.keyBaru(), parent_key: parentKey, label: this.labelBaru(parentKey), teks: '', petunjuk: '', content_blocks: [], answer_format: 'rich_text', answer_config: {} };
             if (parentKey === null) {
                 this.subSoal.push(bagian);
                 return;
@@ -120,6 +194,16 @@
         <textarea id="teks" name="teks" rows="4" class="input" required @error('teks') aria-invalid="true" @enderror>{{ old('teks', $question?->teks) }}</textarea>
         @error('teks') <p class="field-error">{{ $message }}</p> @enderror
     </div>
+
+    <section class="border-t border-outline pt-5" aria-label="Konten tambahan soal">
+        @include('admin.questions._content-block-editor', [
+            'label' => 'Konten tambahan (opsional)',
+            'blocksExpression' => 'contentBlocks',
+            'nameExpression' => "'content_blocks[' + blockIndex + ']'",
+        ])
+        @error('content_blocks') <p class="field-error">{{ $message }}</p> @enderror
+        @error('content_blocks.*') <p class="field-error">{{ $message }}</p> @enderror
+    </section>
 
     <fieldset>
         <legend class="label">Tipe soal</legend>
@@ -236,6 +320,18 @@
     </fieldset>
 
     <div x-show="tipe === 'essay'" x-cloak class="space-y-5">
+        <section x-show="subSoal.length === 0" class="border-b border-outline pb-5">
+            @include('admin.questions._answer-format-editor', [
+                'formatExpression' => 'answerFormat',
+                'configExpression' => 'answerConfig',
+                'nameExpression' => "''",
+                'idExpression' => "'answer-format'",
+                'changeExpression' => 'ubahFormatUtama()',
+                'disabledExpression' => "tipe !== 'essay' || subSoal.length > 0",
+            ])
+            @error('answer_format') <p class="field-error">{{ $message }}</p> @enderror
+            @error('answer_config') <p class="field-error">{{ $message }}</p> @enderror
+        </section>
         <div>
         <label for="kunci_essay" class="label">Jawaban acuan (opsional)</label>
         <textarea id="kunci_essay" name="kunci_essay" rows="4" class="input" maxlength="5000" x-bind:disabled="tipe !== 'essay'" @error('kunci_essay') aria-invalid="true" @enderror>{{ old('kunci_essay', $question?->kunci_essay) }}</textarea>
@@ -297,6 +393,23 @@
                             <textarea x-bind:id="'sub-petunjuk-' + index" x-bind:name="'sub_soal[' + index + '][petunjuk]'" x-model="bagian.petunjuk" rows="3" class="input" maxlength="5000" x-bind:disabled="tipe !== 'essay'"></textarea>
                             <p class="help mt-1">Satu poin per baris.</p>
                         </div>
+                        <div class="border-t border-outline pt-4">
+                            @include('admin.questions._content-block-editor', [
+                                'label' => 'Konten tambahan bagian (opsional)',
+                                'blocksExpression' => 'bagian.content_blocks',
+                                'nameExpression' => "'sub_soal[' + index + '][content_blocks][' + blockIndex + ']'",
+                            ])
+                        </div>
+                        <div class="border-t border-outline pt-4">
+                            @include('admin.questions._answer-format-editor', [
+                                'formatExpression' => 'bagian.answer_format',
+                                'configExpression' => 'bagian.answer_config',
+                                'nameExpression' => "'sub_soal[' + index + ']'",
+                                'idExpression' => "'sub-answer-format-' + index",
+                                'changeExpression' => 'ubahFormatBagian(bagian)',
+                                'disabledExpression' => "tipe !== 'essay' || punyaAnak(bagian.key)",
+                            ])
+                        </div>
                     </div>
                 </template>
                 <p x-show="subSoal.length === 0" class="text-sm text-ink-muted">Belum ada sub-soal. Soal essay biasa tetap memakai satu kotak jawaban.</p>
@@ -307,6 +420,9 @@
             @error('sub_soal.*.label') <p class="field-error">{{ $message }}</p> @enderror
             @error('sub_soal.*.teks') <p class="field-error">{{ $message }}</p> @enderror
             @error('sub_soal.*.petunjuk') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.content_blocks*') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.answer_format') <p class="field-error">{{ $message }}</p> @enderror
+            @error('sub_soal.*.answer_config*') <p class="field-error">{{ $message }}</p> @enderror
         </fieldset>
 
         <fieldset class="border-t border-outline pt-5">

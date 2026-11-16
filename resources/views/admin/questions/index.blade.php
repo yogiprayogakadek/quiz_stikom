@@ -5,6 +5,8 @@
     $ruteImport = isset($quiz) ? route('admin.quizzes.questions.import', $quiz) : route('admin.quizzes.index');
     $ruteExport = isset($quiz) ? route('admin.quizzes.questions.export', $quiz) : '#';
     $ruteAi = isset($quiz) ? route('admin.quizzes.questions.ai.form', $quiz) : '#';
+    $adaKontenTerstruktur = $questions->contains(fn ($soal) => ! empty($soal->content_blocks_json)
+        || collect($soal->sub_soal_json ?? [])->contains(fn ($bagian) => ! empty($bagian['content_blocks'] ?? [])));
 @endphp
 
 <x-layouts.admin :judul="$judulHalaman" :keterangan="isset($quiz) ? 'Daftar soal khusus untuk kuis ini. Soal pilihan ganda dinilai otomatis, essay dinilai manual.' : 'Kelola soal per kuis.'">
@@ -23,7 +25,11 @@
                     <x-icon name="upload" :size="18" />
                     <span>Impor CSV</span>
                 </a>
-                <a href="{{ $ruteExport }}" class="btn btn-secondary">
+                <a
+                    href="{{ $ruteExport }}"
+                    class="btn btn-secondary"
+                    @if ($adaKontenTerstruktur) onclick="return confirm('CSV hanya memuat teks utama. Gambar, tabel, kode, dan konfigurasi jawaban terstruktur tidak ikut diekspor. Tetap lanjutkan?')" @endif
+                >
                     <x-icon name="download" :size="18" />
                     <span>Ekspor CSV</span>
                 </a>

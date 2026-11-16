@@ -6,6 +6,7 @@ use App\Models\AiUsageEvent;
 use App\Models\Kelas;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
+use App\Models\QuestionMedia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -73,7 +74,12 @@ class OrganizationUsage
 
         $disk = Storage::disk('public');
 
-        return (int) $paths->sum(fn (string $path) => $disk->exists($path) ? $disk->size($path) : 0);
+        $publicBytes = (int) $paths->sum(fn (string $path) => $disk->exists($path) ? $disk->size($path) : 0);
+        $questionBytes = (int) QuestionMedia::withoutGlobalScopes()
+            ->where('organization_id', $organizationId)
+            ->sum('size_bytes');
+
+        return $publicBytes + $questionBytes;
     }
 
     public function storageLimitBytes(int $organizationId): int

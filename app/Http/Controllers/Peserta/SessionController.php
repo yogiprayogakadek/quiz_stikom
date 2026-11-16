@@ -13,6 +13,7 @@ use App\Models\QuizGrade;
 use App\Models\QuizSession;
 use App\Services\ProctoringService;
 use App\Services\QuizEngine;
+use App\Support\QuestionContent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -285,6 +286,7 @@ class SessionController extends Controller
 
             return [
                 'teks' => $question->teks,
+                'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
                 'jawaban_saya' => $jawabanSaya?->option?->teks,

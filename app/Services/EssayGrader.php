@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Answer;
 use App\Models\AuditLog;
+use App\Support\QuestionContent;
 use RuntimeException;
 
 class EssayGrader
@@ -31,6 +32,13 @@ class EssayGrader
             throw new RuntimeException('Jawaban essay kosong.');
         }
 
+        $imageBlocks = collect($question->content_blocks_json ?? [])
+            ->merge(collect($question->sub_soal_json ?? [])->flatMap(fn ($part) => $part['content_blocks'] ?? []))
+            ->where('type', 'image');
+        if ($imageBlocks->contains(fn ($block) => blank($block['ai_context'] ?? null))) {
+            throw new RuntimeException('Tambahkan konteks gambar untuk AI sebelum meminta saran penilaian.');
+        }
+
         $organizationId = $attempt?->organization_id;
 
         if ($organizationId !== null) {
@@ -41,7 +49,7 @@ class EssayGrader
             $question->teksUntukPenilaian(),
             $question->kunci_essay,
             $question->rubrik_essay ?? [],
-            (string) $answer->jawaban_teks,
+            QuestionContent::answerForGrading($question, $answer),
             (int) $question->bobot,
         );
 

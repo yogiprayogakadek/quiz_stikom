@@ -23,6 +23,7 @@ use App\Models\QuizSession;
 use App\Models\SessionQuestion;
 use App\Models\User;
 use App\Support\OrganizationContext;
+use App\Support\QuestionContent;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -1119,6 +1120,7 @@ class QuizEngine
         return [
             'id' => $question->id,
             'teks' => $question->teks,
+            'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? [], true),
             'tipe' => $question->tipe,
             'bobot' => $question->bobot,
             'durasi_detik' => $question->durasi_detik,

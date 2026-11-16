@@ -12,6 +12,7 @@ use App\Models\AttemptQuestion;
 use App\Models\QuizGrade;
 use App\Services\ProctoringService;
 use App\Services\QuizEngine;
+use App\Support\QuestionContent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -92,14 +93,21 @@ class AttemptController extends Controller
                 'id' => $question->id,
                 'urutan' => $aq->urutan,
                 'teks' => $question->teks,
+                'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
                 'opsi' => $opsi,
                 'jawaban_option_id' => $jawaban->get($question->id)?->option_id,
                 'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
                 'jawaban_parts' => $jawaban->get($question->id)?->jawaban_parts_json ?? [],
+                'jawaban_data' => $jawaban->get($question->id)?->jawaban_data_json ?? [],
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->subSoalTerstruktur(),
+                'answer_format' => QuestionContent::definition($question)['format'],
+                'answer_config' => QuestionContent::definition($question)['config'],
+                'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
+                    ...$part,
+                    'content_html' => QuestionContent::renderBlocks($part['content_blocks'] ?? []),
+                ])->all(),
                 'ragu_ragu' => (bool) $aq->ragu_ragu,
                 'highlight_soal' => (bool) $aq->highlight_soal,
                 'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
@@ -114,13 +122,23 @@ class AttemptController extends Controller
 
             if ($lengkap && $question['tipe'] === 'essay' && $question['sub_soal'] !== []) {
                 $parts = $answer->jawaban_parts_json ?? [];
+                $answerData = $answer->jawaban_data_json ?? [];
 
                 foreach (array_filter($question['sub_soal'], fn (array $bagian) => $bagian['is_leaf']) as $bagian) {
-                    if (trim((string) ($parts[$bagian['key']] ?? '')) === '') {
+                    $definition = [
+                        'format' => $bagian['answer_format'] ?? 'rich_text',
+                        'config' => $bagian['answer_config'] ?? [],
+                    ];
+                    $stored = $answerData[$bagian['key']] ?? ['value' => $parts[$bagian['key']] ?? ''];
+                    if (! QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config'])) {
                         $lengkap = false;
                         break;
                     }
                 }
+            } elseif ($lengkap && $question['tipe'] === 'essay') {
+                $definition = ['format' => $question['answer_format'], 'config' => $question['answer_config']];
+                $stored = ($answer->jawaban_data_json ?? [])['__main'] ?? ['value' => $answer->jawaban_teks ?? ''];
+                $lengkap = QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config']);
             }
 
             if (! $lengkap) {
@@ -192,7 +210,6 @@ class AttemptController extends Controller
             $subSoal = $question->subSoalTerstruktur();
             $bagianJawaban = array_values(array_filter($subSoal, fn (array $bagian) => $bagian['is_leaf']));
             $partKey = trim((string) $request->input('part_key', ''));
-            $teks = trim((string) $request->input('jawaban_teks', ''));
 
             if ($subSoal !== [] && $partKey === '') {
                 return response()->json(['message' => 'Jawaban soal ini harus dikirim per bagian.'], 422);
@@ -202,21 +219,60 @@ class AttemptController extends Controller
                 return response()->json(['message' => 'Bagian soal tidak dikenali.'], 422);
             }
 
+            $definition = QuestionContent::definition($question, $partKey !== '' ? $partKey : null);
+            if ($definition['format'] === 'table') {
+                if ($request->filled('jawaban_teks')) {
+                    return response()->json(['message' => 'Soal ini harus dijawab melalui tabel yang tersedia.'], 422);
+                }
+                $table = (array) $request->input('jawaban_table', []);
+                $cells = (array) ($table['cells'] ?? []);
+                $expectedRows = count($definition['config']['rows'] ?? []);
+                $expectedColumns = count($definition['config']['columns'] ?? []);
+                $validShape = count($cells) === $expectedRows
+                    && collect($cells)->every(fn ($row) => is_array($row) && count($row) === $expectedColumns);
+                if (! $validShape) {
+                    return response()->json(['message' => 'Ukuran tabel jawaban tidak sesuai dengan soal. Muat ulang halaman lalu coba lagi.'], 422);
+                }
+            } elseif ($request->has('jawaban_table')) {
+                return response()->json(['message' => 'Soal ini tidak menggunakan jawaban tabel.'], 422);
+            }
+            $normalized = QuestionContent::normalizeAnswer(
+                $definition['format'],
+                $definition['config'],
+                $request->input('jawaban_teks'),
+                $request->input('jawaban_table'),
+            );
+            if (($normalized['total_length'] ?? 0) > 20000) {
+                return response()->json(['message' => 'Isi keseluruhan tabel maksimal 20.000 karakter.'], 422);
+            }
+
             $answer = Answer::where('attempt_id', $attempt->id)
                 ->where('question_id', $questionId)
                 ->first();
             $parts = $answer?->jawaban_parts_json ?? [];
+            $answerData = $answer?->jawaban_data_json ?? [];
+            $dataKey = $partKey !== '' ? $partKey : '__main';
 
             if ($partKey !== '') {
-                if ($teks === '') {
+                if ($normalized['empty']) {
                     unset($parts[$partKey]);
+                    unset($answerData[$dataKey]);
                 } else {
-                    $parts[$partKey] = $teks;
+                    $parts[$partKey] = $normalized['text'];
+                    $answerData[$dataKey] = $normalized['data'];
                 }
 
                 $labelValid = collect($bagianJawaban)->pluck('key')->map(fn ($key) => (string) $key)->all();
                 $parts = array_intersect_key($parts, array_flip($labelValid));
+                $answerData = array_intersect_key($answerData, array_flip($labelValid));
                 $teks = $this->gabungkanJawabanParts($bagianJawaban, $parts);
+            } else {
+                $teks = $normalized['text'];
+                if ($normalized['empty']) {
+                    unset($answerData[$dataKey]);
+                } else {
+                    $answerData[$dataKey] = $normalized['data'];
+                }
             }
 
             if ($teks === '') {
@@ -229,6 +285,7 @@ class AttemptController extends Controller
                         'option_id' => null,
                         'jawaban_teks' => $teks,
                         'jawaban_parts_json' => $partKey !== '' ? $parts : null,
+                        'jawaban_data_json' => $answerData,
                         'waktu_jawab_ms' => $waktuJawab,
                         'skor' => 0,
                         'dinilai_at' => null,
@@ -246,6 +303,8 @@ class AttemptController extends Controller
                 'part_key' => $partKey !== '' ? $partKey : null,
                 'jawaban_teks' => $teks,
                 'jawaban_parts' => $parts,
+                'jawaban_data' => $answerData,
+                'complete' => $normalized['complete'],
                 'answered_count' => $attempt->answers()->count(),
             ]);
         }
@@ -423,11 +482,18 @@ class AttemptController extends Controller
 
             return [
                 'teks' => $question->teks,
+                'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->subSoalTerstruktur(),
+                'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
+                    ...$part,
+                    'content_html' => QuestionContent::renderBlocks($part['content_blocks'] ?? []),
+                ])->all(),
                 'jawaban_parts' => $essay ? ($jawabanSaya?->jawaban_parts_json ?? []) : [],
+                'jawaban_data' => $essay ? ($jawabanSaya?->jawaban_data_json ?? []) : [],
+                'answer_format' => QuestionContent::definition($question)['format'],
+                'answer_config' => QuestionContent::definition($question)['config'],
                 'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $jawabanSaya?->option?->teks,
                 'jawaban_benar' => $essay
                     ? ($tampilkan ? $question->kunci_essay : null)

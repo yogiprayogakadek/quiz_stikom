@@ -178,6 +178,7 @@
                         </div>
 
                         <h3 id="soal-{{ $item->id }}-teks" class="question-text mt-3 whitespace-pre-line">{{ $item->teks }}</h3>
+                        {!! \App\Support\QuestionContent::renderBlocks($item->content_blocks_json ?? []) !!}
 
                         @if ($item->isEssay() && ! empty($item->petunjuk_json))
                             <div class="mt-4 rounded-xl border border-outline bg-page p-4">
@@ -199,6 +200,7 @@
                                     <div class="rounded-xl border border-outline bg-page p-3">
                                         <p class="text-sm font-bold text-ink">Bagian {{ $bagian['code'] }}</p>
                                         <p class="mt-1 whitespace-pre-line text-base text-ink">{{ $bagian['teks'] ?? '' }}</p>
+                                        {!! \App\Support\QuestionContent::renderBlocks($bagian['content_blocks'] ?? []) !!}
                                         @if (! empty($bagian['petunjuk']))
                                             <ul class="mt-2 space-y-1 text-sm text-ink-muted">
                                                 @foreach ((array) $bagian['petunjuk'] as $poin)
@@ -285,6 +287,7 @@
                                         </div>
 
                                         <h3 id="preview-soal-{{ $nomor }}" tabindex="-1" class="question-text mt-3 whitespace-pre-line focus:outline-none">{{ $item->teks }}</h3>
+                                        {!! \App\Support\QuestionContent::renderBlocks($item->content_blocks_json ?? []) !!}
 
                                         @if ($item->isEssay() && ! empty($item->petunjuk_json))
                                             <div class="mt-4 rounded-xl border border-outline bg-page p-4">
@@ -306,6 +309,7 @@
                                                     <div @class(['border-t border-outline pt-5' => ! $loop->first])>
                                                         <h4 class="text-lg font-bold text-ink">Bagian {{ $bagian['code'] }}</h4>
                                                         <p class="mt-1 whitespace-pre-line text-base text-ink-muted">{{ $bagian['teks'] ?? '' }}</p>
+                                                        {!! \App\Support\QuestionContent::renderBlocks($bagian['content_blocks'] ?? []) !!}
                                                         @if (! empty($bagian['petunjuk']))
                                                             <ul class="mt-2 space-y-1 text-sm text-ink-muted">
                                                                 @foreach ((array) $bagian['petunjuk'] as $poin)
@@ -317,8 +321,9 @@
                                                             </ul>
                                                         @endif
                                                         @if ($bagian['is_leaf'])
-                                                            <label class="label mt-3" for="preview-jawaban-{{ $item->id }}-{{ $loop->index }}">Jawaban {{ $bagian['code'] }}</label>
-                                                            <textarea id="preview-jawaban-{{ $item->id }}-{{ $loop->index }}" class="input min-h-28 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                                            <div class="mt-3">
+                                                                <x-question-answer-preview :format="$bagian['answer_format']" :config="$bagian['answer_config']" :id="'preview-jawaban-'.$item->id.'-'.$loop->index" :label="'Jawaban '.$bagian['code']" />
+                                                            </div>
                                                         @else
                                                             <p class="mt-2 text-sm font-semibold text-ink-muted">Jawab melalui bagian turunannya.</p>
                                                         @endif
@@ -327,8 +332,7 @@
                                             </div>
                                         @elseif ($item->isEssay())
                                             <div class="mt-5">
-                                                <label class="label" for="preview-jawaban-{{ $item->id }}">Jawaban Anda</label>
-                                                <textarea id="preview-jawaban-{{ $item->id }}" class="input min-h-40 resize-none" disabled placeholder="Jawaban peserta ditulis di sini"></textarea>
+                                                <x-question-answer-preview :format="$item->answer_format" :config="$item->answer_config_json ?? []" :id="'preview-jawaban-'.$item->id" />
                                             </div>
                                         @elseif ($item->options->isNotEmpty())
                                             <div class="mt-5 space-y-3" role="group" aria-label="Opsi jawaban soal {{ $nomor + 1 }}">

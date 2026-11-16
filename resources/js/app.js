@@ -138,6 +138,19 @@ window.salinTeks = async (teks, tombol) => {
     }
 };
 
+document.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('[data-copy-code]') : null;
+    if (!button) return;
+    const protectedArea = button.closest('[data-clipboard-policy]');
+    const policy = protectedArea?.dataset.clipboardPolicy;
+    if (policy && policy !== 'allow') {
+        window.dispatchEvent(new CustomEvent('kuis-code-copy-attempt', { detail: { policy } }));
+        return;
+    }
+    const code = button.closest('.question-code')?.querySelector('code')?.textContent ?? '';
+    window.salinTeks(code, button);
+});
+
 window.tabelData = (config = {}) => ({
     cari: '',
     perPage: config.perPage || 10,

@@ -6,11 +6,13 @@ use App\Models\Kelas;
 use App\Models\Option;
 use App\Models\Organization;
 use App\Models\Question;
+use App\Models\QuestionMedia;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -20,7 +22,25 @@ class TrialSessionTest extends TestCase
 
     public function test_admin_membuat_snapshot_simulasi_dengan_peserta_terpilih(): void
     {
+        Storage::fake('local');
         [$organization, $admin, $selected, $unselected, $quiz, $session] = $this->scenario();
+        $sourceBefore = $quiz->questions()->where('tipe', 'essay')->firstOrFail();
+        $sourcePath = 'question-media/'.$organization->id.'/source.png';
+        Storage::disk('local')->put($sourcePath, 'image');
+        $sourceMedia = $sourceBefore->media()->create([
+            'organization_id' => $organization->id,
+            'path' => $sourcePath,
+            'mime_type' => 'image/png',
+            'size_bytes' => 5,
+            'original_name' => 'source.png',
+        ]);
+        $sourceBefore->update(['content_blocks_json' => [[
+            'type' => 'image',
+            'media_id' => $sourceMedia->id,
+            'alt' => 'Diagram fotosintesis',
+            'caption' => '',
+            'ai_context' => 'Alur fotosintesis.',
+        ]]]);
 
         $this->actingAs($admin)
             ->withSession($this->authSession($organization, $admin))
@@ -48,6 +68,10 @@ class TrialSessionTest extends TestCase
         $this->assertSame($sourceEssay->sub_soal_json, $trialEssay->sub_soal_json);
         $this->assertSame($sourceEssay->rubrik_essay, $trialEssay->rubrik_essay);
         $this->assertSame($sourceEssay->kunci_essay, $trialEssay->kunci_essay);
+        $trialMediaId = $trialEssay->content_blocks_json[0]['media_id'];
+        $this->assertNotSame($sourceMedia->id, $trialMediaId);
+        $trialMedia = QuestionMedia::findOrFail($trialMediaId);
+        Storage::disk('local')->assertExists($trialMedia->path);
 
         $this->assertNull($trialSession->kelas_id);
         $this->assertSame('draft', $trialSession->status);

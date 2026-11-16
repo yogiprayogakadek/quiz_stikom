@@ -15,6 +15,7 @@ class Answer extends Model
         'option_id',
         'jawaban_teks',
         'jawaban_parts_json',
+        'jawaban_data_json',
         'waktu_jawab_ms',
         'skor',
         'ai_suggested_score',
@@ -31,6 +32,7 @@ class Answer extends Model
     {
         return [
             'jawaban_parts_json' => 'array',
+            'jawaban_data_json' => 'array',
             'waktu_jawab_ms' => 'integer',
             'skor' => 'integer',
             'ai_suggested_score' => 'integer',

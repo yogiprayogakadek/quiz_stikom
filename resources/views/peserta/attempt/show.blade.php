@@ -6,8 +6,10 @@
             jawaban: config.jawaban,
             jawabanTeks: config.jawabanTeks,
             jawabanParts: config.jawabanParts ?? {},
+            jawabanData: config.jawabanData ?? {},
             teksTersimpan: { ...config.jawabanTeks },
             partsTersimpan: JSON.parse(JSON.stringify(config.jawabanParts ?? {})),
+            dataTersimpan: JSON.parse(JSON.stringify(config.jawabanData ?? {})),
             statusTeks: {},
             statusParts: {},
             janjiTeks: {},
@@ -43,6 +45,7 @@
             clipboardToast: '',
             clipboardToastBlocked: false,
             clipboardToastTimer: null,
+            clipboardPolicy: config.clipboardPolicy,
             audioCtx: null,
             notifWaktu300: false,
             notifWaktu60: false,
@@ -111,17 +114,25 @@
                         return this.bagianJawaban(soal).every((bagian) => this.bagianTerjawab(soal, bagian));
                     }
 
+                    if (soal.answer_format === 'table') {
+                        return this.tabelLengkap(soal);
+                    }
+
                     return (this.jawabanTeks[soal.id] ?? '').trim() !== '';
                 }
 
                 return this.jawaban[soal.id] !== null && this.jawaban[soal.id] !== undefined;
             },
             terjawabSebagian(soal) {
-                if (soal.tipe !== 'essay' || !soal.sub_soal?.length) {
+                if (soal.tipe !== 'essay') {
                     return false;
                 }
 
-                return this.bagianJawaban(soal).some((bagian) => this.bagianTerjawab(soal, bagian)) && !this.sudahDijawab(soal);
+                if (!soal.sub_soal?.length) {
+                    return soal.answer_format === 'table' && this.tabelAdaIsi(soal) && !this.tabelLengkap(soal);
+                }
+
+                return this.bagianJawaban(soal).some((bagian) => this.bagianAdaIsi(soal, bagian)) && !this.sudahDijawab(soal);
             },
             bagianJawaban(soal) {
                 return soal.sub_soal?.filter((bagian) => bagian.is_leaf) ?? [];
@@ -145,7 +156,66 @@
                 return (this.partsTersimpan[soal.id]?.[bagian.key] ?? '').trim() !== '' ? 'Tersimpan otomatis' : '';
             },
             bagianTerjawab(soal, bagian) {
+                if (bagian.answer_format === 'table') {
+                    return this.tabelLengkap(soal, bagian);
+                }
+
                 return (this.jawabanParts[soal.id]?.[bagian.key] ?? '').trim() !== '';
+            },
+            dataKey(bagian = null) {
+                return bagian?.key ?? '__main';
+            },
+            tabelCells(soal, bagian = null) {
+                const key = this.dataKey(bagian);
+                this.jawabanData[soal.id] ??= {};
+                const configJawaban = bagian?.answer_config ?? soal.answer_config ?? {};
+                const rows = configJawaban.rows ?? [];
+                const columns = configJawaban.columns ?? [];
+                const existing = this.jawabanData[soal.id][key]?.value?.cells ?? [];
+                const cells = rows.map((_, rowIndex) => columns.map((__, columnIndex) => existing[rowIndex]?.[columnIndex] ?? ''));
+                this.jawabanData[soal.id][key] = { format: 'table', value: { cells } };
+
+                return this.jawabanData[soal.id][key].value.cells;
+            },
+            tabelLengkap(soal, bagian = null) {
+                const cells = this.tabelCells(soal, bagian);
+                return cells.length > 0 && cells.every((row) => row.length > 0 && row.every((cell) => String(cell).trim() !== ''));
+            },
+            tabelAdaIsi(soal, bagian = null) {
+                return this.tabelCells(soal, bagian).some((row) => row.some((cell) => String(cell).trim() !== ''));
+            },
+            bagianAdaIsi(soal, bagian) {
+                if (bagian.answer_format === 'table') return this.tabelAdaIsi(soal, bagian);
+                return (this.jawabanParts[soal.id]?.[bagian.key] ?? '').trim() !== '';
+            },
+            ubahSelTabel(soal, bagian, rowIndex, columnIndex, nilai) {
+                const cells = this.tabelCells(soal, bagian);
+                cells[rowIndex][columnIndex] = nilai;
+                if (bagian) {
+                    const key = this.kunciBagian(soal, bagian);
+                    this.statusParts[key] = 'menunggu';
+                    clearTimeout(this.timerParts[key]);
+                    this.timerParts[key] = setTimeout(() => this.simpanBagian(soal, bagian), 800);
+                    return;
+                }
+                this.statusTeks[soal.id] = 'menunggu';
+                clearTimeout(this.timerTeks[soal.id]);
+                this.timerTeks[soal.id] = setTimeout(() => this.simpanTeks(soal), 800);
+            },
+            formatMarkdown(id, prefix, suffix = prefix) {
+                const input = document.getElementById(id);
+                if (!input || input.disabled) return;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                const selected = input.value.slice(start, end);
+                input.setRangeText(prefix + selected + suffix, start, end, 'end');
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.focus();
+            },
+            sisipkanTab(event) {
+                const input = event.target;
+                input.setRangeText('    ', input.selectionStart, input.selectionEnd, 'end');
+                input.dispatchEvent(new Event('input', { bubbles: true }));
             },
             kodeBagian(soal, bagian) {
                 return (this.questions.indexOf(soal) + 1) + (bagian.code ?? bagian.label ?? '');
@@ -291,13 +361,23 @@
                         // Pulihkan jawaban lokal jika ada di antrean
                         for (const item of this.antreanOffline) {
                             if (item.tipe === 'essay' && item.part_key) {
-                                if (!this.jawabanParts[item.question_id]) {
-                                    this.jawabanParts[item.question_id] = {};
+                                if (item.jawaban_table) {
+                                    this.jawabanData[item.question_id] ??= {};
+                                    this.jawabanData[item.question_id][item.part_key] = { format: 'table', value: item.jawaban_table };
+                                } else {
+                                    if (!this.jawabanParts[item.question_id]) {
+                                        this.jawabanParts[item.question_id] = {};
+                                    }
+                                    this.jawabanParts[item.question_id][item.part_key] = item.jawaban_teks;
                                 }
-                                this.jawabanParts[item.question_id][item.part_key] = item.jawaban_teks;
                                 this.statusParts[item.question_id + ':' + item.part_key] = 'offline';
                             } else if (item.tipe === 'essay') {
-                                this.jawabanTeks[item.question_id] = item.jawaban_teks;
+                                if (item.jawaban_table) {
+                                    this.jawabanData[item.question_id] ??= {};
+                                    this.jawabanData[item.question_id].__main = { format: 'table', value: item.jawaban_table };
+                                } else {
+                                    this.jawabanTeks[item.question_id] = item.jawaban_teks;
+                                }
                                 this.statusTeks[item.question_id] = 'offline';
                             } else if (item.option_id) {
                                 this.jawaban[item.question_id] = item.option_id;
@@ -360,7 +440,8 @@
                     const item = this.antreanOffline[queueIndex];
                     const body = { question_id: item.question_id };
                     if (item.tipe === 'essay') {
-                        body.jawaban_teks = item.jawaban_teks;
+                        if (item.jawaban_table) body.jawaban_table = item.jawaban_table;
+                        else body.jawaban_teks = item.jawaban_teks;
                         if (item.part_key) {
                             body.part_key = item.part_key;
                         }
@@ -381,12 +462,16 @@
                             this.simpanAntreanKeStorage();
                             if (item.tipe === 'essay' && item.part_key) {
                                 this.partsTersimpan[item.question_id] = res.data?.jawaban_parts ?? {};
+                                this.jawabanData[item.question_id] = res.data?.jawaban_data ?? this.jawabanData[item.question_id] ?? {};
+                                this.dataTersimpan[item.question_id] = JSON.parse(JSON.stringify(this.jawabanData[item.question_id] ?? {}));
                                 this.statusParts[item.question_id + ':' + item.part_key] = 'tersimpan';
                                 if (res.data?.jawaban_teks !== undefined) {
                                     this.jawabanTeks[item.question_id] = res.data.jawaban_teks;
                                 }
                             } else if (item.tipe === 'essay') {
-                                this.teksTersimpan[item.question_id] = item.jawaban_teks;
+                                this.teksTersimpan[item.question_id] = res.data?.jawaban_teks ?? item.jawaban_teks ?? '';
+                                this.jawabanData[item.question_id] = res.data?.jawaban_data ?? this.jawabanData[item.question_id] ?? {};
+                                this.dataTersimpan[item.question_id] = JSON.parse(JSON.stringify(this.jawabanData[item.question_id] ?? {}));
                                 this.statusTeks[item.question_id] = 'tersimpan';
                             }
                         } else if (res.status === 403 && res.data?.selesai) {
@@ -534,17 +619,21 @@
                     return true;
                 }
 
+                const isTable = soal.answer_format === 'table';
                 if (this.janjiTeks[soal.id]) {
                     await this.janjiTeks[soal.id];
 
-                    if ((this.jawabanTeks[soal.id] ?? '') === (this.teksTersimpan[soal.id] ?? '')) {
+                    if (!isTable && (this.jawabanTeks[soal.id] ?? '') === (this.teksTersimpan[soal.id] ?? '')) {
                         return true;
                     }
                 }
 
-                const nilai = this.jawabanTeks[soal.id] ?? '';
+                const nilai = isTable ? JSON.stringify(this.tabelCells(soal)) : (this.jawabanTeks[soal.id] ?? '');
+                const tersimpan = isTable
+                    ? JSON.stringify(this.dataTersimpan[soal.id]?.__main?.value?.cells ?? this.tabelCells(soal).map((row) => row.map(() => '')))
+                    : (this.teksTersimpan[soal.id] ?? '');
 
-                if (nilai === (this.teksTersimpan[soal.id] ?? '')) {
+                if (nilai === tersimpan) {
                     this.statusTeks[soal.id] = nilai === '' ? '' : 'tersimpan';
                     return true;
                 }
@@ -553,7 +642,7 @@
                     this.statusTeks[soal.id] = 'offline';
                     this.tambahAntrean({
                         question_id: soal.id,
-                        jawaban_teks: nilai,
+                        ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
                         tipe: 'essay',
                         waktu: Date.now()
                     });
@@ -566,7 +655,7 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, jawaban_teks: nilai },
+                        body: { question_id: soal.id, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }) },
                         progress: denganProgress,
                         progressMessage: 'Menyimpan jawaban...'
                     });
@@ -577,7 +666,7 @@
                     this.statusTeks[soal.id] = 'offline';
                     this.tambahAntrean({
                         question_id: soal.id,
-                        jawaban_teks: nilai,
+                        ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
                         tipe: 'essay',
                         waktu: Date.now()
                     });
@@ -587,7 +676,9 @@
                 delete this.janjiTeks[soal.id];
 
                 if (hasil.ok) {
-                    this.teksTersimpan[soal.id] = nilai;
+                    this.teksTersimpan[soal.id] = hasil.data?.jawaban_teks ?? (isTable ? '' : nilai);
+                    this.jawabanData[soal.id] = hasil.data?.jawaban_data ?? this.jawabanData[soal.id] ?? {};
+                    this.dataTersimpan[soal.id] = JSON.parse(JSON.stringify(this.jawabanData[soal.id] ?? {}));
                     this.statusTeks[soal.id] = 'tersimpan';
 
                     return true;
@@ -606,7 +697,7 @@
 
                 if (hasil.status === 422) {
                     this.statusTeks[soal.id] = 'gagal';
-                    this.tambahAntrean({ question_id: soal.id, jawaban_teks: nilai, tipe: 'essay', waktu: Date.now() });
+                    this.tambahAntrean({ question_id: soal.id, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }), tipe: 'essay', waktu: Date.now() });
                     this.pesan = hasil.data?.message ?? 'Jawaban belum dapat diterima server. Isi jawaban tetap tersimpan di perangkat.';
                     return false;
                 }
@@ -615,7 +706,7 @@
                 this.statusTeks[soal.id] = 'offline';
                 this.tambahAntrean({
                     question_id: soal.id,
-                    jawaban_teks: nilai,
+                    ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
                     tipe: 'essay',
                     waktu: Date.now()
                 });
@@ -644,17 +735,21 @@
 
                 const key = this.kunciBagian(soal, bagian);
 
+                const isTable = bagian.answer_format === 'table';
                 if (this.janjiParts[key]) {
                     await this.janjiParts[key];
 
-                    if ((this.jawabanParts[soal.id]?.[bagian.key] ?? '') === (this.partsTersimpan[soal.id]?.[bagian.key] ?? '')) {
+                    if (!isTable && (this.jawabanParts[soal.id]?.[bagian.key] ?? '') === (this.partsTersimpan[soal.id]?.[bagian.key] ?? '')) {
                         return true;
                     }
                 }
 
-                const nilai = this.jawabanParts[soal.id]?.[bagian.key] ?? '';
+                const nilai = isTable ? JSON.stringify(this.tabelCells(soal, bagian)) : (this.jawabanParts[soal.id]?.[bagian.key] ?? '');
+                const tersimpan = isTable
+                    ? JSON.stringify(this.dataTersimpan[soal.id]?.[bagian.key]?.value?.cells ?? this.tabelCells(soal, bagian).map((row) => row.map(() => '')))
+                    : (this.partsTersimpan[soal.id]?.[bagian.key] ?? '');
 
-                if (nilai === (this.partsTersimpan[soal.id]?.[bagian.key] ?? '')) {
+                if (nilai === tersimpan) {
                     this.statusParts[key] = nilai === '' ? '' : 'tersimpan';
                     return true;
                 }
@@ -664,7 +759,7 @@
                     this.tambahAntrean({
                         question_id: soal.id,
                         part_key: bagian.key,
-                        jawaban_teks: nilai,
+                        ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }),
                         tipe: 'essay',
                         waktu: Date.now()
                     });
@@ -677,7 +772,7 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, part_key: bagian.key, jawaban_teks: nilai },
+                        body: { question_id: soal.id, part_key: bagian.key, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }) },
                         progress: denganProgress,
                         progressMessage: 'Menyimpan jawaban...'
                     });
@@ -689,7 +784,7 @@
                     this.tambahAntrean({
                         question_id: soal.id,
                         part_key: bagian.key,
-                        jawaban_teks: nilai,
+                        ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }),
                         tipe: 'essay',
                         waktu: Date.now()
                     });
@@ -700,6 +795,8 @@
 
                 if (hasil.ok) {
                     this.partsTersimpan[soal.id] = hasil.data?.jawaban_parts ?? {};
+                    this.jawabanData[soal.id] = hasil.data?.jawaban_data ?? this.jawabanData[soal.id] ?? {};
+                    this.dataTersimpan[soal.id] = JSON.parse(JSON.stringify(this.jawabanData[soal.id] ?? {}));
                     this.statusParts[key] = 'tersimpan';
                     if (hasil.data?.jawaban_teks !== undefined) {
                         this.jawabanTeks[soal.id] = hasil.data.jawaban_teks;
@@ -721,7 +818,7 @@
 
                 if (hasil.status === 422) {
                     this.statusParts[key] = 'gagal';
-                    this.tambahAntrean({ question_id: soal.id, part_key: bagian.key, jawaban_teks: nilai, tipe: 'essay', waktu: Date.now() });
+                    this.tambahAntrean({ question_id: soal.id, part_key: bagian.key, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }), tipe: 'essay', waktu: Date.now() });
                     this.pesan = hasil.data?.message ?? 'Jawaban belum dapat diterima server. Isi jawaban tetap tersimpan di perangkat.';
                     return false;
                 }
@@ -730,7 +827,7 @@
                 this.tambahAntrean({
                     question_id: soal.id,
                     part_key: bagian.key,
-                    jawaban_teks: nilai,
+                    ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }),
                     tipe: 'essay',
                     waktu: Date.now()
                 });
@@ -1160,6 +1257,7 @@
             jawaban: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_option_id']])->filter()->all()) }},
             jawabanTeks: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_teks'] ?? ''])->all()) }},
             jawabanParts: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_parts'] ?? []])->all()) }},
+            jawabanData: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_data'] ?? []])->all()) }},
             serverNow: {{ $server_now }},
             batasAkhir: {{ $attempt->batas_akhir_at }},
             sessionId: {{ $session->id }},
@@ -1177,6 +1275,13 @@
             resultUrl: '{{ route('peserta.attempt.result', $attempt) }}'
         })"
         class="space-y-5"
+        x-bind:data-clipboard-policy="clipboardPolicy"
+        x-on:kuis-code-copy-attempt.window="
+            const blocked = $event.detail.policy === 'block';
+            tampilkanClipboardToast(blocked ? 'Copy kode diblokir dan dihitung sebagai pelanggaran.' : 'Copy kode diblokir dan dicatat tanpa menambah pelanggaran.', blocked);
+            kirimKejadian('copy_attempt');
+            if (blocked) mulaiToleransi();
+        "
     >
         <div class="exam-bar -mx-4 px-4 py-3 sm:-mx-6 sm:px-6">
             <div class="mx-auto flex max-w-6xl flex-col gap-2">
@@ -1304,6 +1409,8 @@
                     x-text="current.teks"
                 ></h2>
 
+                <div x-show="current.content_html" x-html="current.content_html" class="mt-4 space-y-4"></div>
+
                 <template x-if="current.tipe === 'essay' && current.petunjuk?.length">
                     <div class="mt-4 rounded-xl border border-outline bg-page p-4">
                         <p class="text-sm font-bold text-ink">Yang harus dijawab</p>
@@ -1321,19 +1428,41 @@
                 <template x-if="current.tipe === 'essay' && !current.sub_soal?.length">
                     <div class="mt-5">
                         <label for="jawaban-essay" class="label">Jawaban Anda</label>
-                        <textarea
-                            id="jawaban-essay"
-                            data-answer-input
-                            class="input min-h-[12rem] resize-y"
-                            maxlength="5000"
-                            x-bind:disabled="berhenti"
-                            x-bind:value="jawabanTeks[current.id] ?? ''"
-                            x-on:input="ubahTeks(current, $event.target.value)"
-                            x-on:blur="simpanTeks(current)"
-                            placeholder="Tulis jawaban lengkap di sini"
-                        ></textarea>
+                        <template x-if="current.answer_format === 'rich_text'">
+                            <div class="mb-2 flex flex-wrap gap-2" role="toolbar" aria-label="Pemformatan jawaban">
+                                <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-essay', '**')"><strong>Tebal</strong></button>
+                                <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-essay', '*')"><em>Miring</em></button>
+                                <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-essay', '- ', '')">Daftar</button>
+                                <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-essay', '`')">Kode singkat</button>
+                            </div>
+                        </template>
+                        <template x-if="current.answer_format !== 'table'">
+                            <textarea
+                                id="jawaban-essay"
+                                data-answer-input
+                                class="input min-h-[12rem] resize-y"
+                                x-bind:class="current.answer_format === 'code' ? 'font-mono' : ''"
+                                maxlength="20000"
+                                x-bind:spellcheck="current.answer_format !== 'code'"
+                                x-bind:disabled="berhenti"
+                                x-bind:value="jawabanTeks[current.id] ?? ''"
+                                x-on:keydown.tab="if (current.answer_format === 'code') { $event.preventDefault(); sisipkanTab($event) }"
+                                x-on:input="ubahTeks(current, $event.target.value)"
+                                x-on:blur="simpanTeks(current)"
+                                x-bind:placeholder="current.answer_format === 'code' ? 'Tulis kode ' + (current.answer_config.language || '') + ' di sini' : 'Tulis jawaban lengkap di sini'"
+                            ></textarea>
+                        </template>
+                        <template x-if="current.answer_format === 'table'">
+                            <div class="overflow-x-auto" tabindex="0">
+                                <table class="answer-table">
+                                    <thead><tr><th scope="col">Baris</th><template x-for="column in current.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
+                                    <tbody><template x-for="(row, rowIndex) in current.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in current.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current)[rowIndex][columnIndex]" x-on:input="ubahSelTabel(current, null, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanTeks(current)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
+                                </table>
+                            </div>
+                        </template>
                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">
-                            <span x-text="(jawabanTeks[current.id] ?? '').length + ' / 5000 karakter'"></span>
+                            <span x-show="current.answer_format !== 'table'" x-text="(jawabanTeks[current.id] ?? '').length + ' / 20000 karakter'"></span>
+                            <span x-show="current.answer_format === 'table'" x-text="tabelLengkap(current) ? 'Semua sel terisi' : 'Lengkapi seluruh sel tabel'"></span>
                             <span x-text="statusTeksAktif"></span>
                         </div>
                     </div>
@@ -1379,6 +1508,7 @@
                                     Bagian <span x-text="kodeBagian(current, bagian)"></span>
                                 </h3>
                                 <p class="mt-1 whitespace-pre-line text-base text-ink-muted" x-text="bagian.teks"></p>
+                                <div x-show="bagian.content_html" x-html="bagian.content_html" class="mt-3 space-y-4"></div>
                                 <template x-if="bagian.petunjuk?.length">
                                     <ul class="mt-2 space-y-1 text-sm text-ink-muted">
                                         <template x-for="(poin, poinIndex) in bagian.petunjuk" :key="poinIndex">
@@ -1393,19 +1523,35 @@
                                 <template x-if="bagian.is_leaf">
                                     <div class="mt-3">
                                         <label class="label" x-bind:for="'jawaban-' + current.id + '-' + bagianIndex">Jawaban <span x-text="kodeBagian(current, bagian)"></span></label>
+                                        <div x-show="bagian.answer_format === 'rich_text'" class="mb-2 flex flex-wrap gap-2" role="toolbar" x-bind:aria-label="'Pemformatan jawaban ' + kodeBagian(current, bagian)">
+                                            <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-' + current.id + '-' + bagianIndex, '**')"><strong>Tebal</strong></button>
+                                            <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-' + current.id + '-' + bagianIndex, '*')"><em>Miring</em></button>
+                                            <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="formatMarkdown('jawaban-' + current.id + '-' + bagianIndex, '- ', '')">Daftar</button>
+                                        </div>
                                         <textarea
+                                            x-show="bagian.answer_format !== 'table'"
                                             data-answer-input
                                             class="input min-h-[9rem] resize-y"
-                                            maxlength="5000"
+                                            x-bind:class="bagian.answer_format === 'code' ? 'font-mono' : ''"
+                                            maxlength="20000"
+                                            x-bind:spellcheck="bagian.answer_format !== 'code'"
                                             x-bind:id="'jawaban-' + current.id + '-' + bagianIndex"
                                             x-bind:disabled="berhenti"
                                             x-bind:value="(jawabanParts[current.id] ?? {})[bagian.key] ?? ''"
+                                            x-on:keydown.tab="if (bagian.answer_format === 'code') { $event.preventDefault(); sisipkanTab($event) }"
                                             x-on:input="ubahBagian(current, bagian, $event.target.value)"
                                             x-on:blur="simpanBagian(current, bagian)"
-                                            x-bind:placeholder="'Tulis jawaban ' + kodeBagian(current, bagian) + ' di sini'"
+                                            x-bind:placeholder="bagian.answer_format === 'code' ? 'Tulis kode ' + (bagian.answer_config.language || '') + ' di sini' : 'Tulis jawaban ' + kodeBagian(current, bagian) + ' di sini'"
                                         ></textarea>
+                                        <div x-show="bagian.answer_format === 'table'" class="overflow-x-auto" tabindex="0">
+                                            <table class="answer-table">
+                                                <thead><tr><th scope="col">Baris</th><template x-for="column in bagian.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
+                                                <tbody><template x-for="(row, rowIndex) in bagian.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in bagian.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current, bagian)[rowIndex][columnIndex]" x-on:input="ubahSelTabel(current, bagian, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanBagian(current, bagian)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
+                                            </table>
+                                        </div>
                                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">
-                                            <span x-text="(((jawabanParts[current.id] ?? {})[bagian.key] ?? '').length) + ' / 5000 karakter'"></span>
+                                            <span x-show="bagian.answer_format !== 'table'" x-text="(((jawabanParts[current.id] ?? {})[bagian.key] ?? '').length) + ' / 20000 karakter'"></span>
+                                            <span x-show="bagian.answer_format === 'table'" x-text="tabelLengkap(current, bagian) ? 'Semua sel terisi' : 'Lengkapi seluruh sel tabel'"></span>
                                             <span x-text="statusBagian(current, bagian)"></span>
                                         </div>
                                     </div>

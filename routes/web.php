@@ -32,6 +32,7 @@ use App\Http\Controllers\Peserta\AttemptController;
 use App\Http\Controllers\Peserta\FeedbackController as PesertaFeedbackController;
 use App\Http\Controllers\Peserta\KelasController as PesertaKelasController;
 use App\Http\Controllers\Peserta\SessionController as PesertaSessionController;
+use App\Http\Controllers\QuestionMediaController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -86,6 +87,10 @@ Route::get('/display/{token}', [DisplayController::class, 'show'])
 Route::get('/display/{token}/state', [DisplayController::class, 'state'])
     ->where('token', '[A-Za-z0-9]+')
     ->name('display.state');
+
+Route::get('/media/soal/{media}', QuestionMediaController::class)
+    ->whereNumber('media')
+    ->name('question-media.show');
 
 Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])->group(function () {
     Route::get('/', [OrganizationController::class, 'index'])->name('organizations.index');

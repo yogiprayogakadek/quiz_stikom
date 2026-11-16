@@ -715,3 +715,90 @@
 .tour-popover .driver-popover-close-btn:focus {
     color: var(--color-ink) !important;
 }
+
+.question-rich-text {
+    max-width: 75ch;
+    color: var(--color-ink);
+    line-height: 1.7;
+}
+
+.question-rich-text > * + * {
+    margin-top: 0.75rem;
+}
+
+.question-rich-text ul,
+.question-rich-text ol {
+    padding-left: 1.5rem;
+}
+
+.question-rich-text ul { list-style: disc; }
+.question-rich-text ol { list-style: decimal; }
+
+.question-code,
+.question-image,
+.question-table {
+    margin-top: 1rem;
+}
+
+.question-code pre {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--color-outline);
+    border-radius: 12px;
+    background: var(--color-surface-sunken);
+    padding: 1rem;
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    line-height: 1.6;
+    tab-size: 4;
+}
+
+.question-image img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 32rem;
+    border-radius: 12px;
+    object-fit: contain;
+}
+
+.question-table {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.question-table table,
+.answer-table {
+    min-width: 100%;
+    border-collapse: collapse;
+}
+
+.question-table caption,
+.answer-table caption {
+    margin-bottom: 0.5rem;
+    text-align: left;
+    font-weight: 700;
+    color: var(--color-ink);
+}
+
+.question-table th,
+.question-table td,
+.answer-table th,
+.answer-table td {
+    border: 1px solid var(--color-outline);
+    padding: 0.75rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.question-table th,
+.answer-table th {
+    background: var(--color-surface-sunken);
+    color: var(--color-ink);
+    font-weight: 700;
+}
+
+.answer-table td {
+    min-width: 11rem;
+    background: var(--color-page);
+}

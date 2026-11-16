@@ -16,6 +16,7 @@ use App\Services\EssayGrader;
 use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
+use App\Support\QuestionContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -132,9 +133,16 @@ class ReportController extends Controller
                 'tipe' => $question->tipe,
                 'bobot' => $question->bobot,
                 'teks' => $question->teks,
+                'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'petunjuk' => $question->petunjuk_json ?? [],
-                'sub_soal' => $question->subSoalTerstruktur(),
+                'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
+                    ...$part,
+                    'content_html' => QuestionContent::renderBlocks($part['content_blocks'] ?? []),
+                ])->all(),
                 'jawaban_parts' => $essay ? ($answer?->jawaban_parts_json ?? []) : [],
+                'jawaban_data' => $essay ? ($answer?->jawaban_data_json ?? []) : [],
+                'answer_format' => QuestionContent::definition($question)['format'],
+                'answer_config' => QuestionContent::definition($question)['config'],
                 'jawaban_saya' => $essay ? $answer?->jawaban_teks : $answer?->option?->teks,
                 'jawaban_benar' => $essay ? null : $question->correctOption()?->teks,
                 'kunci_essay' => $essay ? $question->kunci_essay : null,
