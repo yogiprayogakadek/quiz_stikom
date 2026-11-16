@@ -81,6 +81,9 @@
             </div>
         </fieldset>
 
+        @error('target') <p class="field-error mt-2">{{ $message }}</p> @enderror
+        @error('attempt_ids') <p class="field-error mt-2">{{ $message }}</p> @enderror
+
         <div x-show="target === 'terpilih'" x-cloak class="mt-4">
             <label for="pesan-cari" class="label">Cari peserta</label>
             <input
@@ -112,7 +115,6 @@
                     @endforeach
                 </div>
             </fieldset>
-            @error('attempt_ids') <p class="field-error">{{ $message }}</p> @enderror
         </div>
 
         <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

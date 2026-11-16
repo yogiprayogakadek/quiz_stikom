@@ -95,8 +95,11 @@ class EssayGrader
 
         $score = max(0, min((int) $question->bobot, $score));
         $previousScore = $answer->dinilai_at ? $answer->skor : null;
+        $nilaiTetap = $answer->dinilai_at !== null && (int) $previousScore === $score;
 
-        $perubahan = [
+        // Catatan saja pada jawaban yang sudah dinilai tidak boleh menyentuh
+        // nilai, waktu penilaian, atau menambah log perubahan nilai.
+        $perubahan = $nilaiTetap ? [] : [
             'skor' => $score,
             'dinilai_at' => now(),
             'dinilai_oleh' => $userId,
@@ -106,6 +109,10 @@ class EssayGrader
             $perubahan['catatan_pengajar'] = trim($catatan) === '' ? null : trim($catatan);
         }
 
+        if ($perubahan === []) {
+            return ! $onlyIfUnscored;
+        }
+
         $updated = Answer::query()
             ->whereKey($answer->id)
             ->when($onlyIfUnscored, fn ($query) => $query->whereNull('dinilai_at'))
@@ -113,6 +120,10 @@ class EssayGrader
 
         if ($updated === 0) {
             return false;
+        }
+
+        if ($nilaiTetap) {
+            return true;
         }
 
         $aiSuggestion = AuditLog::query()

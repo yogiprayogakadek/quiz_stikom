@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
+use App\Models\AuditLog;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
@@ -104,7 +105,67 @@ class CatatanPengajarTest extends TestCase
             ->assertSee('Argumen kuat, contoh kurang.');
     }
 
-    private function tambahEssayKedua(Attempt $attempt): void
+    public function test_essay_tidak_dijawab_tidak_menghalangi_catatan_tampil(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+        $this->tambahEssayKedua($attempt, dijawab: false);
+        app(\App\Services\EssayGrader::class)->applyFinal($answer, 8, $admin->id, catatan: 'Baik.');
+
+        $this->actingAs($attempt->user)
+            ->withSession(['auth_token' => $attempt->user->current_session_token])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('Catatan pengajar')
+            ->assertSee('Baik.');
+    }
+
+    public function test_catatan_pada_jawaban_terdinilai_tidak_mengubah_nilai_dan_log(): void
+    {
+        [$admin, , $answer] = $this->jawabanEssay();
+        $grader = app(\App\Services\EssayGrader::class);
+
+        $grader->applyFinal($answer, 6, $admin->id, catatan: 'Catatan pertama.');
+        $answer->refresh();
+        $dinilaiPertama = $answer->dinilai_at?->toDateTimeString();
+
+        $this->travel(5)->seconds();
+
+        $grader->applyFinal($answer, 6, $admin->id, catatan: 'Catatan diperbarui.');
+        $answer->refresh();
+
+        $this->assertSame(6, $answer->skor);
+        $this->assertSame($dinilaiPertama, $answer->dinilai_at?->toDateTimeString());
+        $this->assertSame('Catatan diperbarui.', $answer->catatan_pengajar);
+        $this->assertSame(1, AuditLog::where('action', 'essay_score_changed')->where('subject_id', $answer->id)->count());
+    }
+
+    public function test_essay_tanpa_jawaban_tidak_bisa_dinilai_atau_diberi_catatan(): void
+    {
+        [$admin, $attempt, $answer] = $this->jawabanEssay();
+        $answer->update(['jawaban_teks' => null]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$answer->question_id => 5],
+                'catatan' => [$answer->question_id => 'Tidak seharusnya tersimpan.'],
+            ])
+            ->assertSessionHasErrors('nilai.'.$answer->question_id);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => $admin->current_session_token])
+            ->post(route('admin.attempts.nilai', $attempt), [
+                'nilai' => [$answer->question_id => 0],
+                'catatan' => [$answer->question_id => 'Tidak seharusnya tersimpan.'],
+            ])
+            ->assertRedirect();
+
+        $answer->refresh();
+        $this->assertNull($answer->catatan_pengajar);
+        $this->assertNull($answer->dinilai_at);
+    }
+
+    private function tambahEssayKedua(Attempt $attempt, bool $dijawab = true): void
     {
         $essay = Question::create([
             'quiz_id' => $attempt->quizSession->quiz_id,
@@ -124,7 +185,7 @@ class CatatanPengajarTest extends TestCase
         Answer::create([
             'attempt_id' => $attempt->id,
             'question_id' => $essay->id,
-            'jawaban_teks' => 'Jawaban kedua yang belum dinilai.',
+            'jawaban_teks' => $dijawab ? 'Jawaban kedua yang belum dinilai.' : null,
             'waktu_jawab_ms' => 1000,
             'skor' => 0,
             'answered_at' => now(),

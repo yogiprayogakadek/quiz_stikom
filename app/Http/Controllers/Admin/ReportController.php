@@ -274,7 +274,7 @@ class ReportController extends Controller
 
             $answer = $answers->get($question->id);
 
-            if ($answer === null) {
+            if ($answer === null || blank($answer->jawaban_teks)) {
                 if ((int) $nilai > 0) {
                     $errors['nilai.'.$questionId] = 'Peserta tidak menjawab soal ini.';
                 }
