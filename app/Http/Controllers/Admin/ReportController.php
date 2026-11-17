@@ -383,6 +383,13 @@ class ReportController extends Controller
         try {
             $saran = $grader->suggest($answer);
         } catch (\Throwable $e) {
+            Log::warning('Saran AI essay gagal: '.$e->getMessage(), [
+                'answer_id' => $answer->id,
+                'attempt_id' => $answer->attempt_id,
+                'question_id' => $answer->question_id,
+                'transient' => $e instanceof AiRequestException && $e->transient(),
+            ]);
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'ok' => false,

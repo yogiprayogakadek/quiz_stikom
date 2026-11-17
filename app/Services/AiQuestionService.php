@@ -425,39 +425,65 @@ PROMPT;
             ));
         $userPrompt = "Pertanyaan:\n{$question}\n\nJawaban acuan:\n".($referenceAnswer ?: 'Tidak ada jawaban acuan.')."\n\nKriteria:\n{$criteriaText}\n\nJawaban peserta:\n{$answer}\n\nNilai maksimum: {$maxScore}";
 
-        try {
-            $response = Http::withToken($this->apiKey)
-                ->timeout($this->timeout)
-                ->post("{$this->baseUrl}/chat/completions", [
-                    'model' => $this->defaultModel,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $userPrompt],
-                    ],
-                    'temperature' => 0.1,
-                    'stream' => false,
-                ]);
-        } catch (Throwable $e) {
-            throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
+        $data = null;
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $prompt = $attempt === 1
+                ? $userPrompt
+                : $userPrompt."\n\nPENTING: Kembalikan HANYA satu objek JSON valid tanpa markdown dan tanpa teks lain. Wajib memuat kunci score, confidence, dan feedback. Tulis feedback dalam satu baris.";
+
+            try {
+                $response = Http::withToken($this->apiKey)
+                    ->timeout($this->timeout)
+                    ->post("{$this->baseUrl}/chat/completions", [
+                        'model' => $this->defaultModel,
+                        'messages' => [
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                        'temperature' => 0.1,
+                        'stream' => false,
+                    ]);
+            } catch (Throwable $e) {
+                throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
+            }
+
+            if (! $response->successful()) {
+                throw new AiRequestException(
+                    $this->pesanChatGagal($response),
+                    $response->status(),
+                    (int) $response->header('Retry-After') ?: null,
+                );
+            }
+
+            $rawContent = $this->extractRawContent($response);
+            $data = json_decode($this->extractJson($rawContent), true);
+
+            if (is_array($data) && isset($data['score'], $data['confidence'])) {
+                break;
+            }
+
+            Log::warning('Saran penilaian essay tidak valid.', [
+                'attempt' => $attempt,
+                'model' => $this->defaultModel,
+                'finish_reason' => $response->json('choices.0.finish_reason'),
+                'keys' => is_array($data) ? array_keys($data) : [],
+                'preview' => Str::limit($rawContent, 1000),
+            ]);
+
+            $data = null;
         }
 
-        if (! $response->successful()) {
-            throw new AiRequestException(
-                $this->pesanChatGagal($response),
-                $response->status(),
-                (int) $response->header('Retry-After') ?: null,
-            );
-        }
-
-        $data = json_decode($this->extractJson($this->extractRawContent($response)), true);
-        if (! is_array($data) || ! isset($data['score'], $data['confidence'], $data['feedback'])) {
+        if (! is_array($data) || ! isset($data['score'], $data['confidence'])) {
             throw new RuntimeException('Layanan AI tidak mengembalikan format penilaian yang valid.');
         }
+
+        $feedback = is_scalar($data['feedback'] ?? null) ? trim((string) $data['feedback']) : '';
 
         return [
             'score' => max(0, min($maxScore, (int) $data['score'])),
             'confidence' => max(0, min(100, (int) $data['confidence'])),
-            'feedback' => Str::limit(trim((string) $data['feedback']), 1500, ''),
+            'feedback' => Str::limit($feedback, 1500, '') ?: 'AI tidak memberikan alasan.',
             'model' => $this->defaultModel,
             'provider' => parse_url($this->baseUrl, PHP_URL_HOST) ?: $this->baseUrl,
         ];

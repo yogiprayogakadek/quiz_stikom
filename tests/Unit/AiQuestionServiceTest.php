@@ -6,6 +6,7 @@ use App\Exceptions\AiRequestException;
 use App\Services\AiQuestionService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 class AiQuestionServiceTest extends TestCase
@@ -328,6 +329,84 @@ class AiQuestionServiceTest extends TestCase
             $this->assertTrue($e->transient());
             $this->assertStringContainsString('quota exhausted for today', $e->getMessage());
             $this->assertStringContainsString('45 detik', $e->getMessage());
+        }
+    }
+
+    public function test_evaluate_essay_retries_once_when_response_is_invalid(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::sequence()
+                ->push([
+                    'choices' => [[
+                        'message' => ['content' => 'bukan json'],
+                    ]],
+                ])
+                ->push([
+                    'choices' => [[
+                        'message' => [
+                            'content' => json_encode([
+                                'score' => 7,
+                                'confidence' => 80,
+                                'feedback' => 'Cukup.',
+                            ]),
+                        ],
+                    ]],
+                ]),
+        ]);
+
+        $result = (new AiQuestionService)->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10);
+
+        $this->assertSame(7, $result['score']);
+        $this->assertSame(80, $result['confidence']);
+        $this->assertSame('Cukup.', $result['feedback']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_evaluate_essay_accepts_missing_feedback(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 6,
+                            'confidence' => 70,
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $result = (new AiQuestionService)->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10);
+
+        $this->assertSame(6, $result['score']);
+        $this->assertSame('AI tidak memberikan alasan.', $result['feedback']);
+        Http::assertSentCount(1);
+    }
+
+    public function test_evaluate_essay_throws_after_invalid_retry(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::sequence()
+                ->push([
+                    'choices' => [[
+                        'message' => ['content' => '{"score": 7}'],
+                    ]],
+                ])
+                ->push([
+                    'choices' => [[
+                        'message' => ['content' => '{"confidence": 80}'],
+                    ]],
+                ]),
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('format penilaian yang valid');
+
+        try {
+            (new AiQuestionService)->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10);
+        } finally {
+            Http::assertSentCount(2);
         }
     }
 
