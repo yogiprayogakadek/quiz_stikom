@@ -60,7 +60,7 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100">
             <div>
                 <h2 id="tabel-nilai" class="text-xl font-bold text-slate-900">Tabel Nilai & Hasil Ujian</h2>
-                <p class="text-xs text-slate-500">Rekap perolehan skor dan catatan proctoring tiap peserta</p>
+                <p class="text-xs text-slate-500">Rekap perolehan skor dan catatan proctoring tiap peserta. Saran AI bukan nilai final.</p>
             </div>
             <a
                 href="{{ route('admin.reports.session', $tinjau ? ['session' => $session] : ['session' => $session, 'tinjau' => 1]) }}"
@@ -92,6 +92,7 @@
                                     <th scope="col">Status</th>
                                     <th scope="col">PG benar</th>
                                     <th scope="col">Poin / nilai</th>
+                                    <th scope="col">Saran AI</th>
                                     <th scope="col">Jawaban</th>
                                     <th scope="col">Kejadian</th>
                                     <th scope="col" class="text-right">Aksi</th>
@@ -127,6 +128,19 @@
                                                 <span class="block text-xs text-slate-500">Nilai {{ $attempt->skor_total }}</span>
                                             @else
                                                 <span class="font-bold text-slate-900">{{ $attempt->skor_total }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-sm">
+                                            @if ($attempt->saran_ai_status === 'kosong')
+                                                <span class="text-slate-500">-</span>
+                                            @else
+                                                <span class="pill {{ $attempt->saran_ai_status === 'sudah' ? 'pill-leaf' : ($attempt->saran_ai_status === 'sebagian' ? 'pill-sun' : 'pill-neutral') }} text-xs">
+                                                    {{ $attempt->saran_ai_status === 'sudah' ? 'Sudah dicek' : ($attempt->saran_ai_status === 'sebagian' ? 'Sebagian' : 'Belum dicek') }}
+                                                </span>
+                                                @if ($attempt->saran_ai_status !== 'belum')
+                                                    <span class="mt-1 block font-mono text-sm font-semibold text-slate-900">{{ (int) $attempt->essay_ai_poin }} poin</span>
+                                                @endif
+                                                <span class="block text-xs text-slate-500">{{ $attempt->essay_ai }}/{{ $attempt->essay_dijawab }} essay</span>
                                             @endif
                                         </td>
                                         <td class="font-mono text-sm">{{ $attempt->answers_count }}</td>

@@ -353,4 +353,130 @@ class ReportAndQuizOptionsTest extends TestCase
         $response->assertSee('1.00');
         $response->assertSee('4 dtk');
     }
+
+    public function test_laporan_sesi_menampilkan_status_dan_poin_saran_ai(): void
+    {
+        $admin = User::create([
+            'nama' => 'Admin Saran AI',
+            'username' => 'admin_saran_ai',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'current_session_token' => 'token-saran-ai',
+        ]);
+
+        $peserta = User::create([
+            'nama' => 'Peserta Saran AI',
+            'username' => 'peserta_saran_ai',
+            'password' => Hash::make('password'),
+            'role' => 'peserta',
+        ]);
+
+        $quiz = Quiz::create([
+            'judul' => 'Kuis Saran AI',
+            'jumlah_soal' => 2,
+            'created_by' => $admin->id,
+        ]);
+
+        $session = QuizSession::create([
+            'quiz_id' => $quiz->id,
+            'nama' => 'Sesi Saran AI',
+            'mode' => 'acak',
+            'status' => 'selesai',
+            'display_token' => 'token-sesi-saran-ai',
+            'created_by' => $admin->id,
+        ]);
+
+        $attempt = Attempt::create([
+            'user_id' => $peserta->id,
+            'quiz_session_id' => $session->id,
+            'status' => 'selesai',
+            'bergabung_at' => now(),
+        ]);
+
+        $essay1 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Essay pertama',
+            'tipe' => 'essay',
+            'bobot' => 10,
+        ]);
+        $essay2 = Question::create([
+            'quiz_id' => $quiz->id,
+            'teks' => 'Essay kedua',
+            'tipe' => 'essay',
+            'bobot' => 10,
+        ]);
+
+        Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay1->id,
+            'jawaban_teks' => 'Jawaban pertama.',
+            'answered_at' => now(),
+            'ai_suggested_score' => 8,
+            'ai_confidence' => 90,
+            'ai_feedback' => 'Saran pertama.',
+            'ai_model' => 'test-model',
+            'ai_reviewed_at' => now(),
+        ]);
+        $jawaban2 = Answer::create([
+            'attempt_id' => $attempt->id,
+            'question_id' => $essay2->id,
+            'jawaban_teks' => 'Jawaban kedua.',
+            'answered_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-saran-ai'])
+            ->get(route('admin.reports.session', $session));
+
+        $response->assertOk();
+        $response->assertSee('Saran AI');
+        $response->assertSee('Sebagian');
+        $response->assertSee('8 poin');
+        $response->assertSee('1/2 essay');
+        $response->assertSee('Saran AI bukan nilai final.');
+
+        $csv = $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-saran-ai'])
+            ->get(route('admin.reports.export', $session));
+
+        $csv->assertOk();
+        $content = $csv->streamedContent();
+        $this->assertStringContainsString('saran_ai', $content);
+        $this->assertStringContainsString('saran_ai_poin', $content);
+        $this->assertStringContainsString('saran_ai_essay', $content);
+        $this->assertStringContainsString('sebagian', $content);
+        $this->assertStringContainsString('8', $content);
+        $this->assertStringContainsString('1/2', $content);
+
+        $jawaban2->update([
+            'ai_suggested_score' => 6,
+            'ai_confidence' => 80,
+            'ai_feedback' => 'Saran kedua.',
+            'ai_model' => 'test-model',
+            'ai_reviewed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-saran-ai'])
+            ->get(route('admin.reports.session', $session))
+            ->assertOk()
+            ->assertSee('Sudah dicek')
+            ->assertSee('14 poin')
+            ->assertSee('2/2 essay');
+
+        Answer::where('attempt_id', $attempt->id)->update([
+            'ai_suggested_score' => null,
+            'ai_confidence' => null,
+            'ai_feedback' => null,
+            'ai_model' => null,
+            'ai_reviewed_at' => null,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-saran-ai'])
+            ->get(route('admin.reports.session', $session))
+            ->assertOk()
+            ->assertSee('Belum dicek')
+            ->assertSee('0/2 essay');
+    }
 }

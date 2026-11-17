@@ -18,6 +18,7 @@ use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use App\Support\QuestionContent;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,20 +36,7 @@ class ReportController extends Controller
 
         $tinjau = $request->boolean('tinjau');
 
-        $attempts = $session->attempts()
-            ->mengikuti()
-            ->with('user')
-            ->withCount([
-                'events',
-                'answers',
-                'answers as essay_belum_dinilai' => fn ($q) => $q
-                    ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
-                    ->whereNull('dinilai_at'),
-            ])
-            ->when($tinjau, fn ($q) => $q->has('events', '>=', 3))
-            ->orderByDesc('skor_total')
-            ->orderBy('created_at')
-            ->get();
+        $attempts = $this->attemptsLaporan($session, $tinjau);
 
         $totalAttempt = $session->attempts()->mengikuti()->count();
         $selesai = $session->attempts()->mengikuti()->where('status', 'selesai')->count();
@@ -420,19 +408,7 @@ class ReportController extends Controller
 
     public function export(QuizSession $session): StreamedResponse
     {
-        $attempts = $session->attempts()
-            ->mengikuti()
-            ->with('user')
-            ->withCount([
-                'events',
-                'answers as essay_belum_dinilai' => fn ($q) => $q
-                    ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
-                    ->whereNull('dinilai_at'),
-            ])
-            ->withSum(['events as detik_luar' => fn ($q) => $q->whereNotNull('durasi_detik')], 'durasi_detik')
-            ->orderByDesc('skor_total')
-            ->orderBy('created_at')
-            ->get();
+        $attempts = $this->attemptsLaporan($session);
 
         $session->loadMissing('kelas');
 
@@ -451,6 +427,9 @@ class ReportController extends Controller
                 'poin_maksimal',
                 'skor_total',
                 'essay_belum_dinilai',
+                'saran_ai',
+                'saran_ai_poin',
+                'saran_ai_essay',
                 'mulai',
                 'selesai',
                 'pelanggaran',
@@ -473,6 +452,9 @@ class ReportController extends Controller
                     $attempt->poin_maksimal,
                     $attempt->skor_total,
                     $attempt->essay_belum_dinilai,
+                    $attempt->saran_ai_status === 'kosong' ? '-' : $attempt->saran_ai_status,
+                    (int) ($attempt->essay_ai_poin ?? 0),
+                    $attempt->essay_ai.'/'.$attempt->essay_dijawab,
                     $this->waktu($attempt->mulai_at),
                     $this->waktu($attempt->selesai_at),
                     $attempt->events_count,
@@ -527,6 +509,48 @@ class ReportController extends Controller
             ->with('sukses', $mode === 'resume'
                 ? 'Attempt '.($nama ?? '').' dibuka ulang dengan jawaban terakhir.'
                 : 'Attempt '.($nama ?? '').' dihapus. Peserta dapat mengulang dari awal.');
+    }
+
+    private function attemptsLaporan(QuizSession $session, bool $tinjau = false): Collection
+    {
+        $attempts = $session->attempts()
+            ->mengikuti()
+            ->with('user')
+            ->withCount([
+                'events',
+                'answers',
+                'answers as essay_belum_dinilai' => fn ($q) => $q
+                    ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
+                    ->whereNull('dinilai_at'),
+                'answers as essay_dijawab' => fn ($q) => $q
+                    ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
+                    ->whereRaw("TRIM(jawaban_teks) <> ''"),
+                'answers as essay_ai' => fn ($q) => $q
+                    ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
+                    ->whereNotNull('ai_reviewed_at'),
+            ])
+            ->withSum(['events as detik_luar' => fn ($q) => $q->whereNotNull('durasi_detik')], 'durasi_detik')
+            ->withSum(['answers as essay_ai_poin' => fn ($q) => $q
+                ->whereHas('question', fn ($qq) => $qq->where('tipe', 'essay'))
+                ->whereNotNull('ai_reviewed_at')], 'ai_suggested_score')
+            ->when($tinjau, fn ($q) => $q->has('events', '>=', 3))
+            ->orderByDesc('skor_total')
+            ->orderBy('created_at')
+            ->get();
+
+        $attempts->each(function (Attempt $attempt) {
+            $dijawab = (int) ($attempt->essay_dijawab ?? 0);
+            $terisi = (int) ($attempt->essay_ai ?? 0);
+
+            $attempt->setAttribute('saran_ai_status', match (true) {
+                $dijawab === 0 => 'kosong',
+                $terisi === 0 => 'belum',
+                $terisi >= $dijawab => 'sudah',
+                default => 'sebagian',
+            });
+        });
+
+        return $attempts;
     }
 
     private function statistikSoal(QuizSession $session): array
