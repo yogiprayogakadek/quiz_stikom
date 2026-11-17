@@ -6,7 +6,11 @@
         </a>
     </x-slot:aksi>
 
-    <div class="grid gap-5 sm:grid-cols-3">
+    @php
+        $adaSaran = $ruangPenilaian && $saranEssay['total'] > 0;
+    @endphp
+
+    <div class="grid gap-5 {{ $adaSaran ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3' }}">
         <div class="card">
             <p class="text-base font-bold text-ink-muted">Status attempt</p>
             <p class="mt-2 font-display text-2xl font-bold text-ink">{{ ucfirst($attempt->status) }}</p>
@@ -28,6 +32,14 @@
                 <p class="mt-1 text-base text-ink-muted">Nilai</p>
             @endif
         </div>
+        @if ($adaSaran)
+            <div class="card">
+                <p class="text-base font-bold text-ink-muted">Saran AI</p>
+                <p class="mt-2 font-display text-2xl font-bold text-ink">{{ $saranEssay['tersedia'] }} dari {{ $saranEssay['total'] }}</p>
+                <p class="mt-1 text-base text-ink-muted">Essay dijawab sudah punya saran.</p>
+                <p class="mt-1 text-xs font-semibold text-ink-subtle">Bukan nilai final</p>
+            </div>
+        @endif
     </div>
 
     <section class="mt-6 card" aria-labelledby="log-kejadian">
@@ -109,14 +121,86 @@
             id="penilaian-essay"
             class="mt-6 card"
             aria-labelledby="judul-ruang-penilaian"
+            data-saran-tujuan='@json($saranTujuan)'
             x-data="{
                 awal: '',
                 kini: '',
+                catatanAwal: '',
+                catatanKini: '',
+                saranTujuan: [],
+                saranTotal: 0,
+                saranMassal: false,
+                saranSelesai: 0,
+                saranGagal: 0,
+                saranPesan: '',
                 init() {
                     this.awal = this.kini = this.$refs.nilai?.value ?? '';
+                    this.catatanAwal = this.catatanKini = this.$refs.catatan?.value ?? '';
+                    this.saranTujuan = JSON.parse(this.$el.dataset.saranTujuan || '[]');
+                    this.saranTotal = this.saranTujuan.length;
                 },
                 get kotor() {
-                    return this.kini !== this.awal;
+                    return this.kini !== this.awal || this.catatanKini !== this.catatanAwal;
+                },
+                async mintaSemuaSaran() {
+                    if (this.saranMassal || this.saranTujuan.length === 0) return;
+                    if (this.kotor) {
+                        this.saranPesan = 'Simpan penilaian manual dulu sebelum meminta saran semua.';
+                        return;
+                    }
+
+                    this.saranMassal = true;
+                    this.saranSelesai = 0;
+                    this.saranGagal = 0;
+                    this.saranPesan = '';
+                    this.saranTotal = this.saranTujuan.length;
+                    let pesanTerakhir = '';
+
+                    for (const tujuan of [...this.saranTujuan]) {
+                        let hasil;
+                        try {
+                            hasil = await window.kuisFetch(tujuan.url, {
+                                method: 'POST',
+                                progress: false,
+                                headers: { Accept: 'application/json' },
+                            });
+                        } catch {
+                            this.saranMassal = false;
+                            this.saranPesan = 'Koneksi terputus saat meminta saran. Saran yang sudah jadi tetap tersimpan.';
+                            return;
+                        }
+
+                        if (!hasil.ok || !hasil.data?.ok) {
+                            const pesan = hasil.data?.pesan ?? 'Saran AI gagal dibuat.';
+                            if (!hasil.ok || hasil.data?.transient) {
+                                this.saranMassal = false;
+                                this.saranPesan = pesan;
+                                return;
+                            }
+
+                            this.saranGagal++;
+                            pesanTerakhir = pesan;
+                            this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
+                            continue;
+                        }
+
+                        this.saranSelesai++;
+                        this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
+                    }
+
+                    this.saranMassal = false;
+
+                    if (this.saranGagal > 0) {
+                        this.saranPesan = `${this.saranSelesai} saran dibuat, ${this.saranGagal} essay dilewati. ${pesanTerakhir}`;
+                        return;
+                    }
+
+                    if (this.kotor) {
+                        this.saranPesan = 'Saran sudah dibuat. Simpan penilaian manual dulu, lalu muat ulang halaman.';
+                        return;
+                    }
+
+                    window.location.reload();
                 },
                 cekKeluar(event) {
                     if (! this.kotor) return;
@@ -133,8 +217,30 @@
                         Satu soal per layar. Pilih nomor soal, simpan nilainya, lalu lanjut ke soal berikutnya tanpa menggulir seluruh jawaban.
                     </p>
                 </div>
-                <p class="pill pill-neutral">{{ $progresEssay['graded'] }} dari {{ $progresEssay['total'] }} soal dinilai</p>
+                <div class="flex flex-col items-start gap-2 sm:items-end">
+                    <p class="pill pill-neutral">{{ $progresEssay['graded'] }} dari {{ $progresEssay['total'] }} soal dinilai</p>
+                    @if ($saranEssay['tanpa'] > 0)
+                        <button
+                            type="button"
+                            class="btn btn-secondary min-h-11 text-xs"
+                            x-cloak
+                            x-show="saranTujuan.length > 0"
+                            @click="mintaSemuaSaran"
+                            :disabled="saranMassal || kotor"
+                            :aria-busy="saranMassal"
+                        >
+                            <span x-show="!saranMassal" x-text="`Minta saran ${saranTujuan.length} essay`"></span>
+                            <span x-show="saranMassal" x-text="`Membuat saran ${saranSelesai} dari ${saranTotal}...`"></span>
+                        </button>
+                        <p x-show="kotor" x-cloak class="text-xs text-ink-subtle">Simpan penilaian manual dulu sebelum meminta saran semua.</p>
+                    @endif
+                </div>
             </div>
+
+            <x-alert jenis="warning" x-show="saranPesan" x-cloak class="mt-3" aria-live="polite">
+                <p x-text="saranPesan"></p>
+                <button type="button" class="btn btn-secondary mt-2 min-h-11 text-xs" x-show="saranGagal > 0" :disabled="kotor" @click="window.location.reload()">Muat ulang</button>
+            </x-alert>
 
             <div
                 class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"
@@ -269,19 +375,22 @@
                         @if (filled($aktifEssay['jawaban_saya']))
                             <div class="mt-3 rounded-xl border border-outline bg-surface p-3">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-sm font-bold text-ink">Saran penilaian AI</p>
+                                    <div>
+                                        <p class="text-sm font-bold text-ink">Saran AI</p>
+                                        <p class="text-xs text-ink-subtle">Bukan nilai final. Hanya terlihat oleh admin.</p>
+                                    </div>
                                     <button type="submit" form="essay-ai-{{ $aktifEssay['answer_id'] }}" class="btn btn-secondary min-h-11 text-xs">
                                         {{ $aktifEssay['ai_reviewed_at'] ? 'Buat ulang saran' : 'Minta saran AI' }}
                                     </button>
                                 </div>
                                 @if ($aktifEssay['ai_reviewed_at'])
                                     <p class="mt-2 text-sm text-ink">
-                                        Saran nilai <strong>{{ $aktifEssay['ai_suggested_score'] }} / {{ $aktifEssay['bobot'] }}</strong>, confidence {{ $aktifEssay['ai_confidence'] }}%.
+                                        Saran nilai <strong>{{ $aktifEssay['ai_suggested_score'] }} / {{ $aktifEssay['bobot'] }}</strong>, keyakinan {{ $aktifEssay['ai_confidence'] }}%.
                                     </p>
                                     <p class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ $aktifEssay['ai_feedback'] }}</p>
-                                    <p class="mt-2 text-xs text-ink-subtle">Nilai final tetap ditentukan admin melalui isian di bawah.</p>
+                                    <p class="mt-2 text-xs text-ink-subtle">Nilai final tetap diisi manual di bagian Penilaian manual.</p>
                                 @else
-                                    <p class="mt-2 text-sm text-ink-muted">AI membaca pertanyaan, rubrik, dan jawaban peserta. Admin tetap memeriksa hasilnya.</p>
+                                    <p class="mt-2 text-sm text-ink-muted">Saran ini hanya untuk admin. Nilai final tetap diisi manual.</p>
                                 @endif
                             </div>
                         @endif
@@ -339,62 +448,69 @@
                             </details>
                         @endif
 
-                        <form
-                            method="POST"
-                            action="{{ route('admin.attempts.nilai', $attempt) }}"
-                            class="mt-4"
-                            data-progress-message="Menyimpan nilai essay..."
-                            @submit="awal = kini"
-                        >
-                            @csrf
-                            <input type="hidden" name="focus_question_id" value="{{ $aktifEssay['question_id'] }}">
+                        <div class="mt-4 rounded-xl border border-outline bg-surface p-3">
+                            <p class="text-sm font-bold text-ink">Penilaian manual</p>
+                            <p class="mt-1 text-xs text-ink-muted">Nilai final dan catatan untuk peserta.</p>
 
-                            <div class="max-w-xs">
-                                <label for="nilai-{{ $aktifEssay['question_id'] }}" class="label">Nilai final (0 sampai {{ $aktifEssay['bobot'] }})</label>
-                                <input
-                                    id="nilai-{{ $aktifEssay['question_id'] }}"
-                                    name="nilai[{{ $aktifEssay['question_id'] }}]" type="number" min="0" max="{{ $aktifEssay['bobot'] }}" value="{{ $nilaiAwal }}"
-                                    class="input"
-                                    inputmode="numeric"
-                                    x-ref="nilai"
-                                    @input="kini = $event.target.value"
-                                    @disabled(! $aktifEssay['dijawab'])
-                                    @error('nilai.'.$aktifEssay['question_id']) aria-invalid="true" @enderror
-                                >
-                                @error('nilai.'.$aktifEssay['question_id']) <p class="field-error">{{ $message }}</p> @enderror
-                                @if (! $aktifEssay['dijawab'])
-                                    <p class="help mt-1">Peserta tidak menjawab soal ini. Nilai tidak diperlukan.</p>
-                                @endif
-                            </div>
+                            <form
+                                method="POST"
+                                action="{{ route('admin.attempts.nilai', $attempt) }}"
+                                class="mt-3"
+                                data-progress-message="Menyimpan nilai essay..."
+                                @submit="awal = kini; catatanAwal = catatanKini"
+                            >
+                                @csrf
+                                <input type="hidden" name="focus_question_id" value="{{ $aktifEssay['question_id'] }}">
 
-                            <div class="mt-4">
-                                <label for="catatan-{{ $aktifEssay['question_id'] }}" class="label">Catatan untuk peserta</label>
-                                <textarea
-                                    id="catatan-{{ $aktifEssay['question_id'] }}"
-                                    name="catatan[{{ $aktifEssay['question_id'] }}]"
-                                    rows="3"
-                                    maxlength="2000"
-                                    class="input"
-                                    aria-describedby="bantuan-catatan-{{ $aktifEssay['question_id'] }}"
-                                    @disabled(! $aktifEssay['dijawab'])
-                                    @error('catatan.'.$aktifEssay['question_id']) aria-invalid="true" @enderror
-                                >{{ $catatanAwal }}</textarea>
-                                <p id="bantuan-catatan-{{ $aktifEssay['question_id'] }}" class="help mt-1">Tampil ke peserta setelah semua essay dinilai. Kosongkan untuk menghapus.</p>
-                                @error('catatan.'.$aktifEssay['question_id']) <p class="field-error">{{ $message }}</p> @enderror
-                            </div>
+                                <div class="max-w-xs">
+                                    <label for="nilai-{{ $aktifEssay['question_id'] }}" class="label">Nilai final (0 sampai {{ $aktifEssay['bobot'] }})</label>
+                                    <input
+                                        id="nilai-{{ $aktifEssay['question_id'] }}"
+                                        name="nilai[{{ $aktifEssay['question_id'] }}]" type="number" min="0" max="{{ $aktifEssay['bobot'] }}" value="{{ $nilaiAwal }}"
+                                        class="input"
+                                        inputmode="numeric"
+                                        x-ref="nilai"
+                                        @input="kini = $event.target.value"
+                                        @disabled(! $aktifEssay['dijawab'])
+                                        @error('nilai.'.$aktifEssay['question_id']) aria-invalid="true" @enderror
+                                    >
+                                    @error('nilai.'.$aktifEssay['question_id']) <p class="field-error">{{ $message }}</p> @enderror
+                                    @if (! $aktifEssay['dijawab'])
+                                        <p class="help mt-1">Peserta tidak menjawab soal ini. Nilai tidak diperlukan.</p>
+                                    @endif
+                                </div>
 
-                            <div class="mt-5 flex flex-wrap items-center gap-2" data-nav-sebelumnya="{{ $essaySebelumnya['question_id'] ?? 'tidak-ada' }}">
-                                @if ($essaySebelumnya)
-                                    <a href="{{ route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essaySebelumnya['question_id']]) }}#penilaian-essay" class="btn btn-secondary">
-                                        Sebelumnya
-                                    </a>
-                                @else
-                                    <button type="button" class="btn btn-secondary" disabled>Sebelumnya</button>
-                                @endif
-                                <button type="submit" name="after_save" value="stay" class="btn btn-primary">Simpan nilai</button>
-                                <button type="submit" name="after_save" value="next" class="btn btn-secondary">Simpan &amp; berikutnya</button>
-                            </div>
-                        </form>
+                                <div class="mt-4">
+                                    <label for="catatan-{{ $aktifEssay['question_id'] }}" class="label">Catatan untuk peserta</label>
+                                    <textarea
+                                        id="catatan-{{ $aktifEssay['question_id'] }}"
+                                        name="catatan[{{ $aktifEssay['question_id'] }}]"
+                                        rows="3"
+                                        maxlength="2000"
+                                        class="input"
+                                        aria-describedby="bantuan-catatan-{{ $aktifEssay['question_id'] }}"
+                                        x-ref="catatan"
+                                        @input="catatanKini = $event.target.value"
+                                        @disabled(! $aktifEssay['dijawab'])
+                                        @error('catatan.'.$aktifEssay['question_id']) aria-invalid="true" @enderror
+                                    >{{ $catatanAwal }}</textarea>
+                                    <p id="bantuan-catatan-{{ $aktifEssay['question_id'] }}" class="help mt-1">Tampil ke peserta setelah semua essay dinilai. Kosongkan untuk menghapus.</p>
+                                    @error('catatan.'.$aktifEssay['question_id']) <p class="field-error">{{ $message }}</p> @enderror
+                                </div>
+
+                                <div class="mt-5 flex flex-wrap items-center gap-2" data-nav-sebelumnya="{{ $essaySebelumnya['question_id'] ?? 'tidak-ada' }}">
+                                    @if ($essaySebelumnya)
+                                        <a href="{{ route('admin.reports.attempt', ['attempt' => $attempt, 'soal' => $essaySebelumnya['question_id']]) }}#penilaian-essay" class="btn btn-secondary">
+                                            Sebelumnya
+                                        </a>
+                                    @else
+                                        <button type="button" class="btn btn-secondary" disabled>Sebelumnya</button>
+                                    @endif
+                                    <button type="submit" name="after_save" value="stay" class="btn btn-primary">Simpan nilai</button>
+                                    <button type="submit" name="after_save" value="next" class="btn btn-secondary">Simpan &amp; berikutnya</button>
+                                </div>
+                            </form>
+                        </div>
 
                         @if ($progresEssay['pending'] === 0 && $pesertaBerikutnya)
                             <div data-peserta-berikutnya="{{ $pesertaBerikutnya->id }}" class="mt-5 rounded-xl border border-leaf bg-leaf-soft p-4">
@@ -406,7 +522,7 @@
                     </article>
 
                     @if ($aktifEssay['answer_id'] && filled($aktifEssay['jawaban_saya']))
-                        <form id="essay-ai-{{ $aktifEssay['answer_id'] }}" method="POST" action="{{ route('admin.answers.ai-suggestion', $aktifEssay['answer_id']) }}" data-progress-message="Meminta saran penilaian AI..." class="hidden">
+                        <form id="essay-ai-{{ $aktifEssay['answer_id'] }}" method="POST" action="{{ route('admin.answers.ai-suggestion', $aktifEssay['answer_id']) }}" data-progress-message="Meminta saran AI..." class="hidden">
                             @csrf
                         </form>
                     @endif

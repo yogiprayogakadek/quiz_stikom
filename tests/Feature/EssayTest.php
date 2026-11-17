@@ -101,6 +101,31 @@ class EssayTest extends TestCase
             ->assertDontSee('data-score-pending', false);
     }
 
+    public function test_hasil_peserta_tidak_memuat_saran_ai(): void
+    {
+        [, $peserta, $session, $attempt, , $essay] = $this->buatAcakBerjalan();
+        $session->update(['pembahasan_mode' => 'terbuka']);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $answer->update([
+            'ai_suggested_score' => 8,
+            'ai_confidence' => 91,
+            'ai_feedback' => 'Umpan balik rahasia dari AI.',
+            'ai_model' => 'test-model',
+            'ai_reviewed_at' => now(),
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-peserta'])
+            ->get(route('peserta.attempt.result', $attempt))
+            ->assertOk()
+            ->assertSee('setelah penilaian selesai')
+            ->assertDontSee('admin atau AI')
+            ->assertDontSee('Saran AI')
+            ->assertDontSee('Umpan balik rahasia dari AI.');
+    }
+
     public function test_essay_kosong_tidak_dianggap_menunggu_penilaian(): void
     {
         [, $peserta, $session, $attempt] = $this->buatAcakBerjalan(false);
@@ -863,6 +888,77 @@ class EssayTest extends TestCase
             ->assertSee('ai.example.test');
     }
 
+    public function test_saran_ai_mengembalikan_json_untuk_permintaan_menyeluruh(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 8,
+                            'confidence' => 91,
+                            'feedback' => 'Jawaban menyebut TLS dan perbedaan enkripsi.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->postJson(route('admin.answers.ai-suggestion', $answer))
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'skor' => 8,
+                'keyakinan' => 91,
+                'umpan_balik' => 'Jawaban menyebut TLS dan perbedaan enkripsi.',
+            ]);
+
+        $answer->refresh();
+        $this->assertSame(8, $answer->ai_suggested_score);
+        $this->assertSame(0, $answer->skor);
+        $this->assertNull($answer->dinilai_at);
+    }
+
+    public function test_saran_ai_json_menandai_429_sebagai_gangguan_sementara(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'error' => ['message' => 'Batas kuota tercapai.'],
+            ], 429, ['Retry-After' => '30']),
+        ]);
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->postJson(route('admin.answers.ai-suggestion', $answer))
+            ->assertOk()
+            ->assertJson([
+                'ok' => false,
+                'transient' => true,
+            ]);
+
+        $this->assertNull($answer->fresh()->ai_reviewed_at);
+    }
+
     /**
      * @return array{0: User, 1: User, 2: QuizSession, 3: Attempt, 4: Question, 5: Question, 6: Option}
      */
@@ -965,7 +1061,13 @@ class EssayTest extends TestCase
             ->assertSee('data-hitung-kosong="1"', false)
             ->assertSee('data-active-essay="'.$essay2->id.'"', false)
             ->assertSee('data-nav-sebelumnya="'.$essay1->id.'"', false)
-            ->assertSee('aria-current="page"', false);
+            ->assertSee('aria-current="page"', false)
+            ->assertSee('Saran AI')
+            ->assertSee('0 dari 2')
+            ->assertSee('Bukan nilai final')
+            ->assertSee('Penilaian manual')
+            ->assertSee('data-saran-tujuan', false)
+            ->assertSee('Minta saran');
     }
 
     public function test_soal_aktif_mengikuti_query_soal_dan_mengabaikan_query_asing(): void

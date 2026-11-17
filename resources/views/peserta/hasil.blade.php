@@ -83,7 +83,7 @@
             @if ($essayBelum > 0)
                 <div class="mt-4 rounded-2xl bg-sun-soft px-4 py-3">
                     <p class="font-bold text-ink">{{ $essayBelum }} jawaban essay menunggu penilaian.</p>
-                    <p class="mt-1 text-sm text-ink-muted">Halaman ini akan diperbarui otomatis setelah admin atau AI menyelesaikan penilaian.</p>
+                    <p class="mt-1 text-sm text-ink-muted">Halaman ini akan diperbarui otomatis setelah penilaian selesai.</p>
                 </div>
             @endif
 

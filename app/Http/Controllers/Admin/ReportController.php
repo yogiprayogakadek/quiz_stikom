@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Events\EssayDinilai;
 use App\Events\SessionMonitorUpdated;
+use App\Exceptions\AiRequestException;
 use App\Http\Controllers\Controller;
 use App\Models\Answer;
 use App\Models\Attempt;
@@ -17,6 +18,7 @@ use App\Services\NilaiService;
 use App\Services\QuizEngine;
 use App\Support\OrganizationContext;
 use App\Support\QuestionContent;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -178,6 +180,20 @@ class ReportController extends Controller
             && $attempt->quizSession->mode === 'acak'
             && $essayRincian->isNotEmpty();
 
+        $saranTujuan = $essayRincian
+            ->filter(fn (array $baris) => $baris['dijawab'] && $baris['ai_reviewed_at'] === null)
+            ->map(fn (array $baris) => [
+                'id' => $baris['answer_id'],
+                'url' => route('admin.answers.ai-suggestion', $baris['answer_id']),
+            ])
+            ->values();
+
+        $saranEssay = [
+            'total' => $essayRincian->where('dijawab', true)->count(),
+            'tersedia' => $essayRincian->where('dijawab', true)->whereNotNull('ai_reviewed_at')->count(),
+            'tanpa' => $saranTujuan->count(),
+        ];
+
         $soalDiminta = filter_var($request->query('soal'), FILTER_VALIDATE_INT);
         $aktifEssay = ($soalDiminta !== false ? $essayRincian->firstWhere('question_id', $soalDiminta) : null)
             ?? $essayRincian->firstWhere('status', 'pending')
@@ -219,6 +235,8 @@ class ReportController extends Controller
             'essaySebelumnya',
             'essayBerikutnya',
             'pesertaBerikutnya',
+            'saranEssay',
+            'saranTujuan',
         ));
     }
 
@@ -360,7 +378,7 @@ class ReportController extends Controller
             ->with('sukses', $pesan);
     }
 
-    public function saranNilaiEssay(Answer $answer, EssayGrader $grader): RedirectResponse
+    public function saranNilaiEssay(Request $request, Answer $answer, EssayGrader $grader): RedirectResponse|JsonResponse
     {
         $answer->loadMissing(['question', 'attempt.quizSession']);
         abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
@@ -368,9 +386,26 @@ class ReportController extends Controller
         abort_unless(filled($answer->jawaban_teks), 422);
 
         try {
-            $grader->suggest($answer);
+            $saran = $grader->suggest($answer);
         } catch (\Throwable $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'ok' => false,
+                    'pesan' => $e->getMessage(),
+                    'transient' => $e instanceof AiRequestException && $e->transient(),
+                ]);
+            }
+
             return back()->withErrors(['ai_essay' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'skor' => $saran['score'],
+                'keyakinan' => $saran['confidence'],
+                'umpan_balik' => $saran['feedback'],
+            ]);
         }
 
         return back()->with('sukses', 'Saran AI dibuat. Periksa hasilnya sebelum menyimpan nilai final.');
