@@ -211,6 +211,7 @@ class SettingController extends Controller
         $data = $request->validate([
             'ai_base_url' => ['nullable', 'url', 'max:255'],
             'ai_api_key' => ['nullable', 'string', 'max:500'],
+            'ai_default_model' => ['nullable', 'string', 'max:150'],
             'ai_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
         ]);
 
@@ -218,6 +219,7 @@ class SettingController extends Controller
             $data['ai_base_url'] ?? null,
             filled($data['ai_api_key'] ?? null) ? $data['ai_api_key'] : null,
             isset($data['ai_timeout']) ? (int) $data['ai_timeout'] : null,
+            $data['ai_default_model'] ?? null,
         ));
     }
 

@@ -337,6 +337,8 @@
                     memuat: false,
                     pesan: '',
                     berhasil: false,
+                    probePesan: '',
+                    probeBerhasil: false,
                     model: {},
                     get jumlah() {
                         return Object.values(this.model).reduce((total, daftar) => total + daftar.length, 0);
@@ -345,6 +347,8 @@
                         this.memuat = true;
                         this.pesan = '';
                         this.berhasil = false;
+                        this.probePesan = '';
+                        this.probeBerhasil = false;
                         this.model = {};
                         try {
                             const hasil = await window.kuisFetch(this.url, {
@@ -353,12 +357,16 @@
                                 body: {
                                     ai_base_url: document.getElementById('ai_base_url').value.trim(),
                                     ai_api_key: document.getElementById('ai_api_key').value,
+                                    ai_default_model: document.getElementById('ai_default_model').value.trim(),
                                     ai_timeout: document.getElementById('ai_timeout').value,
                                 },
                             });
-                            this.berhasil = hasil.data?.ok === true;
-                            this.pesan = hasil.data?.pesan ?? hasil.data?.message ?? 'Tes koneksi gagal. Periksa kembali isian.';
-                            this.model = this.berhasil ? (hasil.data?.model ?? {}) : {};
+                            const data = hasil.data ?? {};
+                            this.berhasil = data.endpoint?.ok === true;
+                            this.pesan = data.endpoint?.pesan ?? data.message ?? 'Tes koneksi gagal. Periksa kembali isian.';
+                            this.probeBerhasil = data.probe?.ok === true;
+                            this.probePesan = data.probe?.pesan ?? '';
+                            this.model = data.model ?? {};
                         } catch (e) {
                             this.berhasil = false;
                             this.pesan = 'Tes koneksi gagal. Periksa koneksi server.';
@@ -368,7 +376,8 @@
                     },
                     pilih(id) {
                         document.getElementById('ai_default_model').value = id;
-                        this.pesan = 'Model default diisi: ' + id + '. Klik Simpan untuk memakai model ini.';
+                        this.probePesan = 'Model default diisi: ' + id + '. Klik Tes koneksi lagi untuk menguji model ini.';
+                        this.probeBerhasil = false;
                     },
                 }"
             >
@@ -382,17 +391,23 @@
                         class="btn btn-secondary min-h-11"
                         x-on:click="uji()"
                         x-bind:disabled="memuat"
-                        x-text="memuat ? 'Menghubungi endpoint...' : 'Tes koneksi'"
+                        x-text="memuat ? 'Menguji endpoint dan model...' : 'Tes koneksi'"
                     ></button>
                 </div>
-                <p
-                    class="mt-3 text-base"
-                    role="status"
-                    aria-live="polite"
-                    x-show="pesan"
-                    x-text="pesan"
-                    x-bind:class="berhasil ? 'text-brand-deep' : 'text-coral-deep'"
-                ></p>
+                <div class="mt-3 space-y-1" role="status" aria-live="polite">
+                    <p
+                        class="text-base"
+                        x-show="pesan"
+                        x-text="pesan"
+                        x-bind:class="berhasil ? 'text-brand-deep' : 'text-coral-deep'"
+                    ></p>
+                    <p
+                        class="text-sm"
+                        x-show="probePesan"
+                        x-text="probePesan"
+                        x-bind:class="probeBerhasil ? 'text-brand-deep' : 'text-coral-deep'"
+                    ></p>
+                </div>
                 <div x-show="Object.keys(model).length > 0" x-cloak class="mt-4">
                     <p class="text-sm font-bold text-ink"><span x-text="jumlah"></span> model tersedia</p>
                     <div class="mt-2 max-h-72 space-y-3 overflow-y-auto rounded-xl border border-outline bg-surface p-3">

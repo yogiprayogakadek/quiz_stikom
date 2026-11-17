@@ -708,6 +708,27 @@ class EssayTest extends TestCase
         $this->assertNull($answer->dinilai_at);
     }
 
+    public function test_job_auto_grade_berhenti_saat_429_tanpa_menilai(): void
+    {
+        config([
+            'services.ai.base_url' => 'https://ai.example.test/v1',
+            'services.ai.api_key' => 'test-key',
+            'services.ai.default_model' => 'test-model',
+        ]);
+        Http::fake([
+            'https://ai.example.test/v1/chat/completions' => Http::response([
+                'error' => ['message' => 'rate limit reached'],
+            ], 429, ['Retry-After' => '60']),
+        ]);
+
+        [, , , $attempt, , $essay] = $this->buatAcakBerjalan(true, true);
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+        $this->assertNull($answer->dinilai_at);
+        Http::assertSentCount(1);
+    }
+
     public function test_job_auto_grade_tanpa_jawaban_essay_tidak_memanggil_ai(): void
     {
         Http::fake();

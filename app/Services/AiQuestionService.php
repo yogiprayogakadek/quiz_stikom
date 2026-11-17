@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AiRequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -60,30 +61,40 @@ class AiQuestionService
     }
 
     /**
-     * Menguji endpoint AI dan mengembalikan model yang benar-benar tersedia.
+     * Menguji endpoint AI, daftar model, dan apakah model default benar-benar bisa menjawab.
      * Tidak memakai cache maupun fallback agar hasil tes jujur.
      *
-     * @return array{ok: bool, status: int|null, pesan: string, model: array<string, array<string>>}
+     * @return array{
+     *     ok: bool,
+     *     endpoint: array{ok: bool, status: int|null, pesan: string},
+     *     probe: array{ok: bool, status: int|null, pesan: string}|null,
+     *     model: array<string, array<string>>
+     * }
      */
-    public function testConnection(?string $baseUrl = null, ?string $apiKey = null, ?int $timeout = null): array
+    public function testConnection(?string $baseUrl = null, ?string $apiKey = null, ?int $timeout = null, ?string $model = null): array
     {
         $baseUrl = rtrim($baseUrl ?: $this->baseUrl, '/');
         $apiKey = $apiKey ?: $this->apiKey;
-        // ponytail: tes dibatasi 30 detik supaya request tidak menggantung mengikuti timeout simpan.
+        $model = trim($model ?: $this->defaultModel);
+        // ponytail: total tes dibatasi 25 detik agar tidak kena batas eksekusi PHP.
         $timeout = min(max($timeout ?: $this->timeout, 5), 30);
         $host = parse_url($baseUrl, PHP_URL_HOST) ?: $baseUrl;
 
         try {
             $response = Http::withToken($apiKey ?? '')
-                ->timeout($timeout)
+                ->timeout(min($timeout, 10))
                 ->get("{$baseUrl}/models");
         } catch (Throwable $e) {
             Log::warning('Tes koneksi AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl]);
 
             return [
                 'ok' => false,
-                'status' => null,
-                'pesan' => 'Tidak bisa menghubungi endpoint. Periksa Base URL dan koneksi server.',
+                'endpoint' => [
+                    'ok' => false,
+                    'status' => null,
+                    'pesan' => 'Tidak bisa menghubungi endpoint. Periksa Base URL dan koneksi server.',
+                ],
+                'probe' => null,
                 'model' => [],
             ];
         }
@@ -91,31 +102,138 @@ class AiQuestionService
         if (! $response->successful()) {
             return [
                 'ok' => false,
-                'status' => $response->status(),
-                'pesan' => $this->pesanGagal($response->status()),
+                'endpoint' => [
+                    'ok' => false,
+                    'status' => $response->status(),
+                    'pesan' => $this->pesanGagal($response->status()),
+                ],
+                'probe' => null,
                 'model' => [],
             ];
         }
 
-        $model = $this->parseModels($response->json());
+        $models = $this->parseModels($response->json());
+        $jumlah = array_sum(array_map('count', $models));
+        $probe = $this->probeModel($baseUrl, $apiKey, $model, min($timeout, 15));
 
-        if ($model === []) {
-            return [
+        return [
+            'ok' => $probe['ok'],
+            'endpoint' => [
                 'ok' => true,
                 'status' => $response->status(),
-                'pesan' => "Endpoint {$host} merespons, tetapi tidak ada model yang dikembalikan.",
-                'model' => [],
+                'pesan' => $models === []
+                    ? "Endpoint {$host} merespons, tetapi tidak ada model yang dikembalikan."
+                    : "Terhubung ke {$host}. {$jumlah} model ditemukan.",
+            ],
+            'probe' => $probe,
+            'model' => $models,
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, status: int|null, pesan: string}
+     */
+    protected function probeModel(string $baseUrl, ?string $apiKey, string $model, int $timeout): array
+    {
+        if ($model === '') {
+            return [
+                'ok' => false,
+                'status' => null,
+                'pesan' => 'Model default belum diisi.',
             ];
         }
 
-        $jumlah = array_sum(array_map('count', $model));
+        try {
+            $response = Http::withToken($apiKey ?? '')
+                ->timeout($timeout)
+                ->post("{$baseUrl}/chat/completions", [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'user', 'content' => 'Balas hanya: ok'],
+                    ],
+                    'max_tokens' => 8,
+                    'temperature' => 0,
+                    'stream' => false,
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('Probe model AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl, 'model' => $model]);
+
+            return [
+                'ok' => false,
+                'status' => null,
+                'pesan' => 'Tidak bisa menghubungi endpoint saat menguji model default.',
+            ];
+        }
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'status' => $response->status(),
+                'pesan' => $this->pesanChatGagal($response, $model),
+            ];
+        }
 
         return [
             'ok' => true,
             'status' => $response->status(),
-            'pesan' => "Terhubung ke {$host}. {$jumlah} model ditemukan.",
-            'model' => $model,
+            'pesan' => "Model default {$model} merespons.",
         ];
+    }
+
+    protected function pesanChatGagal(Response $response, ?string $model = null): string
+    {
+        $status = $response->status();
+        $alasan = $this->alasanProvider($response);
+        $model = $model ?: $this->defaultModel;
+        $retryAfter = (int) $response->header('Retry-After');
+        $detail = $alasan === '' ? '' : ': '.$alasan;
+
+        return match (true) {
+            in_array($status, [401, 403], true) => "API key ditolak (status {$status}){$detail}. Periksa kembali API key.",
+            $status === 404 => "Model {$model} tidak ditemukan (404){$detail}. Pilih model lain di daftar.",
+            $status === 429 => "Layanan AI membatasi permintaan (429){$detail}. "
+                .($retryAfter > 0 ? "Coba lagi dalam {$retryAfter} detik" : 'Coba lagi beberapa saat')
+                .' atau ganti model default di Pengaturan > AI.',
+            $status >= 500 => "Layanan AI bermasalah (status {$status}){$detail}. Coba lagi beberapa saat.",
+            default => "Layanan AI menolak permintaan (status {$status}){$detail}.",
+        };
+    }
+
+    /**
+     * Mengambil alasan singkat dari body error provider.
+     */
+    protected function alasanProvider(Response $response): string
+    {
+        $json = $response->json();
+        $alasan = '';
+
+        if (is_array($json)) {
+            $error = $json['error'] ?? null;
+            $kandidat = [
+                is_array($error) ? ($error['message'] ?? null) : $error,
+                $json['message'] ?? null,
+                $json['detail'] ?? null,
+            ];
+
+            foreach ($kandidat as $nilai) {
+                if (is_string($nilai) && trim($nilai) !== '') {
+                    $alasan = $nilai;
+                    break;
+                }
+            }
+        }
+
+        if ($alasan === '') {
+            $alasan = strip_tags($response->body());
+        }
+
+        $alasan = Str::limit(trim((string) preg_replace('/\s+/', ' ', $alasan)), 200, '...');
+
+        if (! str_ends_with($alasan, '...')) {
+            $alasan = rtrim($alasan, '. ');
+        }
+
+        return $alasan;
     }
 
     protected function pesanGagal(int $status): string
@@ -260,13 +378,15 @@ PROMPT;
                     'stream' => false,
                 ]);
         } catch (Throwable $e) {
-            throw new RuntimeException("Gagal menghubungi layanan AI: {$e->getMessage()}");
+            throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
         }
 
         if (! $response->successful()) {
-            $status = $response->status();
-            $body = $response->body();
-            throw new RuntimeException("Layanan AI merespon dengan status {$status}: {$body}");
+            throw new AiRequestException(
+                $this->pesanChatGagal($response, $model),
+                $response->status(),
+                (int) $response->header('Retry-After') ?: null,
+            );
         }
 
         $rawContent = $this->extractRawContent($response);
@@ -318,11 +438,15 @@ PROMPT;
                     'stream' => false,
                 ]);
         } catch (Throwable $e) {
-            throw new RuntimeException("Gagal menghubungi layanan AI: {$e->getMessage()}");
+            throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
         }
 
         if (! $response->successful()) {
-            throw new RuntimeException('Layanan AI merespons status '.$response->status().'.');
+            throw new AiRequestException(
+                $this->pesanChatGagal($response),
+                $response->status(),
+                (int) $response->header('Retry-After') ?: null,
+            );
         }
 
         $data = json_decode($this->extractJson($this->extractRawContent($response)), true);

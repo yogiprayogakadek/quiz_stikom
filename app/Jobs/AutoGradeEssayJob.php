@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\EssayDinilai;
 use App\Events\SessionMonitorUpdated;
+use App\Exceptions\AiRequestException;
 use App\Models\Attempt;
 use App\Services\EssayGrader;
 use App\Services\NilaiService;
@@ -19,7 +20,7 @@ class AutoGradeEssayJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public int $timeout = 300;
 
@@ -54,6 +55,7 @@ class AutoGradeEssayJob implements ShouldQueue
         try {
             $grader = app(EssayGrader::class);
             $dinilai = [];
+            $gagalSementara = null;
 
             foreach ($answers as $answer) {
                 try {
@@ -74,6 +76,15 @@ class AutoGradeEssayJob implements ShouldQueue
                         'question_id' => $answer->question_id,
                         'score' => (int) $suggestion['score'],
                     ];
+                } catch (AiRequestException $e) {
+                    Log::warning('Auto-grade essay berhenti: '.$e->getMessage(), [
+                        'attempt_id' => $attempt->id,
+                        'answer_id' => $answer->id,
+                        'status' => $e->status,
+                    ]);
+
+                    $gagalSementara = $e;
+                    break;
                 } catch (RuntimeException $e) {
                     Log::warning('Auto-grade essay dilewati: '.$e->getMessage(), [
                         'attempt_id' => $attempt->id,
@@ -108,6 +119,14 @@ class AutoGradeEssayJob implements ShouldQueue
                 'action' => 'essay_graded',
                 'attempt_id' => $attempt->id,
             ]);
+
+            // ponytail: hentikan loop saat 429/5xx agar tidak menghajar provider per jawaban.
+            if ($gagalSementara !== null
+                && $gagalSementara->transient()
+                && $this->job !== null
+                && $this->attempts() < $this->tries) {
+                $this->release($gagalSementara->retryDelay());
+            }
         } finally {
             $context->force(null);
         }

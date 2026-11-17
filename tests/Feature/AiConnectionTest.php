@@ -16,7 +16,7 @@ class AiConnectionTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_tes_koneksi_memakai_isian_form_dan_menampilkan_model(): void
+    public function test_tes_koneksi_memakai_isian_form_dan_menguji_model(): void
     {
         [$admin, $organization] = $this->adminWorkspace();
 
@@ -27,6 +27,9 @@ class AiConnectionTest extends TestCase
                     ['id' => 'ag/gemini-3.8-flash-medium', 'owned_by' => 'google'],
                 ],
             ]),
+            'https://form.example.test/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'ok']]],
+            ]),
         ]);
 
         $response = $this->actingAs($admin)
@@ -34,18 +37,27 @@ class AiConnectionTest extends TestCase
             ->postJson(route('admin.settings.ai.test'), [
                 'ai_base_url' => 'https://form.example.test/v1',
                 'ai_api_key' => 'form-secret',
+                'ai_default_model' => 'openai/gpt-4o',
                 'ai_timeout' => 20,
             ]);
 
         $response->assertOk()
             ->assertJsonPath('ok', true)
-            ->assertJsonPath('status', 200)
+            ->assertJsonPath('endpoint.ok', true)
+            ->assertJsonPath('endpoint.status', 200)
+            ->assertJsonPath('probe.ok', true)
+            ->assertJsonPath('probe.status', 200)
             ->assertJsonPath('model.OpenAI.0', 'openai/gpt-4o')
             ->assertJsonPath('model.Google.0', 'ag/gemini-3.8-flash-medium');
 
+        $this->assertStringContainsString('openai/gpt-4o', $response->json('probe.pesan'));
         $this->assertStringNotContainsString('form-secret', $response->getContent());
 
         Http::assertSent(fn ($request) => $request->url() === 'https://form.example.test/v1/models'
+            && $request->header('Authorization')[0] === 'Bearer form-secret');
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://form.example.test/v1/chat/completions'
+            && $request['model'] === 'openai/gpt-4o'
             && $request->header('Authorization')[0] === 'Bearer form-secret');
 
         $this->assertDatabaseMissing('organization_settings', ['organization_id' => $organization->id]);
@@ -59,12 +71,16 @@ class AiConnectionTest extends TestCase
             'organization_id' => $organization->id,
             'ai_base_url' => 'https://saved.example.test/v1',
             'ai_api_key' => 'saved-secret',
+            'ai_default_model' => 'gpt-4o-mini',
             'ai_timeout' => 45,
         ]);
 
         Http::fake([
             'https://saved.example.test/v1/models' => Http::response([
                 'data' => [['id' => 'gpt-4o-mini', 'owned_by' => 'openai']],
+            ]),
+            'https://saved.example.test/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'ok']]],
             ]),
         ]);
 
@@ -73,14 +89,54 @@ class AiConnectionTest extends TestCase
             ->postJson(route('admin.settings.ai.test'), [
                 'ai_base_url' => '',
                 'ai_api_key' => '',
+                'ai_default_model' => '',
                 'ai_timeout' => '',
             ])
             ->assertOk()
             ->assertJsonPath('ok', true)
+            ->assertJsonPath('endpoint.ok', true)
+            ->assertJsonPath('probe.ok', true)
             ->assertJsonPath('model.OpenAI.0', 'gpt-4o-mini');
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://saved.example.test/v1/models'
+        Http::assertSent(fn ($request) => $request->url() === 'https://saved.example.test/v1/chat/completions'
+            && $request['model'] === 'gpt-4o-mini'
             && $request->header('Authorization')[0] === 'Bearer saved-secret');
+    }
+
+    public function test_probe_429_menampilkan_alasan_dan_daftar_model(): void
+    {
+        [$admin, $organization] = $this->adminWorkspace();
+
+        Http::fake([
+            'https://form.example.test/v1/models' => Http::response([
+                'data' => [['id' => 'openai/gpt-4o', 'owned_by' => 'openai']],
+            ]),
+            'https://form.example.test/v1/chat/completions' => Http::response([
+                'error' => ['message' => 'rate limit reached for requests'],
+            ], 429, ['Retry-After' => '30']),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->withSession($this->sesi($admin, $organization))
+            ->postJson(route('admin.settings.ai.test'), [
+                'ai_base_url' => 'https://form.example.test/v1',
+                'ai_api_key' => 'form-secret',
+                'ai_default_model' => 'openai/gpt-4o',
+                'ai_timeout' => 20,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('ok', false)
+            ->assertJsonPath('endpoint.ok', true)
+            ->assertJsonPath('probe.ok', false)
+            ->assertJsonPath('probe.status', 429)
+            ->assertJsonPath('model.OpenAI.0', 'openai/gpt-4o');
+
+        $pesan = $response->json('probe.pesan');
+        $this->assertStringContainsString('membatasi permintaan', $pesan);
+        $this->assertStringContainsString('rate limit reached for requests', $pesan);
+        $this->assertStringContainsString('30 detik', $pesan);
+        $this->assertStringNotContainsString('form-secret', $response->getContent());
     }
 
     public function test_api_key_ditolak_dilaporkan_tanpa_membocorkan_key(): void
@@ -94,16 +150,20 @@ class AiConnectionTest extends TestCase
             ->postJson(route('admin.settings.ai.test'), [
                 'ai_base_url' => 'https://form.example.test/v1',
                 'ai_api_key' => 'salah-secret',
+                'ai_default_model' => 'openai/gpt-4o',
                 'ai_timeout' => 20,
             ]);
 
         $response->assertOk()
             ->assertJsonPath('ok', false)
-            ->assertJsonPath('status', 401)
+            ->assertJsonPath('endpoint.ok', false)
+            ->assertJsonPath('endpoint.status', 401)
+            ->assertJsonPath('probe', null)
             ->assertJsonPath('model', []);
 
-        $this->assertStringContainsString('API key ditolak', $response->json('pesan'));
+        $this->assertStringContainsString('API key ditolak', $response->json('endpoint.pesan'));
         $this->assertStringNotContainsString('salah-secret', $response->getContent());
+        Http::assertSentCount(1);
     }
 
     public function test_kegagalan_koneksi_dilaporkan(): void
@@ -120,7 +180,9 @@ class AiConnectionTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('ok', false)
-            ->assertJsonPath('status', null)
+            ->assertJsonPath('endpoint.ok', false)
+            ->assertJsonPath('endpoint.status', null)
+            ->assertJsonPath('probe', null)
             ->assertJsonPath('model', []);
     }
 
@@ -128,16 +190,24 @@ class AiConnectionTest extends TestCase
     {
         [$admin, $organization] = $this->adminWorkspace();
 
-        Http::fake(['*' => Http::response(['data' => []])]);
+        Http::fake([
+            'https://form.example.test/v1/models' => Http::response(['data' => []]),
+            'https://form.example.test/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'ok']]],
+            ]),
+        ]);
 
         $this->actingAs($admin)
             ->withSession($this->sesi($admin, $organization))
             ->postJson(route('admin.settings.ai.test'), [
                 'ai_base_url' => 'https://form.example.test/v1',
+                'ai_default_model' => 'openai/gpt-4o',
                 'ai_timeout' => 20,
             ])
             ->assertOk()
             ->assertJsonPath('ok', true)
+            ->assertJsonPath('endpoint.ok', true)
+            ->assertJsonPath('probe.ok', true)
             ->assertJsonPath('model', []);
     }
 

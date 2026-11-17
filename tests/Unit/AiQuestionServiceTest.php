@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\AiRequestException;
 use App\Services\AiQuestionService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -306,6 +307,28 @@ class AiQuestionServiceTest extends TestCase
 
         $this->assertCount(1, $result);
         $this->assertEquals('Soal dari SSE', $result[0]['teks']);
+    }
+
+    public function test_evaluate_essay_429_menyertakan_alasan_dan_retry_after(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'error' => ['message' => 'quota exhausted for today'],
+            ], 429, ['Retry-After' => '45']),
+        ]);
+
+        $service = new AiQuestionService;
+
+        try {
+            $service->evaluateEssay('Pertanyaan', 'Acuan', [], 'Jawaban peserta', 10);
+            $this->fail('Seharusnya melempar AiRequestException.');
+        } catch (AiRequestException $e) {
+            $this->assertSame(429, $e->status);
+            $this->assertSame(45, $e->retryAfter);
+            $this->assertTrue($e->transient());
+            $this->assertStringContainsString('quota exhausted for today', $e->getMessage());
+            $this->assertStringContainsString('45 detik', $e->getMessage());
+        }
     }
 
     public function test_calculate_weights_distributes_exactly_to_max_score(): void
