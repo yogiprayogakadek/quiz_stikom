@@ -161,10 +161,10 @@
                 },
                 async mintaSemuaSaran() {
                     if (this.saranMassal || this.saranTujuan.length === 0) return;
-                    if (this.kotor) {
-                        this.saranPesan = 'Simpan penilaian manual dulu sebelum meminta saran semua.';
-                        return;
-                    }
+                    if (this.kotor) return;
+
+                    const dialog = this.$refs.dialogSaran;
+                    if (dialog.open) dialog.close();
 
                     this.saranMassal = true;
                     this.saranBerhenti = false;
@@ -172,6 +172,7 @@
                     this.saranGagal = 0;
                     this.saranPesan = '';
                     this.saranTotal = this.saranTujuan.length;
+                    dialog.showModal();
                     let pesanTerakhir = '';
 
                     for (const tujuan of [...this.saranTujuan]) {
@@ -231,6 +232,11 @@
 
                     window.location.reload();
                 },
+                cekTutupSaran(event) {
+                    if (! this.saranMassal) return;
+                    event.preventDefault();
+                    this.hentikanSaran();
+                },
                 hentikanSaran() {
                     if (! this.saranMassal) return;
                     this.saranBerhenti = true;
@@ -262,37 +268,46 @@
                             :disabled="saranMassal || kotor"
                             :aria-busy="saranMassal"
                         >
-                            <span x-show="!saranMassal" x-text="`Minta saran ${saranTujuan.length} essay`"></span>
-                            <span x-show="saranMassal" x-text="`Membuat saran ${saranSelesai} dari ${saranTotal}...`"></span>
+                            <span x-text="`Minta saran ${saranTujuan.length} essay`"></span>
                         </button>
                         <p x-show="kotor" x-cloak class="text-xs text-ink-subtle">Simpan penilaian manual dulu sebelum meminta saran semua.</p>
                     @endif
                 </div>
             </div>
 
-            <div x-show="saranMassal" x-cloak class="mt-4 rounded-xl border border-outline bg-surface p-4">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-bold text-ink">Membuat saran AI</p>
-                        <p class="mt-1 text-sm text-ink-muted" aria-live="polite" x-text="`${saranSelesai} dari ${saranTotal} saran selesai`"></p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <p class="font-display text-2xl font-bold text-ink" x-text="`${saranPersen}%`"></p>
-                        <button type="button" class="btn btn-ghost min-h-11 text-xs" @click="hentikanSaran" :disabled="saranBerhenti">
+            <dialog
+                x-ref="dialogSaran"
+                class="m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,34rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40"
+                aria-labelledby="judul-dialog-saran"
+                @cancel="cekTutupSaran($event)"
+            >
+                <div class="p-5 sm:p-6">
+                    <h3 id="judul-dialog-saran" class="text-xl font-bold" x-text="saranMassal ? 'Membuat saran AI' : 'Saran AI'"></h3>
+
+                    <div x-show="saranMassal" class="mt-4">
+                        <div class="flex items-end justify-between gap-3">
+                            <p class="text-sm text-ink-muted" aria-live="polite" x-text="`${saranSelesai} dari ${saranTotal} saran selesai`"></p>
+                            <p class="font-display text-2xl font-bold text-ink" x-text="`${saranPersen}%`"></p>
+                        </div>
+                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" :aria-valuenow="saranPersen" aria-valuemin="0" aria-valuemax="100" aria-label="Progres pembuatan saran AI">
+                            <div class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" :style="`width: ${saranPersen}%`"></div>
+                        </div>
+                        <p class="mt-3 text-sm text-ink-muted">Saran yang sudah jadi tetap tersimpan. Hentikan baru berlaku setelah saran yang sedang diproses selesai.</p>
+                        <button type="button" class="btn btn-secondary mt-5 min-h-11 w-full" @click="hentikanSaran" :disabled="saranBerhenti">
                             <span x-text="saranBerhenti ? 'Menghentikan...' : 'Hentikan'"></span>
                         </button>
                     </div>
-                </div>
-                <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" :aria-valuenow="saranPersen" aria-valuemin="0" aria-valuemax="100" aria-label="Progres pembuatan saran AI">
-                    <div class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" :style="`width: ${saranPersen}%`"></div>
-                </div>
-                <p class="mt-2 text-xs text-ink-subtle">Saran yang sudah jadi tetap tersimpan. Hentikan baru berlaku setelah saran yang sedang diproses selesai.</p>
-            </div>
 
-            <x-alert jenis="warning" x-show="saranPesan" x-cloak class="mt-3" aria-live="polite">
-                <p x-text="saranPesan"></p>
-                <button type="button" class="btn btn-secondary mt-2 min-h-11 text-xs" x-show="!saranMassal && saranSelesai > 0" :disabled="kotor" @click="window.location.reload()">Muat ulang</button>
-            </x-alert>
+                    <div x-show="!saranMassal" class="mt-4">
+                        <p class="text-sm text-ink-muted" aria-live="polite" x-text="saranPesan"></p>
+                        <div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button type="button" class="btn btn-secondary min-h-11" @click="$refs.dialogSaran.close()">Tutup</button>
+                            <button type="button" class="btn btn-primary min-h-11" x-show="saranSelesai > 0" :disabled="kotor" @click="window.location.reload()">Muat ulang</button>
+                        </div>
+                        <p x-show="kotor" x-cloak class="mt-2 text-xs text-ink-subtle">Simpan penilaian manual dulu sebelum memuat ulang.</p>
+                    </div>
+                </div>
+            </dialog>
 
             <div
                 class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"
