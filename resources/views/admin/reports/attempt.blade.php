@@ -35,9 +35,22 @@
         @if ($adaSaran)
             <div class="card">
                 <p class="text-base font-bold text-ink-muted">Saran AI</p>
-                <p class="mt-2 font-display text-2xl font-bold text-ink">{{ $saranEssay['tersedia'] }} dari {{ $saranEssay['total'] }}</p>
-                <p class="mt-1 text-base text-ink-muted">Essay dijawab sudah punya saran.</p>
-                <p class="mt-1 text-xs font-semibold text-ink-subtle">Bukan nilai final</p>
+                <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
+                    <p class="font-display text-2xl font-bold text-ink">{{ $saranEssay['tersedia'] }} dari {{ $saranEssay['total'] }} essay</p>
+                    <p class="text-sm font-semibold text-ink-muted">{{ $saranEssay['persen'] }}%</p>
+                </div>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" aria-valuenow="{{ $saranEssay['persen'] }}" aria-valuemin="0" aria-valuemax="100" aria-label="Essay yang sudah punya saran AI">
+                    <div class="h-full rounded-full bg-brand" style="width: {{ $saranEssay['persen'] }}%"></div>
+                </div>
+                <div class="mt-3 border-t border-outline pt-3">
+                    <p class="text-xs font-bold text-ink-muted">Poin saran AI</p>
+                    @if ($saranEssay['tersedia'] > 0)
+                        <p class="mt-1 font-display text-xl font-bold text-ink">{{ $saranEssay['poin'] }} / {{ $saranEssay['poin_maksimal'] }}</p>
+                    @else
+                        <p class="mt-1 font-display text-xl font-bold text-ink">Belum ada</p>
+                    @endif
+                    <p class="mt-1 text-xs text-ink-subtle">Dari essay yang sudah disarankan. Bukan nilai final.</p>
+                </div>
             </div>
         @endif
     </div>
@@ -130,6 +143,7 @@
                 saranTujuan: [],
                 saranTotal: 0,
                 saranMassal: false,
+                saranBerhenti: false,
                 saranSelesai: 0,
                 saranGagal: 0,
                 saranPesan: '',
@@ -142,6 +156,9 @@
                 get kotor() {
                     return this.kini !== this.awal || this.catatanKini !== this.catatanAwal;
                 },
+                get saranPersen() {
+                    return this.saranTotal > 0 ? Math.round((this.saranSelesai / this.saranTotal) * 100) : 0;
+                },
                 async mintaSemuaSaran() {
                     if (this.saranMassal || this.saranTujuan.length === 0) return;
                     if (this.kotor) {
@@ -150,6 +167,7 @@
                     }
 
                     this.saranMassal = true;
+                    this.saranBerhenti = false;
                     this.saranSelesai = 0;
                     this.saranGagal = 0;
                     this.saranPesan = '';
@@ -157,6 +175,8 @@
                     let pesanTerakhir = '';
 
                     for (const tujuan of [...this.saranTujuan]) {
+                        if (this.saranBerhenti) break;
+
                         let hasil;
                         try {
                             hasil = await window.kuisFetch(tujuan.url, {
@@ -181,14 +201,23 @@
                             this.saranGagal++;
                             pesanTerakhir = pesan;
                             this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
+                            if (this.saranBerhenti) break;
+
                             continue;
                         }
 
                         this.saranSelesai++;
                         this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
+                        if (this.saranBerhenti) break;
                     }
 
                     this.saranMassal = false;
+
+                    if (this.saranBerhenti) {
+                        const lewat = this.saranGagal > 0 ? ` ${this.saranGagal} essay dilewati.` : '';
+                        this.saranPesan = `${this.saranSelesai} saran dibuat.${lewat} Proses dihentikan. Saran yang sudah jadi tetap tersimpan.`;
+                        return;
+                    }
 
                     if (this.saranGagal > 0) {
                         this.saranPesan = `${this.saranSelesai} saran dibuat, ${this.saranGagal} essay dilewati. ${pesanTerakhir}`;
@@ -201,6 +230,10 @@
                     }
 
                     window.location.reload();
+                },
+                hentikanSaran() {
+                    if (! this.saranMassal) return;
+                    this.saranBerhenti = true;
                 },
                 cekKeluar(event) {
                     if (! this.kotor) return;
@@ -237,9 +270,28 @@
                 </div>
             </div>
 
+            <div x-show="saranMassal" x-cloak class="mt-4 rounded-xl border border-outline bg-surface p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-bold text-ink">Membuat saran AI</p>
+                        <p class="mt-1 text-sm text-ink-muted" aria-live="polite" x-text="`${saranSelesai} dari ${saranTotal} saran selesai`"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <p class="font-display text-2xl font-bold text-ink" x-text="`${saranPersen}%`"></p>
+                        <button type="button" class="btn btn-ghost min-h-11 text-xs" @click="hentikanSaran" :disabled="saranBerhenti">
+                            <span x-text="saranBerhenti ? 'Menghentikan...' : 'Hentikan'"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3 h-2 overflow-hidden rounded-full bg-surface-sunken" role="progressbar" :aria-valuenow="saranPersen" aria-valuemin="0" aria-valuemax="100" aria-label="Progres pembuatan saran AI">
+                    <div class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" :style="`width: ${saranPersen}%`"></div>
+                </div>
+                <p class="mt-2 text-xs text-ink-subtle">Saran yang sudah jadi tetap tersimpan. Hentikan baru berlaku setelah saran yang sedang diproses selesai.</p>
+            </div>
+
             <x-alert jenis="warning" x-show="saranPesan" x-cloak class="mt-3" aria-live="polite">
                 <p x-text="saranPesan"></p>
-                <button type="button" class="btn btn-secondary mt-2 min-h-11 text-xs" x-show="saranGagal > 0" :disabled="kotor" @click="window.location.reload()">Muat ulang</button>
+                <button type="button" class="btn btn-secondary mt-2 min-h-11 text-xs" x-show="!saranMassal && saranSelesai > 0" :disabled="kotor" @click="window.location.reload()">Muat ulang</button>
             </x-alert>
 
             <div

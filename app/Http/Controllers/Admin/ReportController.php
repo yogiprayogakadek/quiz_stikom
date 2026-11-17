@@ -193,6 +193,13 @@ class ReportController extends Controller
             'tersedia' => $essayRincian->where('dijawab', true)->whereNotNull('ai_reviewed_at')->count(),
             'tanpa' => $saranTujuan->count(),
         ];
+        $saranEssay['persen'] = $saranEssay['total'] > 0
+            ? (int) round($saranEssay['tersedia'] / $saranEssay['total'] * 100)
+            : 0;
+        $saranTerisi = $essayRincian
+            ->filter(fn (array $baris) => $baris['dijawab'] && $baris['ai_reviewed_at'] !== null);
+        $saranEssay['poin'] = $saranTerisi->sum(fn (array $baris) => (int) $baris['ai_suggested_score']);
+        $saranEssay['poin_maksimal'] = $saranTerisi->sum('bobot');
 
         $soalDiminta = filter_var($request->query('soal'), FILTER_VALIDATE_INT);
         $aktifEssay = ($soalDiminta !== false ? $essayRincian->firstWhere('question_id', $soalDiminta) : null)

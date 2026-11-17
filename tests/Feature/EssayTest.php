@@ -1067,7 +1067,39 @@ class EssayTest extends TestCase
             ->assertSee('Bukan nilai final')
             ->assertSee('Penilaian manual')
             ->assertSee('data-saran-tujuan', false)
-            ->assertSee('Minta saran');
+            ->assertSee('Minta saran')
+            ->assertSee('Membuat saran AI')
+            ->assertSee('Hentikan')
+            ->assertSee('Progres pembuatan saran AI');
+    }
+
+    public function test_kartu_saran_ai_menampilkan_total_poin(): void
+    {
+        [$admin, $attempt, $essay1, $essay2] = $this->buatRuangPenilaian();
+
+        Answer::where('attempt_id', $attempt->id)->where('question_id', $essay1->id)->update([
+            'ai_suggested_score' => 8,
+            'ai_confidence' => 90,
+            'ai_feedback' => 'Saran pertama.',
+            'ai_model' => 'test-model',
+            'ai_reviewed_at' => now(),
+        ]);
+        Answer::where('attempt_id', $attempt->id)->where('question_id', $essay2->id)->update([
+            'ai_suggested_score' => 6,
+            'ai_confidence' => 80,
+            'ai_feedback' => 'Saran kedua.',
+            'ai_model' => 'test-model',
+            'ai_reviewed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-ruang'])
+            ->get(route('admin.reports.attempt', $attempt))
+            ->assertOk()
+            ->assertSee('2 dari 2 essay')
+            ->assertSee('Poin saran AI')
+            ->assertSee('14 / 20')
+            ->assertSee('Bukan nilai final');
     }
 
     public function test_soal_aktif_mengikuti_query_soal_dan_mengabaikan_query_asing(): void
