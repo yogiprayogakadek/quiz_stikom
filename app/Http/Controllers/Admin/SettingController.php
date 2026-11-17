@@ -8,8 +8,10 @@ use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
 use App\Models\User;
+use App\Services\AiQuestionService;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -202,6 +204,21 @@ class SettingController extends Controller
         return back()
             ->with('sukses', $message)
             ->with('settings_tab', $section ?? 'identitas');
+    }
+
+    public function testAiConnection(Request $request, AiQuestionService $ai): JsonResponse
+    {
+        $data = $request->validate([
+            'ai_base_url' => ['nullable', 'url', 'max:255'],
+            'ai_api_key' => ['nullable', 'string', 'max:500'],
+            'ai_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
+        ]);
+
+        return response()->json($ai->testConnection(
+            $data['ai_base_url'] ?? null,
+            filled($data['ai_api_key'] ?? null) ? $data['ai_api_key'] : null,
+            isset($data['ai_timeout']) ? (int) $data['ai_timeout'] : null,
+        ));
     }
 
     private function isOwner(?User $user, ?Organization $organization): bool

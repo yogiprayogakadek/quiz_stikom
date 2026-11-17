@@ -146,6 +146,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
 
     Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('settings/ai/test', [SettingController::class, 'testAiConnection'])
+        ->middleware('throttle:10,1')
+        ->name('settings.ai.test');
     Route::middleware('organization_owner')->group(function () {
         Route::get('team', [TeamController::class, 'index'])->name('team.index');
         Route::post('team', [TeamController::class, 'store'])->name('team.store');

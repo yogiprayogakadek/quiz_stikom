@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -51,55 +52,126 @@ class AiQuestionService
                     return $this->fallbackModels();
                 }
 
-                $json = $response->json();
-                $items = is_array($json) && isset($json['data']) && is_array($json['data'])
-                    ? $json['data']
-                    : (is_array($json) ? $json : []);
-
-                if (empty($items)) {
-                    return $this->fallbackModels();
-                }
-
-                $grouped = [];
-                foreach ($items as $item) {
-                    $id = is_array($item) ? ($item['id'] ?? null) : (is_string($item) ? $item : null);
-                    if (! $id) {
-                        continue;
-                    }
-
-                    $ownedBy = is_array($item) ? ($item['owned_by'] ?? '') : '';
-                    $provider = $this->detectProvider((string) $id, (string) $ownedBy);
-
-                    $grouped[$provider][] = (string) $id;
-                }
-
-                if (empty($grouped)) {
-                    return $this->fallbackModels();
-                }
-
-                // Urutkan model di dalam tiap provider
-                foreach ($grouped as $provider => &$models) {
-                    sort($models);
-                }
-                unset($models);
-
-                // Urutkan provider dengan urutan prioritas
-                uksort($grouped, function ($a, $b) {
-                    $priority = ['Google' => 1, 'OpenAI' => 2, 'Anthropic' => 3, 'DeepSeek' => 4, 'Meta' => 5];
-                    $pA = $priority[$a] ?? 99;
-                    $pB = $priority[$b] ?? 99;
-                    if ($pA === $pB) {
-                        return strcmp($a, $b);
-                    }
-
-                    return $pA <=> $pB;
-                });
-
-                return $grouped;
+                return $this->parseModels($response->json()) ?: $this->fallbackModels();
             } catch (Throwable) {
                 return $this->fallbackModels();
             }
         });
+    }
+
+    /**
+     * Menguji endpoint AI dan mengembalikan model yang benar-benar tersedia.
+     * Tidak memakai cache maupun fallback agar hasil tes jujur.
+     *
+     * @return array{ok: bool, status: int|null, pesan: string, model: array<string, array<string>>}
+     */
+    public function testConnection(?string $baseUrl = null, ?string $apiKey = null, ?int $timeout = null): array
+    {
+        $baseUrl = rtrim($baseUrl ?: $this->baseUrl, '/');
+        $apiKey = $apiKey ?: $this->apiKey;
+        // ponytail: tes dibatasi 30 detik supaya request tidak menggantung mengikuti timeout simpan.
+        $timeout = min(max($timeout ?: $this->timeout, 5), 30);
+        $host = parse_url($baseUrl, PHP_URL_HOST) ?: $baseUrl;
+
+        try {
+            $response = Http::withToken($apiKey ?? '')
+                ->timeout($timeout)
+                ->get("{$baseUrl}/models");
+        } catch (Throwable $e) {
+            Log::warning('Tes koneksi AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl]);
+
+            return [
+                'ok' => false,
+                'status' => null,
+                'pesan' => 'Tidak bisa menghubungi endpoint. Periksa Base URL dan koneksi server.',
+                'model' => [],
+            ];
+        }
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'status' => $response->status(),
+                'pesan' => $this->pesanGagal($response->status()),
+                'model' => [],
+            ];
+        }
+
+        $model = $this->parseModels($response->json());
+
+        if ($model === []) {
+            return [
+                'ok' => true,
+                'status' => $response->status(),
+                'pesan' => "Endpoint {$host} merespons, tetapi tidak ada model yang dikembalikan.",
+                'model' => [],
+            ];
+        }
+
+        $jumlah = array_sum(array_map('count', $model));
+
+        return [
+            'ok' => true,
+            'status' => $response->status(),
+            'pesan' => "Terhubung ke {$host}. {$jumlah} model ditemukan.",
+            'model' => $model,
+        ];
+    }
+
+    protected function pesanGagal(int $status): string
+    {
+        return match (true) {
+            in_array($status, [401, 403], true) => "API key ditolak (status {$status}). Periksa kembali API key.",
+            $status === 404 => 'Endpoint /models tidak ditemukan (404). Periksa Base URL.',
+            $status === 429 => 'Layanan AI membatasi permintaan (429). Coba lagi nanti.',
+            $status >= 500 => "Layanan AI bermasalah (status {$status}).",
+            default => "Endpoint merespons dengan status {$status}.",
+        };
+    }
+
+    /**
+     * Mengelompokkan daftar model dari respons /models per provider.
+     *
+     * @return array<string, array<string>>
+     */
+    protected function parseModels(mixed $json): array
+    {
+        $items = is_array($json) && isset($json['data']) && is_array($json['data'])
+            ? $json['data']
+            : (is_array($json) ? $json : []);
+
+        $grouped = [];
+        foreach ($items as $item) {
+            $id = is_array($item) ? ($item['id'] ?? null) : (is_string($item) ? $item : null);
+            if (! $id) {
+                continue;
+            }
+
+            $ownedBy = is_array($item) ? ($item['owned_by'] ?? '') : '';
+            $provider = $this->detectProvider((string) $id, (string) $ownedBy);
+
+            $grouped[$provider][] = (string) $id;
+        }
+
+        // Urutkan model di dalam tiap provider
+        foreach ($grouped as $provider => &$models) {
+            sort($models);
+        }
+        unset($models);
+
+        // Urutkan provider dengan urutan prioritas
+        uksort($grouped, function ($a, $b) {
+            $priority = ['Google' => 1, 'OpenAI' => 2, 'Anthropic' => 3, 'DeepSeek' => 4, 'Meta' => 5];
+            $pA = $priority[$a] ?? 99;
+            $pB = $priority[$b] ?? 99;
+            if ($pA === $pB) {
+                return strcmp($a, $b);
+            }
+
+            return $pA <=> $pB;
+        });
+
+        return $grouped;
     }
 
     /**

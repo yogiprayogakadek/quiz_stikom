@@ -329,6 +329,93 @@
                     @error('ai_timeout') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
             </div>
+
+            <div
+                class="mt-5 rounded-2xl border border-outline bg-page p-4"
+                x-data="{
+                    url: @js(route('admin.settings.ai.test')),
+                    memuat: false,
+                    pesan: '',
+                    berhasil: false,
+                    model: {},
+                    get jumlah() {
+                        return Object.values(this.model).reduce((total, daftar) => total + daftar.length, 0);
+                    },
+                    async uji() {
+                        this.memuat = true;
+                        this.pesan = '';
+                        this.berhasil = false;
+                        this.model = {};
+                        try {
+                            const hasil = await window.kuisFetch(this.url, {
+                                method: 'POST',
+                                progress: false,
+                                body: {
+                                    ai_base_url: document.getElementById('ai_base_url').value.trim(),
+                                    ai_api_key: document.getElementById('ai_api_key').value,
+                                    ai_timeout: document.getElementById('ai_timeout').value,
+                                },
+                            });
+                            this.berhasil = hasil.data?.ok === true;
+                            this.pesan = hasil.data?.pesan ?? hasil.data?.message ?? 'Tes koneksi gagal. Periksa kembali isian.';
+                            this.model = this.berhasil ? (hasil.data?.model ?? {}) : {};
+                        } catch (e) {
+                            this.berhasil = false;
+                            this.pesan = 'Tes koneksi gagal. Periksa koneksi server.';
+                        } finally {
+                            this.memuat = false;
+                        }
+                    },
+                    pilih(id) {
+                        document.getElementById('ai_default_model').value = id;
+                        this.pesan = 'Model default diisi: ' + id + '. Klik Simpan untuk memakai model ini.';
+                    },
+                }"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-lg font-bold text-ink">Tes koneksi</p>
+                        <p class="mt-1 text-sm text-ink-muted">Memakai isian di atas. Perubahan baru dipakai setelah kamu menekan Simpan.</p>
+                    </div>
+                    <button
+                        type="button"
+                        class="btn btn-secondary min-h-11"
+                        x-on:click="uji()"
+                        x-bind:disabled="memuat"
+                        x-text="memuat ? 'Menghubungi endpoint...' : 'Tes koneksi'"
+                    ></button>
+                </div>
+                <p
+                    class="mt-3 text-base"
+                    role="status"
+                    aria-live="polite"
+                    x-show="pesan"
+                    x-text="pesan"
+                    x-bind:class="berhasil ? 'text-brand-deep' : 'text-coral-deep'"
+                ></p>
+                <div x-show="Object.keys(model).length > 0" x-cloak class="mt-4">
+                    <p class="text-sm font-bold text-ink"><span x-text="jumlah"></span> model tersedia</p>
+                    <div class="mt-2 max-h-72 space-y-3 overflow-y-auto rounded-xl border border-outline bg-surface p-3">
+                        <template x-for="(daftar, provider) in model" :key="provider">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-wide text-ink-muted" x-text="provider"></p>
+                                <div class="mt-1 flex flex-wrap gap-2">
+                                    <template x-for="id in daftar" :key="id">
+                                        <button
+                                            type="button"
+                                            class="btn btn-ghost min-h-11 px-3 text-left font-mono text-xs"
+                                            x-on:click="pilih(id)"
+                                            x-bind:aria-label="'Pakai model ' + id"
+                                            x-text="id"
+                                        ></button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <p class="help mt-2">Klik model untuk mengisi kolom Model default.</p>
+                </div>
+            </div>
         </section>
 
         <section class="card" aria-labelledby="cover-heading" id="panel-cover" role="tabpanel" x-show="tab === 'cover'" @if ($tab !== 'cover') x-cloak @endif>
