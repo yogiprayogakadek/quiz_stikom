@@ -863,8 +863,10 @@ class EssayTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-admin'])
-            ->post(route('admin.answers.ai-suggestion', $answer))
+            ->post(route('admin.answers.ai-suggestion', $answer), ['mode' => 'longgar'])
             ->assertRedirect();
+
+        Http::assertSent(fn ($request) => str_contains($request['messages'][0]['content'], 'Mode penilaian: Longgar'));
 
         $answer->refresh();
         $this->assertSame(8, $answer->ai_suggested_score);
@@ -874,6 +876,7 @@ class EssayTest extends TestCase
         $audit = AuditLog::where('action', 'essay_ai_suggested')->where('subject_id', $answer->id)->firstOrFail();
         $this->assertSame('ai.example.test', $audit->metadata['provider']);
         $this->assertSame('test-model', $audit->metadata['model']);
+        $this->assertSame('longgar', $audit->metadata['mode']);
         $this->assertDatabaseHas('ai_usage_events', [
             'organization_id' => $attempt->organization_id,
             'kind' => 'essay',
@@ -885,7 +888,9 @@ class EssayTest extends TestCase
             ->get(route('admin.reports.attempt', $attempt))
             ->assertOk()
             ->assertSee('Riwayat penilaian (1)')
-            ->assertSee('ai.example.test');
+            ->assertSee('ai.example.test')
+            ->assertSee('Mode saran AI')
+            ->assertSee('Mode Longgar');
     }
 
     public function test_saran_ai_mengembalikan_json_untuk_permintaan_menyeluruh(): void
@@ -915,19 +920,22 @@ class EssayTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-admin'])
-            ->postJson(route('admin.answers.ai-suggestion', $answer))
+            ->postJson(route('admin.answers.ai-suggestion', $answer), ['mode' => 'ketat'])
             ->assertOk()
             ->assertJson([
                 'ok' => true,
                 'skor' => 8,
                 'keyakinan' => 91,
                 'umpan_balik' => 'Jawaban menyebut TLS dan perbedaan enkripsi.',
+                'mode' => 'ketat',
             ]);
 
         $answer->refresh();
         $this->assertSame(8, $answer->ai_suggested_score);
         $this->assertSame(0, $answer->skor);
         $this->assertNull($answer->dinilai_at);
+        $audit = AuditLog::where('action', 'essay_ai_suggested')->where('subject_id', $answer->id)->firstOrFail();
+        $this->assertSame('ketat', $audit->metadata['mode']);
     }
 
     public function test_saran_ai_json_menandai_429_sebagai_gangguan_sementara(): void
@@ -957,6 +965,24 @@ class EssayTest extends TestCase
             ]);
 
         $this->assertNull($answer->fresh()->ai_reviewed_at);
+    }
+
+    public function test_mode_saran_ai_tidak_valid_ditolak(): void
+    {
+        Http::fake();
+
+        [$admin, , , $attempt, , $essay] = $this->buatAcakBerjalan();
+        app(QuizEngine::class)->selesaikanAcak($attempt);
+        $answer = Answer::where('attempt_id', $attempt->id)->where('question_id', $essay->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->postJson(route('admin.answers.ai-suggestion', $answer), ['mode' => 'bebas'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('mode');
+
+        $this->assertNull($answer->fresh()->ai_reviewed_at);
+        Http::assertNothingSent();
     }
 
     /**
@@ -1002,7 +1028,7 @@ class EssayTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-admin'])
-            ->post(route('admin.answers.ai-suggestion', $answer));
+            ->post(route('admin.answers.ai-suggestion', $answer), ['mode' => 'longgar']);
 
         $this->actingAs($admin)
             ->withSession(['auth_token' => 'token-admin'])
@@ -1011,6 +1037,7 @@ class EssayTest extends TestCase
         $final = AuditLog::where('action', 'essay_score_changed')->where('subject_id', $answer->id)->firstOrFail();
         $this->assertSame('ai.example.test', $final->metadata['ai_provider']);
         $this->assertSame('test-model', $final->metadata['ai_model']);
+        $this->assertSame('longgar', $final->metadata['ai_mode']);
         $this->assertSame($admin->id, $final->actor_id);
 
         $this->actingAs($admin)
@@ -1019,6 +1046,7 @@ class EssayTest extends TestCase
             ->assertOk()
             ->assertSee('ai.example.test')
             ->assertSee('test-model')
+            ->assertSee('Mode Longgar')
             ->assertSee('Admin');
     }
 
@@ -1063,6 +1091,12 @@ class EssayTest extends TestCase
             ->assertSee('data-nav-sebelumnya="'.$essay1->id.'"', false)
             ->assertSee('aria-current="page"', false)
             ->assertSee('Saran AI')
+            ->assertSee('Mode saran AI')
+            ->assertSee('id="mode-saran-ai"', false)
+            ->assertSee('name="mode"', false)
+            ->assertSee('Ketat')
+            ->assertSee('Seimbang')
+            ->assertSee('Longgar')
             ->assertSee('0 dari 2')
             ->assertSee('Bukan nilai final')
             ->assertSee('Penilaian manual')

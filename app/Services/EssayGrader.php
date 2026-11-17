@@ -15,9 +15,9 @@ class EssayGrader
     ) {}
 
     /**
-     * @return array{score: int, confidence: int, feedback: string, model: string, provider: string}
+     * @return array{score: int, confidence: int, feedback: string, model: string, provider: string, mode: string}
      */
-    public function suggest(Answer $answer): array
+    public function suggest(Answer $answer, string $mode = 'seimbang'): array
     {
         $answer->loadMissing(['question', 'attempt']);
 
@@ -51,6 +51,7 @@ class EssayGrader
             $question->rubrik_essay ?? [],
             QuestionContent::answerForGrading($question, $answer),
             (int) $question->bobot,
+            $mode,
         );
 
         if ($organizationId !== null) {
@@ -72,6 +73,7 @@ class EssayGrader
             'confidence' => $suggestion['confidence'],
             'model' => $suggestion['model'],
             'provider' => $suggestion['provider'],
+            'mode' => $suggestion['mode'],
         ], $organizationId);
 
         return $suggestion;
@@ -142,6 +144,7 @@ class EssayGrader
             'ai_confidence' => $answer->ai_confidence,
             'ai_model' => $answer->ai_model,
             'ai_provider' => $aiSuggestion?->metadata['provider'] ?? null,
+            'ai_mode' => $aiSuggestion?->metadata['mode'] ?? null,
             'auto' => $auto,
         ], $answer->attempt?->organization_id);
 

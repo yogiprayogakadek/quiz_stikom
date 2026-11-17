@@ -403,19 +403,28 @@ PROMPT;
 
     /**
      * @param  array<int, array{label: string, points: int}>  $criteria
-     * @return array{score: int, confidence: int, feedback: string, model: string, provider: string}
+     * @return array{score: int, confidence: int, feedback: string, model: string, provider: string, mode: string}
      */
-    public function evaluateEssay(string $question, ?string $referenceAnswer, array $criteria, string $answer, int $maxScore): array
+    public function evaluateEssay(string $question, ?string $referenceAnswer, array $criteria, string $answer, int $maxScore, string $mode = 'seimbang'): array
     {
         if (blank($this->apiKey)) {
             throw new RuntimeException('API key AI belum dikonfigurasi.');
         }
 
-        $systemPrompt = <<<'PROMPT'
+        $mode = in_array($mode, ['ketat', 'seimbang', 'longgar'], true) ? $mode : 'seimbang';
+        $modeInstruction = match ($mode) {
+            'ketat' => "Mode penilaian: Ketat.\nBeri poin hanya untuk bagian yang secara eksplisit memenuhi kriteria rubrik. Bagian yang hilang, salah, atau hanya berupa kata kunci tanpa penjelasan tidak mendapat poin.",
+            'longgar' => "Mode penilaian: Longgar.\nHargai ide inti yang relevan meskipun jawaban singkat, kurang rapi, atau memiliki detail kecil yang kurang tepat. Toleransi perbedaan redaksi dan kesalahan kecil yang tidak mengubah makna. Jawaban kosong, tidak relevan, atau bertentangan dengan konsep inti tetap tidak mendapat poin.",
+            default => "Mode penilaian: Seimbang.\nBeri poin proporsional untuk ide yang benar. Toleransi perbedaan redaksi yang tidak mengubah makna. Bagian penting yang hilang atau kesalahan konsep mengurangi poin.",
+        };
+
+        $systemPrompt = <<<PROMPT
 Nilai jawaban essay berdasarkan pertanyaan, rubrik, dan nilai maksimum yang diberikan.
+{$modeInstruction}
+Kualitas tulisan hanya memengaruhi nilai jika rubrik memintanya.
 Kembalikan JSON valid saja dengan bentuk:
 {"score":0,"confidence":0,"feedback":"Alasan singkat dalam bahasa Indonesia."}
-score harus bilangan bulat dari 0 sampai nilai maksimum. confidence harus bilangan bulat dari 0 sampai 100. Jangan menebak fakta di luar rubrik.
+score harus bilangan bulat dari 0 sampai nilai maksimum. confidence harus bilangan bulat dari 0 sampai 100. confidence mengukur keyakinan, bukan tingkat kelonggaran. Jangan menebak fakta di luar rubrik.
 PROMPT;
         $criteriaText = $criteria === []
             ? 'Tidak ada kriteria terstruktur.'
@@ -465,6 +474,7 @@ PROMPT;
 
             Log::warning('Saran penilaian essay tidak valid.', [
                 'attempt' => $attempt,
+                'mode' => $mode,
                 'model' => $this->defaultModel,
                 'finish_reason' => $response->json('choices.0.finish_reason'),
                 'keys' => is_array($data) ? array_keys($data) : [],
@@ -486,6 +496,7 @@ PROMPT;
             'feedback' => Str::limit($feedback, 1500, '') ?: 'AI tidak memberikan alasan.',
             'model' => $this->defaultModel,
             'provider' => parse_url($this->baseUrl, PHP_URL_HOST) ?: $this->baseUrl,
+            'mode' => $mode,
         ];
     }
 

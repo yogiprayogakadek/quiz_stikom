@@ -147,6 +147,7 @@
                 saranSelesai: 0,
                 saranGagal: 0,
                 saranPesan: '',
+                modeSaran: 'seimbang',
                 init() {
                     this.awal = this.kini = this.$refs.nilai?.value ?? '';
                     this.catatanAwal = this.catatanKini = this.$refs.catatan?.value ?? '';
@@ -163,6 +164,7 @@
                     if (this.saranMassal || this.saranTujuan.length === 0) return;
                     if (this.kotor) return;
 
+                    const mode = this.modeSaran;
                     const dialog = this.$refs.dialogSaran;
                     if (dialog.open) dialog.close();
 
@@ -184,6 +186,7 @@
                                 method: 'POST',
                                 progress: false,
                                 headers: { Accept: 'application/json' },
+                                body: { mode },
                             });
                         } catch {
                             this.saranMassal = false;
@@ -256,8 +259,17 @@
                         Satu soal per layar. Pilih nomor soal, simpan nilainya, lalu lanjut ke soal berikutnya tanpa menggulir seluruh jawaban.
                     </p>
                 </div>
-                <div class="flex flex-col items-start gap-2 sm:items-end">
+                <div class="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
                     <p class="pill pill-neutral">{{ $progresEssay['graded'] }} dari {{ $progresEssay['total'] }} soal dinilai</p>
+                    <div class="w-full sm:w-56">
+                        <label for="mode-saran-ai" class="label">Mode saran AI</label>
+                        <select id="mode-saran-ai" x-model="modeSaran" class="input min-h-11" :disabled="saranMassal" aria-describedby="bantuan-mode-saran-ai">
+                            <option value="ketat">Ketat</option>
+                            <option value="seimbang" selected>Seimbang</option>
+                            <option value="longgar">Longgar</option>
+                        </select>
+                        <p id="bantuan-mode-saran-ai" class="help mt-1">Ketat menilai hanya poin yang jelas memenuhi rubrik. Longgar lebih toleran pada detail kecil.</p>
+                    </div>
                     @if ($saranEssay['tanpa'] > 0)
                         <button
                             type="button"
@@ -454,6 +466,9 @@
                                     <p class="mt-2 text-sm text-ink">
                                         Saran nilai <strong>{{ $aktifEssay['ai_suggested_score'] }} / {{ $aktifEssay['bobot'] }}</strong>, keyakinan {{ $aktifEssay['ai_confidence'] }}%.
                                     </p>
+                                    @if (filled($aktifEssay['ai_mode']))
+                                        <p class="mt-1 text-xs text-ink-subtle">Mode {{ ucfirst($aktifEssay['ai_mode']) }}.</p>
+                                    @endif
                                     <p class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ $aktifEssay['ai_feedback'] }}</p>
                                     <p class="mt-2 text-xs text-ink-subtle">Nilai final tetap diisi manual di bagian Penilaian manual.</p>
                                 @else
@@ -473,11 +488,13 @@
                                             $meta = $log->metadata;
                                             $aiProvider = $meta['ai_provider'] ?? null;
                                             $aiModel = $meta['ai_model'] ?? null;
+                                            $aiMode = $meta['ai_mode'] ?? null;
 
-                                            if ($log->action === 'essay_score_changed' && (blank($aiProvider) || blank($aiModel))) {
+                                            if ($log->action === 'essay_score_changed' && (blank($aiProvider) || blank($aiModel) || blank($aiMode))) {
                                                 $saran = $aktifEssay['history']->first(fn ($item) => $item->action === 'essay_ai_suggested' && $item->created_at->lte($log->created_at));
                                                 $aiProvider = $aiProvider ?: ($saran?->metadata['provider'] ?? null);
                                                 $aiModel = $aiModel ?: ($saran?->metadata['model'] ?? null);
+                                                $aiMode = $aiMode ?: ($saran?->metadata['mode'] ?? null);
                                             }
                                         @endphp
                                         <li class="grid gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
@@ -498,11 +515,19 @@
                                                             @if (filled($aiProvider) || filled($aiModel))
                                                                 · {{ $aiProvider ?: 'AI' }}@if (filled($aiModel)) · {{ $aiModel }}@endif
                                                             @endif
+                                                            @if (filled($aiMode))
+                                                                · Mode {{ ucfirst($aiMode) }}
+                                                            @endif
                                                         </p>
                                                     @endif
                                                 @else
-                                                    <p class="font-bold text-ink">AI menyarankan {{ $meta['score'] }} poin dengan confidence {{ $meta['confidence'] }}%.</p>
-                                                    <p class="mt-1 text-ink-muted">{{ $meta['provider'] ?: 'AI' }} · {{ $meta['model'] ?: '-' }}</p>
+                                                    <p class="font-bold text-ink">AI menyarankan {{ $meta['score'] }} poin dengan keyakinan {{ $meta['confidence'] }}%.</p>
+                                                    <p class="mt-1 text-ink-muted">
+                                                        {{ $meta['provider'] ?: 'AI' }} · {{ $meta['model'] ?: '-' }}
+                                                        @if (filled($meta['mode'] ?? null))
+                                                            · Mode {{ ucfirst($meta['mode']) }}
+                                                        @endif
+                                                    </p>
                                                 @endif
                                             </div>
                                             <p class="text-xs text-ink-subtle sm:text-right">
@@ -591,6 +616,7 @@
                     @if ($aktifEssay['answer_id'] && filled($aktifEssay['jawaban_saya']))
                         <form id="essay-ai-{{ $aktifEssay['answer_id'] }}" method="POST" action="{{ route('admin.answers.ai-suggestion', $aktifEssay['answer_id']) }}" data-progress-message="Meminta saran AI..." class="hidden">
                             @csrf
+                            <input type="hidden" name="mode" :value="modeSaran">
                         </form>
                     @endif
                 </div>

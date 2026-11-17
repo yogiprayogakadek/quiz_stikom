@@ -384,6 +384,50 @@ class AiQuestionServiceTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_evaluate_essay_mengirim_aturan_mode_penilaian(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 9,
+                            'confidence' => 88,
+                            'feedback' => 'Sesuai rubrik.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $result = (new AiQuestionService)->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10, 'ketat');
+
+        $this->assertSame('ketat', $result['mode']);
+        Http::assertSent(fn ($request) => str_contains($request['messages'][0]['content'], 'Mode penilaian: Ketat'));
+    }
+
+    public function test_evaluate_essay_memakai_mode_seimbang_untuk_mode_tidak_dikenal(): void
+    {
+        Http::fake([
+            'https://api.9router.com/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'score' => 7,
+                            'confidence' => 80,
+                            'feedback' => 'Cukup.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $result = (new AiQuestionService)->evaluateEssay('Pertanyaan', null, [], 'Jawaban', 10, 'bebas');
+
+        $this->assertSame('seimbang', $result['mode']);
+        Http::assertSent(fn ($request) => str_contains($request['messages'][0]['content'], 'Mode penilaian: Seimbang'));
+    }
+
     public function test_evaluate_essay_throws_after_invalid_retry(): void
     {
         Http::fake([

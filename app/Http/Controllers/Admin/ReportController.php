@@ -116,6 +116,8 @@ class ReportController extends Controller
             $answer = $jawaban->get($question->id);
             $essay = $question->isEssay();
             $dijawab = $essay ? filled($answer?->jawaban_teks) : $answer !== null;
+            $riwayat = $answer ? ($history->get($answer->id) ?? collect()) : collect();
+            $saranTerakhir = $riwayat->firstWhere('action', 'essay_ai_suggested');
 
             return [
                 'question_id' => $question->id,
@@ -148,7 +150,8 @@ class ReportController extends Controller
                 'ai_confidence' => $answer?->ai_confidence,
                 'ai_feedback' => $answer?->ai_feedback,
                 'ai_reviewed_at' => $answer?->ai_reviewed_at,
-                'history' => $answer ? ($history->get($answer->id) ?? collect()) : collect(),
+                'ai_mode' => $saranTerakhir?->metadata['mode'] ?? null,
+                'history' => $riwayat,
             ];
         });
 
@@ -380,13 +383,19 @@ class ReportController extends Controller
         abort_unless($answer->attempt->status === 'selesai', 422);
         abort_unless(filled($answer->jawaban_teks), 422);
 
+        $validated = $request->validate([
+            'mode' => ['nullable', 'in:ketat,seimbang,longgar'],
+        ]);
+        $mode = $validated['mode'] ?? 'seimbang';
+
         try {
-            $saran = $grader->suggest($answer);
+            $saran = $grader->suggest($answer, $mode);
         } catch (\Throwable $e) {
             Log::warning('Saran AI essay gagal: '.$e->getMessage(), [
                 'answer_id' => $answer->id,
                 'attempt_id' => $answer->attempt_id,
                 'question_id' => $answer->question_id,
+                'mode' => $mode,
                 'transient' => $e instanceof AiRequestException && $e->transient(),
             ]);
 
@@ -407,6 +416,7 @@ class ReportController extends Controller
                 'skor' => $saran['score'],
                 'keyakinan' => $saran['confidence'],
                 'umpan_balik' => $saran['feedback'],
+                'mode' => $saran['mode'],
             ]);
         }
 
