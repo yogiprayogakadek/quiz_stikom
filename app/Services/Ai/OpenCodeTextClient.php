@@ -25,11 +25,10 @@ class OpenCodeTextClient implements TextClient
      */
     public function modelsOfType(string $type, int $timeout = 15): array
     {
-        $response = $this->send('get', '/api/model', ['types' => $type], $timeout);
+        $items = $this->modelItems([], $timeout);
 
-        $items = $response->json('data');
-        if (! is_array($items)) {
-            return [];
+        if ($items === []) {
+            $items = $this->modelItems(['types' => $type], $timeout);
         }
 
         $ids = [];
@@ -46,6 +45,24 @@ class OpenCodeTextClient implements TextClient
         sort($ids);
 
         return array_values(array_unique($ids));
+    }
+
+    /**
+     * Server OpenCode baru mengabaikan filter `types` (mengembalikan kosong),
+     * jadi daftar diambil tanpa filter lalu disaring di sisi klien.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<int, array<string, mixed>>
+     */
+    private function modelItems(array $query, int $timeout): array
+    {
+        $items = $this->send('get', '/api/model', $query, $timeout)->json('data');
+
+        if (! is_array($items)) {
+            return [];
+        }
+
+        return array_values(array_filter($items, 'is_array'));
     }
 
     public function chat(array $messages, ?string $model, float $temperature): string
@@ -118,13 +135,16 @@ class OpenCodeTextClient implements TextClient
         $detail = $detail === '' ? '' : ': '.$detail;
         $retryAfter = $this->retryAfter($response);
         $notFound = $response->json('_tag') === 'ModelNotFoundError' || $status === 404;
+        $isRateLimit = $status === 429
+            || (int) $response->json('status') === 429
+            || $response->json('reason') === 'rate_limit';
 
         return match (true) {
             in_array($status, [401, 403], true) => "Username atau password OpenCode ditolak (status {$status}){$detail}. Periksa kembali pengaturan OpenCode.",
             $notFound => $model
                 ? "Model {$model} tidak ditemukan di server OpenCode{$detail}."
                 : "Endpoint OpenCode tidak ditemukan (404){$detail}. Periksa Base URL.",
-            $status === 429 => "Server OpenCode membatasi permintaan (429){$detail}. "
+            $isRateLimit => "Server OpenCode membatasi permintaan{$detail}. "
                 .($retryAfter ? "Coba lagi dalam {$retryAfter} detik" : 'Coba lagi beberapa saat')
                 .' atau pilih model lain.',
             $status >= 500 => "Server OpenCode bermasalah (status {$status}){$detail}.",

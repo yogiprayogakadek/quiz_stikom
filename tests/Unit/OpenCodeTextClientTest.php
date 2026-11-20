@@ -18,7 +18,7 @@ class OpenCodeTextClientTest extends TestCase
             ['base_url' => '', 'api_key' => null, 'model' => '', 'timeout' => 150]));
     }
 
-    public function test_models_selalu_mengirim_types_chat_dan_basic_auth(): void
+    public function test_models_mengambil_daftar_tanpa_filter_dan_memakai_basic_auth(): void
     {
         Http::fake(['https://oc.example.test/api/model*' => Http::response(['location' => ['directory' => '/srv'], 'data' => [
             ['id' => 'big-pickle', 'providerID' => 'opencode', 'type' => 'chat', 'enabled' => true],
@@ -29,19 +29,32 @@ class OpenCodeTextClientTest extends TestCase
 
         $this->assertSame(['OpenCode'], array_keys($models));
         $this->assertContains('nemotron-3.5-super-vl-free', $models['OpenCode']);
-        Http::assertSent(fn ($r) => str_contains($r->url(), 'types=chat')
-            && ! str_contains($r->url(), '//api')
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/api/model')
+            && ! str_contains($r->url(), '?')
             && $r->header('Authorization')[0] === 'Basic '.base64_encode('opencode:rahasia'));
+    }
+
+    public function test_models_memakai_filter_types_lama_saat_daftar_tanpa_filter_kosong(): void
+    {
+        Http::fakeSequence('https://oc.example.test/api/model*')
+            ->push(['data' => []])
+            ->push(['data' => [
+                ['id' => 'model-lama', 'providerID' => 'opencode', 'type' => 'chat'],
+            ]]);
+
+        $this->assertSame(['model-lama'], $this->client()->modelsOfType('chat'));
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'types=chat'));
     }
 
     public function test_models_of_type_image_hanya_mengambil_model_gambar(): void
     {
         Http::fake(['https://oc.example.test/api/model*' => Http::response(['data' => [
             ['id' => 'grok-imagine-image-2.0', 'providerID' => 'opencode', 'type' => 'image'],
+            ['id' => 'nemotron-3.5-super-vl-free', 'providerID' => 'opencode', 'type' => 'chat'],
         ]])]);
 
         $this->assertSame(['grok-imagine-image-2.0'], $this->client()->modelsOfType('image'));
-        Http::assertSent(fn ($r) => str_contains($r->url(), 'types=image'));
+        Http::assertSent(fn ($r) => ! str_contains($r->url(), '?'));
     }
 
     public function test_chat_menggabungkan_prompt_dan_memakai_provider_opencode(): void

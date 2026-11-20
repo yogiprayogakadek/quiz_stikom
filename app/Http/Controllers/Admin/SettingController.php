@@ -109,7 +109,7 @@ class SettingController extends Controller
 
         if (in_array('ai', $sections, true)) {
             $rules += [
-                'ai_provider' => ['required', 'in:openai,opencode'],
+                'ai_provider' => ['nullable', 'in:openai,opencode'],
                 'ai_base_url' => ['nullable', 'url', 'max:255'],
                 'ai_api_key' => ['nullable', 'string', 'max:500'],
                 'ai_default_model' => ['nullable', 'string', 'max:150'],
@@ -118,7 +118,7 @@ class SettingController extends Controller
                 'opencode_username' => ['nullable', 'string', 'max:100'],
                 'opencode_password' => ['nullable', 'string', 'max:500'],
                 'opencode_model' => ['nullable', 'string', 'max:150'],
-                'opencode_timeout' => ['required', 'integer', 'min:10', 'max:300'],
+                'opencode_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
             ];
         }
 

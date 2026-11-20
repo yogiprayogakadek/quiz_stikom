@@ -128,7 +128,7 @@ class OpenCodeSettingsTest extends TestCase
             ->assertJsonPath('model.OpenCode.0', 'nemotron-3.5-super-vl-free');
 
         $this->assertStringNotContainsString('rahasia', $response->getContent());
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'types=chat')
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/api/model')
             && $request->header('Authorization')[0] === 'Basic '.base64_encode('opencode:rahasia'));
     }
 
@@ -187,7 +187,8 @@ class OpenCodeSettingsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('model.0', 'grok-imagine-image-2.0');
 
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'types=image'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/api/model')
+            && ! str_contains($request->url(), '?'));
     }
 
     public function test_tab_ai_menampilkan_pilihan_provider_dan_isian_opencode(): void
