@@ -21,10 +21,16 @@ class OrganizationSetting extends Model
         'terms_content',
         'privacy_content',
         'allow_pin_enrollment',
+        'ai_provider',
         'ai_base_url',
         'ai_api_key',
         'ai_default_model',
         'ai_timeout',
+        'opencode_base_url',
+        'opencode_username',
+        'opencode_password',
+        'opencode_model',
+        'opencode_timeout',
         'class_cover_mode',
         'image_base_url',
         'image_api_key',
@@ -36,7 +42,9 @@ class OrganizationSetting extends Model
         return [
             'ai_api_key' => 'encrypted',
             'image_api_key' => 'encrypted',
+            'opencode_password' => 'encrypted',
             'ai_timeout' => 'integer',
+            'opencode_timeout' => 'integer',
             'allow_pin_enrollment' => 'boolean',
         ];
     }
