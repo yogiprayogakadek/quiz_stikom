@@ -209,7 +209,7 @@ class OrganizationController extends Controller
         $settings = DB::table('organization_settings')->where('organization_id', $organization->id)->first();
         if ($settings !== null) {
             $settings = (array) $settings;
-            unset($settings['ai_api_key'], $settings['image_api_key']);
+            unset($settings['ai_api_key'], $settings['image_api_key'], $settings['opencode_password']);
         }
 
         $filename = 'organisasi-'.$organization->slug.'-'.now()->format('Ymd-His').'.json';

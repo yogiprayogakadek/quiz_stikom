@@ -49,6 +49,7 @@ class OrganizationDataTest extends TestCase
         $this->assertArrayNotHasKey('current_session_token', $data['users'][0]);
         $this->assertArrayNotHasKey('ai_api_key', $data['settings']);
         $this->assertArrayNotHasKey('image_api_key', $data['settings']);
+        $this->assertArrayNotHasKey('opencode_password', $data['settings']);
         $this->assertSame($owner->id, $data['memberships'][0]['user_id']);
         $this->assertSame($participant->id, $data['memberships'][1]['user_id']);
 
@@ -168,6 +169,7 @@ class OrganizationDataTest extends TestCase
             'logo_path' => 'branding/logo-data.png',
             'ai_api_key' => 'secret-ai',
             'image_api_key' => 'secret-image',
+            'opencode_password' => 'secret-opencode',
         ]);
 
         $classId = DB::table('kelas')->insertGetId([
