@@ -453,9 +453,15 @@ class SessionController extends Controller
 
     public function destroy(QuizSession $session): RedirectResponse
     {
-        if (! $session->quiz->is_percobaan && $session->attempts()->mengikuti()->exists()) {
+        if (! $session->quiz->is_percobaan) {
             throw ValidationException::withMessages([
-                'hapus' => 'Sesi ini menjadi bagian dari riwayat peserta dan harus dipertahankan.',
+                'hapus' => 'Hanya sesi simulasi yang dapat dihapus. Sesi ujian nyata harus dipertahankan.',
+            ]);
+        }
+
+        if (! in_array($session->status, ['draft', 'selesai'], true)) {
+            throw ValidationException::withMessages([
+                'hapus' => 'Simulasi harus berstatus draft atau selesai sebelum dapat dihapus.',
             ]);
         }
 

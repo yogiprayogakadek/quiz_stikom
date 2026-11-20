@@ -266,23 +266,92 @@ class TrialSessionTest extends TestCase
             ->withSession($this->authSession($organization, $admin))
             ->delete(route('admin.sessions.destroy', $session))
             ->assertSessionHasErrors([
-                'hapus' => 'Sesi ini menjadi bagian dari riwayat peserta dan harus dipertahankan.',
+                'hapus' => 'Hanya sesi simulasi yang dapat dihapus. Sesi ujian nyata harus dipertahankan.',
             ]);
 
         $this->assertDatabaseHas('quiz_sessions', ['id' => $session->id]);
         $this->assertDatabaseHas('attempts', ['id' => $attempt->id]);
     }
 
-    public function test_sesi_nyata_tanpa_attempt_peserta_tetap_dapat_dihapus(): void
+    public function test_sesi_nyata_tanpa_attempt_peserta_tetap_tidak_dapat_dihapus(): void
     {
         [$organization, $admin, , , , $session] = $this->scenario();
 
         $this->actingAs($admin)
             ->withSession($this->authSession($organization, $admin))
             ->delete(route('admin.sessions.destroy', $session))
-            ->assertRedirect(route('admin.sessions.index'));
+            ->assertSessionHasErrors([
+                'hapus' => 'Hanya sesi simulasi yang dapat dihapus. Sesi ujian nyata harus dipertahankan.',
+            ]);
 
-        $this->assertDatabaseMissing('quiz_sessions', ['id' => $session->id]);
+        $this->assertDatabaseHas('quiz_sessions', ['id' => $session->id]);
+    }
+
+    public function test_simulasi_di_lobby_atau_berjalan_tidak_dapat_dihapus(): void
+    {
+        [$organization, $admin, $selected, , , $session] = $this->scenario();
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->post(route('admin.sessions.trial', $session), [
+                'trial_participant_ids' => [$selected->id],
+            ]);
+
+        $trialSession = QuizSession::query()->whereKeyNot($session->id)->firstOrFail();
+
+        foreach (['lobby', 'berjalan'] as $status) {
+            $trialSession->update(['status' => $status]);
+
+            $this->actingAs($admin)
+                ->withSession($this->authSession($organization, $admin))
+                ->delete(route('admin.sessions.destroy', $trialSession))
+                ->assertSessionHasErrors([
+                    'hapus' => 'Simulasi harus berstatus draft atau selesai sebelum dapat dihapus.',
+                ]);
+
+            $this->assertDatabaseHas('quiz_sessions', ['id' => $trialSession->id]);
+        }
+    }
+
+    public function test_tombol_hapus_hanya_tampil_pada_simulasi_draft_atau_selesai(): void
+    {
+        [$organization, $admin, $selected, , , $session] = $this->scenario();
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->get(route('admin.sessions.show', $session))
+            ->assertOk()
+            ->assertDontSee('Hapus simulasi');
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->post(route('admin.sessions.trial', $session), [
+                'trial_participant_ids' => [$selected->id],
+            ]);
+
+        $trialSession = QuizSession::query()->whereKeyNot($session->id)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->get(route('admin.sessions.show', $trialSession))
+            ->assertOk()
+            ->assertSee('Hapus simulasi')
+            ->assertSee(route('admin.sessions.destroy', $trialSession), false)
+            ->assertSee('data-progress-message="Menghapus simulasi..."', false);
+
+        $trialSession->update(['status' => 'lobby']);
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->get(route('admin.sessions.show', $trialSession))
+            ->assertOk()
+            ->assertDontSee('Hapus simulasi');
+
+        $trialSession->update(['status' => 'selesai']);
+        $this->actingAs($admin)
+            ->withSession($this->authSession($organization, $admin))
+            ->get(route('admin.sessions.show', $trialSession))
+            ->assertOk()
+            ->assertSee('Hapus simulasi');
     }
 
     public function test_simulasi_dengan_attempt_tetap_dapat_dihapus_dan_sumbernya_utuh(): void

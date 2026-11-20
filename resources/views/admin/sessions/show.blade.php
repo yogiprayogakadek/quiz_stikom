@@ -64,6 +64,19 @@
         @if ($session->jenis === 'remidi')
             <a href="{{ route('admin.sessions.remidi.laporan', $session) }}" class="btn btn-secondary">Laporan remidi</a>
         @endif
+
+        @if ($session->quiz->is_percobaan && in_array($session->status, ['draft', 'selesai'], true))
+            <form
+                method="POST"
+                action="{{ route('admin.sessions.destroy', $session) }}"
+                onsubmit="return confirm('Hapus simulasi ini? Attempt, jawaban, dan hasil simulasi akan dihapus permanen. Ujian asli tetap aman.')"
+                data-progress-message="Menghapus simulasi..."
+            >
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-soft-danger">Hapus simulasi</button>
+            </form>
+        @endif
     </x-slot:aksi>
 
     <section class="mb-6 rounded-2xl border border-outline bg-page p-4" aria-labelledby="alat-bantu-sesi">
