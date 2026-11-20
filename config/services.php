@@ -42,4 +42,12 @@ return [
         'timeout' => (int) env('AI_TIMEOUT', 60),
     ],
 
+    'opencode' => [
+        'base_url' => env('OPENCODE_URL'),
+        'username' => env('OPENCODE_USERNAME', 'opencode'),
+        'password' => env('OPENCODE_PASSWORD'),
+        'model' => env('OPENCODE_MODEL'),
+        'timeout' => (int) env('OPENCODE_TIMEOUT', 120),
+    ],
+
 ];
