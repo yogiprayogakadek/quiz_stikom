@@ -25,33 +25,89 @@
 
     <template x-if="{{ $formatExpression }} === 'table'">
         <div class="space-y-3">
-            <div>
-                <div class="flex items-center justify-between gap-2">
-                    <p class="label">Kolom jawaban</p>
-                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahKolomJawaban({{ $configExpression }})" x-bind:disabled="{{ $configExpression }}.columns.length >= 10">Tambah kolom</button>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p class="label">Struktur tabel jawaban</p>
+                    <p class="help mt-1">Edit nama kolom dan baris langsung pada tabel. Sel jawaban menunjukkan tampilan yang diterima peserta.</p>
                 </div>
-                <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <template x-for="(column, columnIndex) in {{ $configExpression }}.columns" :key="columnIndex">
-                        <div class="flex gap-2">
-                            <input class="input" maxlength="100" x-bind:name="({{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][columns][' : 'answer_config[columns][') + columnIndex + ']'" x-model="{{ $configExpression }}.columns[columnIndex]" x-bind:aria-label="'Nama kolom ' + (columnIndex + 1)" x-bind:disabled="{{ $disabledExpression ?? 'false' }}">
-                            <button type="button" class="btn btn-ghost min-h-11 px-3 text-coral-deep" x-on:click="{{ $configExpression }}.columns.splice(columnIndex, 1)" x-bind:disabled="{{ $configExpression }}.columns.length <= 1">Hapus</button>
-                        </div>
-                    </template>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahKolomJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.columns.length >= 10">Tambah kolom</button>
+                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahBarisJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.rows.length >= 20">Tambah baris</button>
                 </div>
             </div>
-            <div>
-                <div class="flex items-center justify-between gap-2">
-                    <p class="label">Baris jawaban</p>
-                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahBarisJawaban({{ $configExpression }})" x-bind:disabled="{{ $configExpression }}.rows.length >= 20">Tambah baris</button>
-                </div>
-                <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <template x-for="(row, rowIndex) in {{ $configExpression }}.rows" :key="rowIndex">
-                        <div class="flex gap-2">
-                            <input class="input" maxlength="100" x-bind:name="({{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][rows][' : 'answer_config[rows][') + rowIndex + ']'" x-model="{{ $configExpression }}.rows[rowIndex]" x-bind:aria-label="'Nama baris ' + (rowIndex + 1)" x-bind:disabled="{{ $disabledExpression ?? 'false' }}">
-                            <button type="button" class="btn btn-ghost min-h-11 px-3 text-coral-deep" x-on:click="{{ $configExpression }}.rows.splice(rowIndex, 1)" x-bind:disabled="{{ $configExpression }}.rows.length <= 1">Hapus</button>
-                        </div>
-                    </template>
-                </div>
+
+            <div class="max-w-full overflow-x-auto rounded-xl border border-outline" tabindex="0" aria-label="Pratinjau struktur tabel jawaban">
+                <table class="answer-table min-w-[42rem]">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="min-w-52">Baris</th>
+                            <template x-for="(column, columnIndex) in {{ $configExpression }}.columns" :key="columnIndex">
+                                <th scope="col" class="min-w-56">
+                                    <div class="flex items-center gap-2">
+                                        <label class="sr-only" x-bind:for="{{ $idExpression }} + '-column-' + columnIndex">Nama kolom <span x-text="columnIndex + 1"></span></label>
+                                        <input
+                                            class="input min-w-40 bg-page"
+                                            maxlength="100"
+                                            x-bind:id="{{ $idExpression }} + '-column-' + columnIndex"
+                                            x-bind:name="({{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][columns][' : 'answer_config[columns][') + columnIndex + ']'"
+                                            x-model="{{ $configExpression }}.columns[columnIndex]"
+                                            x-bind:disabled="{{ $disabledExpression ?? 'false' }}"
+                                            placeholder="Nama kolom"
+                                        >
+                                        <button
+                                            type="button"
+                                            class="btn btn-ghost min-h-11 min-w-11 shrink-0 !p-2 text-coral-deep"
+                                            x-on:click="{{ $configExpression }}.columns.splice(columnIndex, 1)"
+                                            x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.columns.length <= 1"
+                                            x-bind:aria-label="'Hapus kolom ' + (column || columnIndex + 1)"
+                                        >
+                                            <x-icon name="x" :size="18" />
+                                        </button>
+                                    </div>
+                                </th>
+                            </template>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(row, rowIndex) in {{ $configExpression }}.rows" :key="rowIndex">
+                            <tr>
+                                <th scope="row" class="min-w-56">
+                                    <div class="flex items-center gap-2">
+                                        <label class="sr-only" x-bind:for="{{ $idExpression }} + '-row-' + rowIndex">Nama baris <span x-text="rowIndex + 1"></span></label>
+                                        <input
+                                            class="input min-w-40 bg-page"
+                                            maxlength="100"
+                                            x-bind:id="{{ $idExpression }} + '-row-' + rowIndex"
+                                            x-bind:name="({{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][rows][' : 'answer_config[rows][') + rowIndex + ']'"
+                                            x-model="{{ $configExpression }}.rows[rowIndex]"
+                                            x-bind:disabled="{{ $disabledExpression ?? 'false' }}"
+                                            placeholder="Nama baris"
+                                        >
+                                        <button
+                                            type="button"
+                                            class="btn btn-ghost min-h-11 min-w-11 shrink-0 !p-2 text-coral-deep"
+                                            x-on:click="{{ $configExpression }}.rows.splice(rowIndex, 1)"
+                                            x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.rows.length <= 1"
+                                            x-bind:aria-label="'Hapus baris ' + (row || rowIndex + 1)"
+                                        >
+                                            <x-icon name="x" :size="18" />
+                                        </button>
+                                    </div>
+                                </th>
+                                <template x-for="(column, columnIndex) in {{ $configExpression }}.columns" :key="columnIndex">
+                                    <td>
+                                        <input
+                                            class="input min-w-40"
+                                            disabled
+                                            placeholder="Jawaban peserta"
+                                            x-bind:aria-label="(row || 'Baris ' + (rowIndex + 1)) + ', ' + (column || 'Kolom ' + (columnIndex + 1))"
+                                        >
+                                    </td>
+                                </template>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
             </div>
         </div>
     </template>

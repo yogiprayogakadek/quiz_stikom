@@ -24,6 +24,22 @@ class StructuredEssayContentTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_table_answer_editor_matches_participant_table_layout(): void
+    {
+        $admin = $this->user('admin-table-editor', 'admin', 'admin-table-editor-token');
+        $quiz = Quiz::create(['judul' => 'Kuis Editor Tabel', 'created_by' => $admin->id]);
+
+        $this->actingAs($admin)->withSession(['auth_token' => 'admin-table-editor-token'])
+            ->get(route('admin.quizzes.questions.create', $quiz))
+            ->assertOk()
+            ->assertSee('Struktur tabel jawaban')
+            ->assertSee('Tambah kolom')
+            ->assertSee('Tambah baris')
+            ->assertSee('aria-label="Pratinjau struktur tabel jawaban"', false)
+            ->assertSee('class="answer-table min-w-[42rem]"', false)
+            ->assertSee('placeholder="Jawaban peserta"', false);
+    }
+
     public function test_admin_can_store_structured_blocks_media_and_leaf_answer_format(): void
     {
         Storage::fake('local');
