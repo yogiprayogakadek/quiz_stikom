@@ -99,6 +99,12 @@
                 return 'Copy soal diblokir. Paste jawaban diizinkan. Keduanya dicatat tanpa menambah pelanggaran.';
             },
 
+            aturanAlat(sesi) {
+                const tools = sesi?.rules?.exam_tools ?? [];
+                if (tools.length === 0) return 'Tidak ada alat bantu yang diizinkan pada sesi ini.';
+                return tools.map((tool) => tool.rule_summary).join(' ');
+            },
+
             bunyikanChime() {
                 try {
                     this.initAudio();
@@ -803,6 +809,10 @@
                     <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
                         <dt class="text-sm font-bold text-slate-900">Copy dan paste</dt>
                         <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0" x-text="aturanClipboard(rulesSession)"></dd>
+                    </div>
+                    <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
+                        <dt class="text-sm font-bold text-slate-900">Alat bantu</dt>
+                        <dd class="mt-1 text-sm leading-relaxed text-slate-600 sm:mt-0" x-text="aturanAlat(rulesSession)"></dd>
                     </div>
                     <div class="py-4 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-4">
                         <dt class="text-sm font-bold text-slate-900">Saat mengerjakan</dt>

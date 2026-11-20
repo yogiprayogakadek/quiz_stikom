@@ -2,9 +2,63 @@ import Alpine from 'alpinejs';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 import './tour';
+import { calculateExpression, calculateSubnet } from './exam-tools';
 
 window.Pusher = Pusher;
 window.Alpine = Alpine;
+
+window.examToolsPanel = (tools = []) => ({
+    tools,
+    activeTool: tools[0] ?? 'calculator',
+    expression: '',
+    calculatorResult: '',
+    calculatorError: '',
+    subnetIp: '',
+    subnetPrefix: '27',
+    subnetResult: null,
+    subnetError: '',
+    open() {
+        this.activeTool = this.tools[0] ?? 'calculator';
+        this.$refs.dialog.showModal();
+        this.$nextTick(() => this.$refs.closeButton?.focus());
+    },
+    close() {
+        this.$refs.dialog.close();
+        this.$nextTick(() => this.$refs.openButton?.focus());
+    },
+    append(value) {
+        if (this.expression.length >= 200) return;
+        this.expression += value;
+        this.calculatorError = '';
+    },
+    backspace() {
+        this.expression = this.expression.slice(0, -1);
+        this.calculatorError = '';
+    },
+    clearCalculator() {
+        this.expression = '';
+        this.calculatorResult = '';
+        this.calculatorError = '';
+    },
+    evaluateCalculator() {
+        try {
+            this.calculatorResult = String(calculateExpression(this.expression));
+            this.calculatorError = '';
+        } catch (error) {
+            this.calculatorResult = '';
+            this.calculatorError = error.message;
+        }
+    },
+    calculateSubnet() {
+        try {
+            this.subnetResult = calculateSubnet(this.subnetIp, this.subnetPrefix);
+            this.subnetError = '';
+        } catch (error) {
+            this.subnetResult = null;
+            this.subnetError = error.message;
+        }
+    },
+});
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\ExamTools;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,6 +19,8 @@ class StoreQuizRequest extends FormRequest
             'acak_opsi' => ['nullable', 'boolean'],
             'auto_grade_essay' => ['nullable', 'boolean'],
             'is_percobaan' => ['nullable', 'boolean'],
+            'exam_tools' => ['nullable', 'array'],
+            'exam_tools.*' => ['string', 'distinct', Rule::in(ExamTools::keys())],
             'remidi_nilai_min' => ['nullable', 'integer', 'min:0', 'max:100'],
         ];
     }
@@ -32,6 +35,11 @@ class StoreQuizRequest extends FormRequest
                     $validator->errors()->add('jumlah_soal', 'Jumlah soal tidak boleh melebihi total soal kuis ('.$totalSoal.').');
                 }
             }
+
+            if (! $this->boolean('is_percobaan')
+                && in_array(ExamTools::SUBNET_CALCULATOR, (array) $this->input('exam_tools', []), true)) {
+                $validator->errors()->add('exam_tools', 'Kalkulator subnet hanya boleh diaktifkan pada kuis simulasi.');
+            }
         });
     }
 
@@ -44,6 +52,9 @@ class StoreQuizRequest extends FormRequest
             'judul.max' => 'Judul kuis maksimal 160 karakter.',
             'jumlah_soal.integer' => 'Jumlah soal harus berupa angka.',
             'jumlah_soal.min' => 'Jumlah soal minimal 1.',
+            'exam_tools.array' => 'Daftar alat bantu tidak valid.',
+            'exam_tools.*.in' => 'Alat bantu yang dipilih tidak tersedia.',
+            'exam_tools.*.distinct' => 'Alat bantu tidak boleh dipilih lebih dari sekali.',
         ];
     }
 }

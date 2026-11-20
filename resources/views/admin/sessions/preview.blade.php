@@ -92,6 +92,16 @@
                         {{ $session->pelanggaran_action === 'reduce_time' ? 'Waktu dikurangi '.$session->pelanggaran_penalty_seconds.' detik.' : 'Pekerjaan dikumpulkan dan peserta logout.' }}
                     </p>
                 </div>
+                <div class="rounded-xl border border-outline bg-page p-4 sm:col-span-2 lg:col-span-4">
+                    <dt class="text-sm font-bold text-ink-muted">Alat bantu peserta</dt>
+                    <dd class="mt-2 flex flex-wrap gap-2">
+                        @forelse (\App\Support\ExamTools::details($session->examTools()) as $alat)
+                            <span class="pill pill-brand">{{ $alat['label'] }}</span>
+                        @empty
+                            <span class="text-base font-bold text-ink">Tidak ada alat bantu</span>
+                        @endforelse
+                    </dd>
+                </div>
             </dl>
 
             @if ($session->mode === 'serempak' && $soal->contains(fn ($item) => $item->isEssay()))

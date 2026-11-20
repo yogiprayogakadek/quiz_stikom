@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\AttemptResetService;
 use App\Services\QuestionMediaService;
 use App\Services\QuizEngine;
+use App\Support\ExamTools;
 use App\Support\OrganizationContext;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -71,6 +72,10 @@ class SessionController extends Controller
     public function store(StoreSessionRequest $request, QuizEngine $engine): RedirectResponse
     {
         $data = $request->validated();
+        $quiz = Quiz::query()->findOrFail($data['quiz_id']);
+        $examTools = $request->boolean('exam_tools_present')
+            ? ExamTools::forQuiz($data['exam_tools'] ?? [], (bool) $quiz->is_percobaan)
+            : $quiz->examTools();
         $pembahasanMode = $data['pembahasan_mode']
             ?? ($request->boolean('tampilkan_pembahasan') ? 'terbuka' : 'tersembunyi');
 
@@ -91,6 +96,7 @@ class SessionController extends Controller
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
             'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
+            'exam_tools_json' => $examTools,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
             ...$this->timingData($data),
@@ -188,6 +194,7 @@ class SessionController extends Controller
                     'source_quiz_id' => $sourceQuiz->id,
                     'judul' => Str::limit($sourceQuiz->judul.' — Simulasi', 255, ''),
                     'is_percobaan' => true,
+                    'exam_tools_json' => ExamTools::forNewTrial($sourceQuiz->exam_tools_json),
                     'created_by' => $request->user()->id,
                 ]);
                 $trialQuiz->save();
@@ -244,6 +251,7 @@ class SessionController extends Controller
                     'pelanggaran_action' => $sourceSession->pelanggaran_action,
                     'pelanggaran_penalty_seconds' => $sourceSession->pelanggaran_penalty_seconds,
                     'clipboard_policy' => $sourceSession->clipboard_policy,
+                    'exam_tools_json' => ExamTools::forNewTrial($sourceSession->exam_tools_json),
                     'jeda_detik' => $sourceSession->jeda_detik,
                     'durasi_total_detik' => $sourceSession->durasi_total_detik,
                     'timing_mode' => $sourceSession->timing_mode,
@@ -366,13 +374,18 @@ class SessionController extends Controller
     {
         $data = $request->validated();
         $kelasLama = $session->kelas_id;
+        $quiz = Quiz::query()->findOrFail($data['quiz_id']);
+        $examTools = $request->boolean('exam_tools_present')
+            ? ExamTools::forQuiz($data['exam_tools'] ?? [], (bool) $quiz->is_percobaan)
+            : $session->examTools();
 
         if ($session->status !== 'draft') {
             if ((int) $data['quiz_id'] !== $session->quiz_id
                 || $data['mode'] !== $session->mode
-                || (int) ($data['kelas_id'] ?? 0) !== (int) $kelasLama) {
+                || (int) ($data['kelas_id'] ?? 0) !== (int) $kelasLama
+                || $examTools !== $session->examTools()) {
                 throw ValidationException::withMessages([
-                    'mode' => 'Mode, kuis, dan kelas terkunci karena sesi sudah keluar dari status draft.',
+                    'mode' => 'Mode, kuis, kelas, dan alat bantu terkunci karena sesi sudah keluar dari status draft.',
                 ]);
             }
         }
@@ -397,6 +410,7 @@ class SessionController extends Controller
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
             'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
+            'exam_tools_json' => $examTools,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
             ...$this->timingData($data),

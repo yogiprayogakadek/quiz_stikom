@@ -128,6 +128,7 @@
             this.nilai = opsi.dataset.nilai;
             this.label = opsi.dataset.label;
             this.galat = '';
+            this.$dispatch('searchable-select-change', { name: @js($nama), value: this.nilai });
             this.tutup(true);
         }
     }"

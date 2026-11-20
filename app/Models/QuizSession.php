@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\ExamTools;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,6 +33,7 @@ class QuizSession extends Model
         'pelanggaran_action',
         'pelanggaran_penalty_seconds',
         'clipboard_policy',
+        'exam_tools_json',
         'jeda_detik',
         'durasi_total_detik',
         'timing_mode',
@@ -58,6 +60,7 @@ class QuizSession extends Model
             'max_pelanggaran' => 'integer',
             'durasi_peringatan' => 'integer',
             'pelanggaran_penalty_seconds' => 'integer',
+            'exam_tools_json' => 'array',
             'jeda_detik' => 'integer',
             'durasi_total_detik' => 'integer',
             'scheduled_start_at' => 'datetime',
@@ -218,5 +221,11 @@ class QuizSession extends Model
     public function displayUrl(): string
     {
         return route('display.show', $this->display_token);
+    }
+
+    /** @return list<string> */
+    public function examTools(): array
+    {
+        return ExamTools::forQuiz($this->exam_tools_json, (bool) $this->quiz?->is_percobaan);
     }
 }

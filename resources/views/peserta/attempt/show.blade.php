@@ -1332,6 +1332,7 @@
                         <button type="button" class="btn btn-secondary px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen" aria-label="Masuk layar penuh">
                             <x-icon name="eye" :size="20" />
                         </button>
+                        <x-exam-tools :tools="$session->examTools()" />
                         <button
                             type="button"
                             class="btn btn-primary"

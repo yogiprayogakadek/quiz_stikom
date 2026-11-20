@@ -14,12 +14,33 @@
     $timingMode = old('timing_mode', $session?->timing_mode ?? 'duration');
     $scheduledStart = old('scheduled_start_at', $session?->scheduled_start_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
     $scheduledEnd = old('scheduled_end_at', $session?->scheduled_end_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
+    $quizTerpilih = (string) old('quiz_id', $session?->quiz_id ?? request('quiz_id', ''));
+    $alatAwal = old('exam_tools', $session?->examTools() ?? optional($quizzes->firstWhere('id', (int) $quizTerpilih))->examTools() ?? []);
+    $konfigurasiAlatKuis = $quizzes->mapWithKeys(fn ($kuis) => [(string) $kuis->id => [
+        'is_trial' => (bool) $kuis->is_percobaan,
+        'tools' => $kuis->examTools(),
+    ]])->all();
 @endphp
 
-<div x-data="{ mode: '{{ $modeAwal }}', timingMode: '{{ $timingMode }}', pelanggaranAction: '{{ $pelanggaranAction }}' }" class="space-y-6">
+<div
+    x-data="{
+        mode: @js($modeAwal),
+        timingMode: @js($timingMode),
+        pelanggaranAction: @js($pelanggaranAction),
+        selectedQuiz: @js($quizTerpilih),
+        quizTools: @js($konfigurasiAlatKuis),
+        tools: @js(array_values((array) $alatAwal)),
+        pilihKuis(value) {
+            this.selectedQuiz = String(value || '');
+            this.tools = [...(this.quizTools[this.selectedQuiz]?.tools ?? [])];
+        }
+    }"
+    x-on:searchable-select-change="if ($event.detail.name === 'quiz_id') pilihKuis($event.detail.value)"
+    class="space-y-6"
+>
     @if ($terkunci)
         <x-alert jenis="warning">
-            Sesi sudah keluar dari status draft. Kuis dan mode terkunci oleh server. Pengaturan lain masih bisa diubah.
+            Sesi sudah keluar dari status draft. Kuis, kelas, mode, dan alat bantu terkunci oleh server. Pengaturan lain masih bisa diubah.
         </x-alert>
     @endif
 
@@ -190,6 +211,41 @@
             </div>
             <p class="help sm:col-span-2">Zona waktu {{ $orgTimezone }}. Buka lobby sebelum jam mulai. Saat jam selesai, jawaban tersimpan dikumpulkan dan dikunci.</p>
         </div>
+    </fieldset>
+
+    <fieldset class="rounded-2xl border border-outline bg-page p-4">
+        <legend class="label">Alat bantu peserta</legend>
+        <input type="hidden" name="exam_tools_present" value="1">
+        <p class="help mt-1">
+            Ini adalah snapshot untuk sesi ini. Perubahan pada kuis tidak mengubah sesi yang sudah dibuat.
+            @if ($terkunci) Pilihan terkunci setelah lobby dibuka. @endif
+        </p>
+
+        @if ($terkunci)
+            @foreach ($session->examTools() as $alat)
+                <input type="hidden" name="exam_tools[]" value="{{ $alat }}">
+            @endforeach
+        @endif
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <label class="flex min-h-24 items-start gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft {{ $terkunci ? 'cursor-not-allowed opacity-70' : '' }}">
+                <input type="checkbox" name="{{ $terkunci ? 'exam_tools_locked[]' : 'exam_tools[]' }}" value="calculator" x-model="tools" class="mt-0.5 h-5 w-5 shrink-0" @disabled($terkunci)>
+                <span>
+                    <span class="block font-bold text-ink">Kalkulator standar</span>
+                    <span class="mt-1 block text-sm leading-relaxed text-ink-muted">Operasi dasar, kurung, persen, akar kuadrat, dan pangkat dua.</span>
+                </span>
+            </label>
+
+            <label class="flex min-h-24 items-start gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft" x-bind:class="({{ $terkunci ? 'true' : 'false' }} || !quizTools[selectedQuiz]?.is_trial) && 'cursor-not-allowed opacity-60'">
+                <input type="checkbox" name="{{ $terkunci ? 'exam_tools_locked[]' : 'exam_tools[]' }}" value="subnet_calculator" x-model="tools" x-bind:disabled="{{ $terkunci ? 'true' : 'false' }} || !quizTools[selectedQuiz]?.is_trial" class="mt-0.5 h-5 w-5 shrink-0">
+                <span>
+                    <span class="block font-bold text-ink">Kalkulator subnet IPv4</span>
+                    <span class="mt-1 block text-sm leading-relaxed text-ink-muted" x-text="quizTools[selectedQuiz]?.is_trial ? 'Khusus simulasi; menghitung mask, rentang host, dan ukuran blok.' : 'Tidak tersedia pada ujian nyata.'"></span>
+                </span>
+            </label>
+        </div>
+        @error('exam_tools') <p class="field-error mt-2">{{ $message }}</p> @enderror
+        @error('exam_tools.*') <p class="field-error mt-2">{{ $message }}</p> @enderror
     </fieldset>
 
     <fieldset class="rounded-2xl border border-outline bg-page p-4">

@@ -115,6 +115,7 @@ class RemedialController extends Controller
             'pembahasan_mode' => 'tersembunyi',
             'leaderboard_live' => true,
             'max_peserta' => null,
+            'exam_tools_json' => $quiz->examTools(),
             'jeda_detik' => 5,
             'durasi_total_detik' => $durasiTotal,
             'status' => 'draft',

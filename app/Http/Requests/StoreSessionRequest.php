@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\Question;
+use App\Models\Quiz;
+use App\Support\ExamTools;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
@@ -29,6 +31,9 @@ class StoreSessionRequest extends FormRequest
             'pelanggaran_action' => ['nullable', 'in:submit,reduce_time'],
             'pelanggaran_penalty_seconds' => ['nullable', 'integer', 'min:1', 'max:36000'],
             'clipboard_policy' => ['nullable', 'in:allow,monitor,block'],
+            'exam_tools_present' => ['nullable', 'boolean'],
+            'exam_tools' => ['nullable', 'array'],
+            'exam_tools.*' => ['string', 'distinct', Rule::in(ExamTools::keys())],
             'jeda_detik' => ['required', 'integer', 'min:1', 'max:60'],
             'durasi_total_menit' => ['nullable', 'integer', 'min:1', 'max:600'],
             'timing_mode' => ['nullable', 'in:duration,scheduled'],
@@ -62,6 +67,12 @@ class StoreSessionRequest extends FormRequest
 
             if ($punyaEssay && $this->input('mode') === 'serempak') {
                 $validator->errors()->add('mode', 'Mode Serempak hanya untuk soal pilihan ganda.');
+            }
+
+            $quiz = Quiz::query()->find($quizId);
+            if ($quiz && ! $quiz->is_percobaan
+                && in_array(ExamTools::SUBNET_CALCULATOR, (array) $this->input('exam_tools', []), true)) {
+                $validator->errors()->add('exam_tools', 'Kalkulator subnet hanya boleh diaktifkan pada sesi simulasi.');
             }
 
             if ($this->input('pelanggaran_action') === 'reduce_time') {
@@ -116,6 +127,9 @@ class StoreSessionRequest extends FormRequest
             'pelanggaran_penalty_seconds.min' => 'Pengurangan waktu minimal 1 detik.',
             'pelanggaran_penalty_seconds.max' => 'Pengurangan waktu maksimal 36000 detik.',
             'clipboard_policy.in' => 'Kebijakan copy dan paste tidak valid.',
+            'exam_tools.array' => 'Daftar alat bantu tidak valid.',
+            'exam_tools.*.in' => 'Alat bantu yang dipilih tidak tersedia.',
+            'exam_tools.*.distinct' => 'Alat bantu tidak boleh dipilih lebih dari sekali.',
             'jeda_detik.min' => 'Jeda minimal 1 detik.',
             'jeda_detik.max' => 'Jeda maksimal 60 detik.',
             'durasi_total_menit.min' => 'Durasi total minimal 1 menit.',

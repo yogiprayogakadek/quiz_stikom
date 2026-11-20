@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\ExamTools;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -20,6 +21,7 @@ class Quiz extends Model
         'acak_opsi',
         'auto_grade_essay',
         'is_percobaan',
+        'exam_tools_json',
         'remidi_nilai_min',
         'created_by',
     ];
@@ -33,6 +35,7 @@ class Quiz extends Model
             'acak_opsi' => 'boolean',
             'auto_grade_essay' => 'boolean',
             'is_percobaan' => 'boolean',
+            'exam_tools_json' => 'array',
             'remidi_nilai_min' => 'integer',
         ];
     }
@@ -74,5 +77,11 @@ class Quiz extends Model
         return $this->sessions()
             ->whereIn('status', ['lobby', 'berjalan', 'selesai'])
             ->exists();
+    }
+
+    /** @return list<string> */
+    public function examTools(): array
+    {
+        return ExamTools::forQuiz($this->exam_tools_json, (bool) $this->is_percobaan);
     }
 }

@@ -1,4 +1,12 @@
-<div class="space-y-6">
+@php
+    $isPercobaan = (bool) old('is_percobaan', $quiz?->is_percobaan ?? false);
+    $alatKuis = old('exam_tools', $quiz?->examTools() ?? []);
+@endphp
+
+<div
+    class="space-y-6"
+    x-data="{ trial: @js($isPercobaan), tools: @js(array_values((array) $alatKuis)) }"
+>
     <div>
         <label for="kelas_id" class="label">Kelas</label>
         <select id="kelas_id" name="kelas_id" class="input" required @error('kelas_id') aria-invalid="true" @enderror>
@@ -57,11 +65,8 @@
     </div>
 
     <div>
-        @php
-            $isPercobaan = (bool) old('is_percobaan', $quiz?->is_percobaan ?? false);
-        @endphp
         <label class="flex items-start gap-3.5 cursor-pointer rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:bg-slate-50 transition">
-            <input type="checkbox" name="is_percobaan" value="1" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500" @checked($isPercobaan)>
+            <input type="checkbox" name="is_percobaan" value="1" x-model="trial" x-on:change="if (!trial) tools = tools.filter(tool => tool !== 'subnet_calculator')" class="mt-1 h-5 w-5 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500">
             <div class="min-w-0">
                 <span class="text-sm font-bold text-slate-900 block">Kuis percobaan sistem</span>
                 <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
@@ -70,6 +75,31 @@
             </div>
         </label>
     </div>
+
+    <fieldset class="rounded-2xl border border-outline bg-page p-4">
+        <legend class="label">Alat bantu peserta</legend>
+        <p class="help mt-1">Pilihan ini menjadi default untuk sesi baru. Sesi yang sudah dibuat tidak ikut berubah.</p>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <label class="flex min-h-24 items-start gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                <input type="checkbox" name="exam_tools[]" value="calculator" x-model="tools" class="mt-0.5 h-5 w-5 shrink-0">
+                <span>
+                    <span class="block font-bold text-ink">Kalkulator standar</span>
+                    <span class="mt-1 block text-sm leading-relaxed text-ink-muted">Operasi dasar, kurung, persen, akar kuadrat, dan pangkat dua. Aman untuk ujian nyata.</span>
+                </span>
+            </label>
+
+            <label class="flex min-h-24 items-start gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft" x-bind:class="!trial && 'cursor-not-allowed opacity-60'">
+                <input type="checkbox" name="exam_tools[]" value="subnet_calculator" x-model="tools" x-bind:disabled="!trial" class="mt-0.5 h-5 w-5 shrink-0">
+                <span>
+                    <span class="block font-bold text-ink">Kalkulator subnet IPv4</span>
+                    <span class="mt-1 block text-sm leading-relaxed text-ink-muted" x-text="trial ? 'Menghitung network, broadcast, host, mask, dan ukuran blok.' : 'Hanya dapat dipakai pada kuis simulasi.'"></span>
+                </span>
+            </label>
+        </div>
+        @error('exam_tools') <p class="field-error mt-2">{{ $message }}</p> @enderror
+        @error('exam_tools.*') <p class="field-error mt-2">{{ $message }}</p> @enderror
+    </fieldset>
 
     <div>
         <div class="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">

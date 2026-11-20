@@ -66,6 +66,20 @@
         @endif
     </x-slot:aksi>
 
+    <section class="mb-6 rounded-2xl border border-outline bg-page p-4" aria-labelledby="alat-bantu-sesi">
+        <h2 id="alat-bantu-sesi" class="text-base font-bold text-ink">Alat bantu peserta</h2>
+        <div class="mt-2 flex flex-wrap gap-2">
+            @forelse (\App\Support\ExamTools::details($session->examTools()) as $alat)
+                <span class="pill pill-brand">{{ $alat['label'] }}</span>
+            @empty
+                <span class="text-sm text-ink-muted">Tidak ada alat bantu pada sesi ini.</span>
+            @endforelse
+        </div>
+        @if ($session->status === 'draft')
+            <p class="mt-2 text-sm text-ink-muted">Pilihan masih dapat diubah melalui Pengaturan sebelum lobby dibuka.</p>
+        @endif
+    </section>
+
     @if ($session->status === 'draft' && ! $session->quiz->is_percobaan)
         <div
             x-data="{

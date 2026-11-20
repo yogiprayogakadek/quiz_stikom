@@ -565,6 +565,12 @@
             if (blocked) mulaiToleransi();
         "
     >
+        @if ($session->examTools() !== [])
+            <div class="flex justify-end">
+                <x-exam-tools :tools="$session->examTools()" />
+            </div>
+        @endif
+
         <div x-show="error" x-cloak class="alert alert-error flex items-center justify-between gap-3" role="alert">
             <p x-text="error"></p>
             <button type="button" class="btn btn-secondary" x-on:click="muat()">Coba lagi</button>

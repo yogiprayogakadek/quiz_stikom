@@ -11,6 +11,7 @@ use App\Models\QuestionMedia;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Support\ExamTools;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -59,6 +60,7 @@ class TrialSessionTest extends TestCase
         $this->assertSame($quiz->jumlah_soal, $trialQuiz->jumlah_soal);
         $this->assertSame($quiz->acak_opsi, $trialQuiz->acak_opsi);
         $this->assertSame($quiz->auto_grade_essay, $trialQuiz->auto_grade_essay);
+        $this->assertSame([ExamTools::CALCULATOR], $trialQuiz->examTools());
         $this->assertCount(2, $trialQuiz->questions);
         $this->assertSame(2, $trialQuiz->questions->firstWhere('tipe', 'pilihan_ganda')->options->count());
 
@@ -82,6 +84,7 @@ class TrialSessionTest extends TestCase
         $this->assertSame($session->pelanggaran_action, $trialSession->pelanggaran_action);
         $this->assertSame($session->pelanggaran_penalty_seconds, $trialSession->pelanggaran_penalty_seconds);
         $this->assertSame($session->clipboard_policy, $trialSession->clipboard_policy);
+        $this->assertSame([ExamTools::CALCULATOR], $trialSession->examTools());
         $this->assertSame($session->timing_mode, $trialSession->timing_mode);
         $this->assertSame([$selected->id], $trialSession->allowedParticipants()->pluck('users.id')->all());
         $this->assertFalse($trialSession->isUserAllowed($unselected));
@@ -334,6 +337,7 @@ class TrialSessionTest extends TestCase
             'acak_opsi' => true,
             'auto_grade_essay' => true,
             'is_percobaan' => false,
+            'exam_tools_json' => [ExamTools::CALCULATOR, ExamTools::SUBNET_CALCULATOR],
             'created_by' => $admin->id,
         ]);
 
@@ -384,6 +388,7 @@ class TrialSessionTest extends TestCase
             'pelanggaran_action' => 'reduce_time',
             'pelanggaran_penalty_seconds' => 90,
             'clipboard_policy' => 'block',
+            'exam_tools_json' => [ExamTools::CALCULATOR, ExamTools::SUBNET_CALCULATOR],
             'jeda_detik' => 7,
             'durasi_total_detik' => 3600,
             'timing_mode' => 'duration',

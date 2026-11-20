@@ -9,6 +9,7 @@ use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Support\ExamTools;
 use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -449,6 +450,7 @@ class DashboardController extends Controller
                     'violation_action' => $sesi->pelanggaran_action ?? 'submit',
                     'penalty_seconds' => $sesi->pelanggaran_penalty_seconds,
                     'clipboard_policy' => $sesi->clipboard_policy ?? 'monitor',
+                    'exam_tools' => ExamTools::details($sesi->examTools()),
                 ],
                 'attempt' => $attempt ? [
                     'id' => $attempt->id,

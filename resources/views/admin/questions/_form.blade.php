@@ -320,6 +320,24 @@
     </fieldset>
 
     <div x-show="tipe === 'essay'" x-cloak class="space-y-5">
+        <details class="rounded-2xl border border-outline bg-surface p-4">
+            <summary class="cursor-pointer font-bold text-ink">Pola soal subnetting</summary>
+            <div class="mt-3 grid gap-3 text-sm leading-relaxed text-ink-muted sm:grid-cols-3">
+                <div>
+                    <p class="font-bold text-ink">Subnet tunggal</p>
+                    <p class="mt-1">Gunakan bagian rich text untuk proses perhitungan, lalu tabel vertikal untuk network, broadcast, dan rentang host.</p>
+                </div>
+                <div>
+                    <p class="font-bold text-ink">Enumerasi FLSM</p>
+                    <p class="mt-1">Pisahkan perhitungan awal dan tabel jawaban yang memuat setiap blok subnet secara berurutan.</p>
+                </div>
+                <div>
+                    <p class="font-bold text-ink">Perencanaan VLSM</p>
+                    <p class="mt-1">Minta alasan urutan alokasi dalam rich text dan gunakan tabel untuk alokasi tiap bagian. Nilai tetap memakai rubrik manual atau saran AI.</p>
+                </div>
+            </div>
+        </details>
+
         <section x-show="subSoal.length === 0" class="border-b border-outline pb-5">
             @include('admin.questions._answer-format-editor', [
                 'formatExpression' => 'answerFormat',
