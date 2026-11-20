@@ -301,134 +301,105 @@
 
         <section class="card" aria-labelledby="ai-heading" id="panel-ai" role="tabpanel" x-show="tab === 'ai'" @if ($tab !== 'ai') x-cloak @endif>
             <div class="border-b border-outline pb-4">
-                <h2 id="ai-heading" class="text-2xl">Provider AI soal</h2>
-                <p class="mt-1 text-base text-ink-muted">Gunakan 9Router atau endpoint lain yang kompatibel dengan OpenAI Chat Completions.</p>
-            </div>
-            <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                    <label for="ai_base_url" class="label">Base URL</label>
-                    <input id="ai_base_url" name="ai_base_url" type="url" class="input" placeholder="https://api.example.com/v1" value="{{ old('ai_base_url', $settings->ai_base_url) }}">
-                    @error('ai_base_url') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="ai_api_key" class="label">API key</label>
-                    <input id="ai_api_key" name="ai_api_key" type="password" class="input" autocomplete="new-password" placeholder="Kosongkan untuk mempertahankan key saat ini">
-                    @error('ai_api_key') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="ai_default_model" class="label">Model default</label>
-                    <input id="ai_default_model" name="ai_default_model" class="input" placeholder="provider/model-name" value="{{ old('ai_default_model', $settings->ai_default_model) }}">
-                    @error('ai_default_model') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label for="ai_timeout" class="label">Batas waktu request</label>
-                    <div class="relative">
-                        <input id="ai_timeout" name="ai_timeout" type="number" class="input pr-16" min="10" max="300" value="{{ old('ai_timeout', $settings->ai_timeout) }}">
-                        <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-ink-subtle">detik</span>
-                    </div>
-                    @error('ai_timeout') <p class="field-error">{{ $message }}</p> @enderror
-                </div>
+                <h2 id="ai-heading" class="text-2xl">Provider AI</h2>
+                <p class="mt-1 text-base text-ink-muted">Pilih satu mesin AI untuk generate soal, saran nilai essay, dan cover kelas.</p>
             </div>
 
-            <div
-                class="mt-5 rounded-2xl border border-outline bg-page p-4"
-                x-data="{
-                    url: @js(route('admin.settings.ai.test')),
-                    memuat: false,
-                    pesan: '',
-                    berhasil: false,
-                    probePesan: '',
-                    probeBerhasil: false,
-                    model: {},
-                    get jumlah() {
-                        return Object.values(this.model).reduce((total, daftar) => total + daftar.length, 0);
-                    },
-                    async uji() {
-                        this.memuat = true;
-                        this.pesan = '';
-                        this.berhasil = false;
-                        this.probePesan = '';
-                        this.probeBerhasil = false;
-                        this.model = {};
-                        try {
-                            const hasil = await window.kuisFetch(this.url, {
-                                method: 'POST',
-                                progress: false,
-                                body: {
-                                    ai_base_url: document.getElementById('ai_base_url').value.trim(),
-                                    ai_api_key: document.getElementById('ai_api_key').value,
-                                    ai_default_model: document.getElementById('ai_default_model').value.trim(),
-                                    ai_timeout: document.getElementById('ai_timeout').value,
-                                },
-                            });
-                            const data = hasil.data ?? {};
-                            this.berhasil = data.endpoint?.ok === true;
-                            this.pesan = data.endpoint?.pesan ?? data.message ?? 'Tes koneksi gagal. Periksa kembali isian.';
-                            this.probeBerhasil = data.probe?.ok === true;
-                            this.probePesan = data.probe?.pesan ?? '';
-                            this.model = data.model ?? {};
-                        } catch (e) {
-                            this.berhasil = false;
-                            this.pesan = 'Tes koneksi gagal. Periksa koneksi server.';
-                        } finally {
-                            this.memuat = false;
-                        }
-                    },
-                    pilih(id) {
-                        document.getElementById('ai_default_model').value = id;
-                        this.probePesan = 'Model default diisi: ' + id + '. Klik Tes koneksi lagi untuk menguji model ini.';
-                        this.probeBerhasil = false;
-                    },
-                }"
-            >
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <p class="text-lg font-bold text-ink">Tes koneksi</p>
-                        <p class="mt-1 text-sm text-ink-muted">Memakai isian di atas. Perubahan baru dipakai setelah kamu menekan Simpan.</p>
+            <div x-data="{ provider: @js(old('ai_provider', $settings->ai_provider ?: 'openai')) }">
+                <fieldset class="mt-5">
+                    <legend class="label">Mesin AI</legend>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                            <input type="radio" name="ai_provider" value="openai" x-model="provider" @checked(old('ai_provider', $settings->ai_provider ?: 'openai') === 'openai')>
+                            <span>
+                                <strong class="block text-ink">OpenAI-compatible (9Router)</strong>
+                                <span class="text-sm text-ink-muted">Endpoint /v1/chat/completions seperti sekarang.</span>
+                            </span>
+                        </label>
+                        <label class="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-outline p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                            <input type="radio" name="ai_provider" value="opencode" x-model="provider" @checked(old('ai_provider', $settings->ai_provider ?: 'openai') === 'opencode')>
+                            <span>
+                                <strong class="block text-ink">OpenCode server</strong>
+                                <span class="text-sm text-ink-muted">Server OpenCode di jaringan atau VPS.</span>
+                            </span>
+                        </label>
                     </div>
-                    <button
-                        type="button"
-                        class="btn btn-secondary min-h-11"
-                        x-on:click="uji()"
-                        x-bind:disabled="memuat"
-                        x-text="memuat ? 'Menguji endpoint dan model...' : 'Tes koneksi'"
-                    ></button>
-                </div>
-                <div class="mt-3 space-y-1" role="status" aria-live="polite">
-                    <p
-                        class="text-base"
-                        x-show="pesan"
-                        x-text="pesan"
-                        x-bind:class="berhasil ? 'text-brand-deep' : 'text-coral-deep'"
-                    ></p>
-                    <p
-                        class="text-sm"
-                        x-show="probePesan"
-                        x-text="probePesan"
-                        x-bind:class="probeBerhasil ? 'text-brand-deep' : 'text-coral-deep'"
-                    ></p>
-                </div>
-                <div x-show="Object.keys(model).length > 0" x-cloak class="mt-4">
-                    <p class="text-sm font-bold text-ink"><span x-text="jumlah"></span> model tersedia</p>
-                    <div class="mt-2 max-h-72 space-y-3 overflow-y-auto rounded-xl border border-outline bg-surface p-3">
-                        <template x-for="(daftar, provider) in model" :key="provider">
-                            <div>
-                                <p class="text-xs font-bold uppercase tracking-wide text-ink-muted" x-text="provider"></p>
-                                <div class="mt-1 flex flex-wrap gap-2">
-                                    <template x-for="id in daftar" :key="id">
-                                        <button
-                                            type="button"
-                                            class="btn btn-ghost min-h-11 px-3 text-left font-mono text-xs"
-                                            x-on:click="pilih(id)"
-                                            x-bind:aria-label="'Pakai model ' + id"
-                                            x-text="id"
-                                        ></button>
-                                    </template>
-                                </div>
+                    @error('ai_provider') <p class="field-error">{{ $message }}</p> @enderror
+                </fieldset>
+
+                <div x-show="provider === 'openai'" @if (old('ai_provider', $settings->ai_provider ?: 'openai') !== 'openai') x-cloak @endif>
+                    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                        <div class="sm:col-span-2">
+                            <label for="ai_base_url" class="label">Base URL</label>
+                            <input id="ai_base_url" name="ai_base_url" type="url" class="input" placeholder="https://api.example.com/v1" value="{{ old('ai_base_url', $settings->ai_base_url) }}">
+                            @error('ai_base_url') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="ai_api_key" class="label">API key</label>
+                            <input id="ai_api_key" name="ai_api_key" type="password" class="input" autocomplete="new-password" placeholder="Kosongkan untuk mempertahankan key saat ini">
+                            @error('ai_api_key') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="ai_default_model" class="label">Model default</label>
+                            <input id="ai_default_model" name="ai_default_model" class="input" placeholder="provider/model-name" value="{{ old('ai_default_model', $settings->ai_default_model) }}">
+                            @error('ai_default_model') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="ai_timeout" class="label">Batas waktu request</label>
+                            <div class="relative">
+                                <input id="ai_timeout" name="ai_timeout" type="number" class="input pr-16" min="10" max="300" value="{{ old('ai_timeout', $settings->ai_timeout) }}">
+                                <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-ink-subtle">detik</span>
                             </div>
-                        </template>
+                            @error('ai_timeout') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
                     </div>
-                    <p class="help mt-2">Klik model untuk mengisi kolom Model default.</p>
+
+                <x-ai-test-panel
+                    :url="route('admin.settings.ai.test')"
+                    :inputs="['ai_base_url', 'ai_api_key', 'ai_default_model', 'ai_timeout']"
+                    model-input="ai_default_model"
+                />
+                </div>
+
+                <div x-show="provider === 'opencode'" @if (old('ai_provider', $settings->ai_provider ?: 'openai') !== 'opencode') x-cloak @endif>
+                    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                        <div class="sm:col-span-2">
+                            <label for="opencode_base_url" class="label">Base URL server</label>
+                            <input id="opencode_base_url" name="opencode_base_url" type="url" class="input" placeholder="http://192.168.0.247:4096" value="{{ old('opencode_base_url', $settings->opencode_base_url) }}">
+                            @error('opencode_base_url') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="opencode_username" class="label">Username</label>
+                            <input id="opencode_username" name="opencode_username" class="input" autocomplete="username" placeholder="opencode" value="{{ old('opencode_username', $settings->opencode_username ?: 'opencode') }}">
+                            @error('opencode_username') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="opencode_password" class="label">Password</label>
+                            <input id="opencode_password" name="opencode_password" type="password" class="input" autocomplete="new-password" placeholder="Kosongkan untuk mempertahankan password saat ini">
+                            @error('opencode_password') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="opencode_model" class="label">Model</label>
+                            <input id="opencode_model" name="opencode_model" class="input" placeholder="Pilih dari daftar setelah tes koneksi" value="{{ old('opencode_model', $settings->opencode_model) }}">
+                            @error('opencode_model') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="opencode_timeout" class="label">Batas waktu request</label>
+                            <div class="relative">
+                                <input id="opencode_timeout" name="opencode_timeout" type="number" class="input pr-16" min="10" max="300" value="{{ old('opencode_timeout', $settings->opencode_timeout ?: 120) }}">
+                                <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-ink-subtle">detik</span>
+                            </div>
+                            @error('opencode_timeout') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+
+                    <x-ai-test-panel
+                        :url="route('admin.settings.opencode.test')"
+                        :inputs="['opencode_base_url', 'opencode_username', 'opencode_password', 'opencode_model', 'opencode_timeout']"
+                        model-input="opencode_model"
+                        title="Tes koneksi OpenCode"
+                        button="Tes & muat model"
+                    />
                 </div>
             </div>
         </section>
@@ -466,8 +437,45 @@
                 </div>
                 <div>
                     <label for="image_model" class="label">Model gambar</label>
-                    <input id="image_model" name="image_model" class="input" placeholder="gpt-image-1" value="{{ old('image_model', $settings->image_model) }}">
+                    <input id="image_model" name="image_model" class="input" @if (($settings->ai_provider ?: 'openai') === 'opencode') list="image-model-options" @endif placeholder="{{ ($settings->ai_provider ?: 'openai') === 'opencode' ? 'Muat daftar lalu pilih model' : 'gpt-image-1' }}" value="{{ old('image_model', $settings->image_model) }}">
                     @error('image_model') <p class="field-error">{{ $message }}</p> @enderror
+                    @if (($settings->ai_provider ?: 'openai') === 'opencode')
+                        <div
+                            class="mt-3"
+                            x-data="{
+                                memuat: false,
+                                pesan: '',
+                                daftar: [],
+                                async muat() {
+                                    this.memuat = true;
+                                    this.pesan = '';
+                                    try {
+                                        const hasil = await window.kuisFetch(@js(route('admin.settings.opencode.image-models')), { method: 'POST', progress: false });
+                                        const data = hasil.data ?? {};
+                                        this.daftar = data.model ?? [];
+                                        this.pesan = this.daftar.length > 0
+                                            ? this.daftar.length + ' model gambar tersedia. Pilih dari daftar.'
+                                            : (data.pesan ?? 'Tidak ada model gambar yang dikembalikan.');
+                                    } catch (e) {
+                                        this.pesan = 'Gagal memuat model gambar. Periksa koneksi server.';
+                                    } finally {
+                                        this.memuat = false;
+                                    }
+                                },
+                            }"
+                        >
+                            <button type="button" class="btn btn-secondary min-h-11" x-on:click="muat()" x-bind:disabled="memuat">
+                                <span x-show="!memuat">Muat model gambar</span>
+                                <span x-show="memuat" x-cloak>Memuat...</span>
+                            </button>
+                            <p class="help mt-2" x-show="pesan" x-text="pesan"></p>
+                            <datalist id="image-model-options">
+                                <template x-for="id in daftar" :key="id">
+                                    <option :value="id"></option>
+                                </template>
+                            </datalist>
+                        </div>
+                    @endif
                 </div>
             </div>
         </section>

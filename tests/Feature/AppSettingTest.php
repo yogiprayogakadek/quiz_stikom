@@ -39,10 +39,12 @@ class AppSettingTest extends TestCase
                 'login_layout' => 'centered',
                 'locale' => 'en',
                 'allow_pin_enrollment' => 1,
+                'ai_provider' => 'openai',
                 'ai_base_url' => 'https://ai.example.test/v1',
                 'ai_api_key' => 'secret-ai-key',
                 'ai_default_model' => 'provider/model',
                 'ai_timeout' => 90,
+                'opencode_timeout' => 120,
                 'class_cover_mode' => 'local',
                 'image_base_url' => null,
                 'image_api_key' => null,
@@ -56,6 +58,7 @@ class AppSettingTest extends TestCase
         $this->assertSame('en', $settings->locale);
         $this->assertTrue($settings->allow_pin_enrollment);
         $this->assertSame('secret-ai-key', $settings->ai_api_key);
+        $this->assertSame('openai', $settings->ai_provider);
         $this->assertNotSame('secret-ai-key', DB::table('organization_settings')->value('ai_api_key'));
     }
 }

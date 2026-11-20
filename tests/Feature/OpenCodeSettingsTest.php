@@ -190,6 +190,43 @@ class OpenCodeSettingsTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), 'types=image'));
     }
 
+    public function test_tab_ai_menampilkan_pilihan_provider_dan_isian_opencode(): void
+    {
+        [$admin, $organization] = $this->adminWorkspace();
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'opencode_password' => 'rahasia-lama',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession($this->sesi($admin, $organization))
+            ->get(route('admin.settings.edit', ['tab' => 'ai']))
+            ->assertOk()
+            ->assertSee('OpenCode server')
+            ->assertSee('name="ai_provider"', false)
+            ->assertSee('name="opencode_base_url"', false)
+            ->assertSee('name="opencode_username"', false)
+            ->assertSee('name="opencode_password"', false)
+            ->assertSee('name="opencode_model"', false)
+            ->assertSee('name="opencode_timeout"', false)
+            ->assertDontSee('rahasia-lama');
+    }
+
+    public function test_tab_cover_menampilkan_tombol_muat_model_gambar_saat_provider_opencode(): void
+    {
+        [$admin, $organization] = $this->adminWorkspace();
+        OrganizationSetting::create([
+            'organization_id' => $organization->id,
+            'ai_provider' => 'opencode',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession($this->sesi($admin, $organization))
+            ->get(route('admin.settings.edit', ['tab' => 'cover']))
+            ->assertOk()
+            ->assertSee('Muat model gambar');
+    }
+
     /**
      * @return array{0: User, 1: Organization}
      */
