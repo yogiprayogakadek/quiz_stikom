@@ -28,7 +28,7 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p class="label">Struktur tabel jawaban</p>
-                    <p class="help mt-1">Edit nama kolom dan baris langsung pada tabel. Sel jawaban menunjukkan tampilan yang diterima peserta.</p>
+                    <p class="help mt-1">Edit judul, nama kolom, dan nama baris langsung pada tabel. Isi sel dengan kisi-kisi singkat yang akan terlihat sebagai petunjuk, bukan jawaban peserta.</p>
                     <p class="help mt-1">
                         <span x-text="{{ $configExpression }}.columns.length"></span>/10 kolom ·
                         <span x-text="{{ $configExpression }}.rows.length"></span>/20 baris
@@ -44,7 +44,18 @@
                 <table class="answer-table min-w-[42rem]">
                     <thead>
                         <tr>
-                            <th scope="col" class="sticky left-0 top-0 z-30 min-w-52">Baris</th>
+                            <th scope="col" class="sticky left-0 top-0 z-30 min-w-52">
+                                <label class="sr-only" x-bind:for="{{ $idExpression }} + '-row-header'">Judul kolom baris</label>
+                                <input
+                                    class="input min-w-40 bg-page"
+                                    maxlength="100"
+                                    x-bind:id="{{ $idExpression }} + '-row-header'"
+                                    x-bind:name="{{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][row_header]' : 'answer_config[row_header]'"
+                                    x-model="{{ $configExpression }}.row_header"
+                                    x-bind:disabled="{{ $disabledExpression ?? 'false' }}"
+                                    placeholder="Judul baris"
+                                >
+                            </th>
                             <template x-for="(column, columnIndex) in {{ $configExpression }}.columns" :key="columnIndex">
                                 <th scope="col" class="sticky top-0 z-20 min-w-56">
                                     <div class="flex items-center gap-2">
@@ -61,7 +72,7 @@
                                         <button
                                             type="button"
                                             class="btn btn-ghost min-h-11 min-w-11 shrink-0 !p-2 text-coral-deep"
-                                            x-on:click="{{ $configExpression }}.columns.splice(columnIndex, 1)"
+                                            x-on:click="hapusKolomJawaban({{ $configExpression }}, columnIndex)"
                                             x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.columns.length <= 1"
                                             x-bind:aria-label="'Hapus kolom ' + (column || columnIndex + 1)"
                                         >
@@ -90,7 +101,7 @@
                                         <button
                                             type="button"
                                             class="btn btn-ghost min-h-11 min-w-11 shrink-0 !p-2 text-coral-deep"
-                                            x-on:click="{{ $configExpression }}.rows.splice(rowIndex, 1)"
+                                            x-on:click="hapusBarisJawaban({{ $configExpression }}, rowIndex)"
                                             x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.rows.length <= 1"
                                             x-bind:aria-label="'Hapus baris ' + (row || rowIndex + 1)"
                                         >
@@ -102,8 +113,11 @@
                                     <td>
                                         <input
                                             class="input min-w-40"
-                                            disabled
-                                            placeholder="Jawaban peserta"
+                                            maxlength="500"
+                                            x-bind:name="({{ $nameExpression }} ? {{ $nameExpression }} + '[answer_config][cell_hints][' : 'answer_config[cell_hints][') + rowIndex + '][' + columnIndex + ']'"
+                                            x-model="{{ $configExpression }}.cell_hints[rowIndex][columnIndex]"
+                                            x-bind:disabled="{{ $disabledExpression ?? 'false' }}"
+                                            placeholder="Kisi-kisi peserta"
                                             x-bind:aria-label="(row || 'Baris ' + (rowIndex + 1)) + ', ' + (column || 'Kolom ' + (columnIndex + 1))"
                                         >
                                     </td>

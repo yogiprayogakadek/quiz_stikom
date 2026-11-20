@@ -7,7 +7,7 @@
         <table class="answer-table" aria-labelledby="{{ $id }}-label">
             <thead>
                 <tr>
-                    <th scope="col">Baris</th>
+                    <th scope="col">{{ $config['row_header'] ?? 'Baris' }}</th>
                     @foreach (($config['columns'] ?? []) as $column)
                         <th scope="col">{{ $column }}</th>
                     @endforeach
@@ -18,7 +18,7 @@
                     <tr>
                         <th scope="row">{{ $row }}</th>
                         @foreach (($config['columns'] ?? []) as $columnIndex => $column)
-                            <td><input class="input min-w-40" disabled aria-label="{{ $row }}, {{ $column }}"></td>
+                            <td><input class="input min-w-40" disabled placeholder="{{ $config['cell_hints'][$rowIndex][$columnIndex] ?? '' }}" aria-label="{{ $row }}, {{ $column }}"></td>
                         @endforeach
                     </tr>
                 @endforeach

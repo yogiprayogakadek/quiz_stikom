@@ -1476,8 +1476,8 @@
                         <template x-if="current.answer_format === 'table'">
                             <div class="overflow-x-auto" tabindex="0">
                                 <table class="answer-table">
-                                    <thead><tr><th scope="col">Baris</th><template x-for="column in current.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
-                                    <tbody><template x-for="(row, rowIndex) in current.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in current.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current)[rowIndex][columnIndex]" x-on:input="ubahSelTabel(current, null, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanTeks(current)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
+                                    <thead><tr><th scope="col" x-text="current.answer_config.row_header || 'Baris'"></th><template x-for="column in current.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
+                                    <tbody><template x-for="(row, rowIndex) in current.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in current.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current)[rowIndex][columnIndex]" x-bind:placeholder="current.answer_config.cell_hints?.[rowIndex]?.[columnIndex] || ''" x-on:input="ubahSelTabel(current, null, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanTeks(current)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
                                 </table>
                             </div>
                         </template>
@@ -1566,8 +1566,8 @@
                                         ></textarea>
                                         <div x-show="bagian.answer_format === 'table'" class="overflow-x-auto" tabindex="0">
                                             <table class="answer-table">
-                                                <thead><tr><th scope="col">Baris</th><template x-for="column in bagian.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
-                                                <tbody><template x-for="(row, rowIndex) in bagian.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in bagian.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current, bagian)[rowIndex][columnIndex]" x-on:input="ubahSelTabel(current, bagian, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanBagian(current, bagian)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
+                                                <thead><tr><th scope="col" x-text="bagian.answer_config.row_header || 'Baris'"></th><template x-for="column in bagian.answer_config.columns" :key="column"><th scope="col" x-text="column"></th></template></tr></thead>
+                                                <tbody><template x-for="(row, rowIndex) in bagian.answer_config.rows" :key="rowIndex"><tr><th scope="row" x-text="row"></th><template x-for="(column, columnIndex) in bagian.answer_config.columns" :key="columnIndex"><td><input data-answer-input class="input min-w-40" maxlength="1000" x-bind:value="tabelCells(current, bagian)[rowIndex][columnIndex]" x-bind:placeholder="bagian.answer_config.cell_hints?.[rowIndex]?.[columnIndex] || ''" x-on:input="ubahSelTabel(current, bagian, rowIndex, columnIndex, $event.target.value)" x-on:blur="simpanBagian(current, bagian)" x-bind:aria-label="row + ', ' + column"></td></template></tr></template></tbody>
                                             </table>
                                         </div>
                                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted">

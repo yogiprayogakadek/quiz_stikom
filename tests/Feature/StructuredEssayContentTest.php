@@ -40,7 +40,9 @@ class StructuredEssayContentTest extends TestCase
             ->assertSee('grid-cols-2', false)
             ->assertSee('sticky left-0 top-0', false)
             ->assertSee('class="answer-table min-w-[42rem]"', false)
-            ->assertSee('placeholder="Jawaban peserta"', false);
+            ->assertSee('[answer_config][row_header]', false)
+            ->assertSee('[answer_config][cell_hints]', false)
+            ->assertSee('placeholder="Kisi-kisi peserta"', false);
     }
 
     public function test_admin_can_store_structured_blocks_media_and_leaf_answer_format(): void
@@ -72,7 +74,12 @@ class StructuredEssayContentTest extends TestCase
                     'label' => 'A',
                     'teks' => 'Lengkapi tabel analisis.',
                     'answer_format' => 'table',
-                    'answer_config' => ['columns' => ['Temuan', 'Alasan'], 'rows' => ['Komponen A', 'Komponen B']],
+                    'answer_config' => [
+                        'row_header' => 'Komponen',
+                        'columns' => ['Temuan', 'Alasan'],
+                        'rows' => ['Komponen A', 'Komponen B'],
+                        'cell_hints' => [['Contoh temuan', 'Jelaskan alasannya'], ['', '']],
+                    ],
                 ]],
             ])
             ->assertRedirect(route('admin.quizzes.questions.index', $quiz));
@@ -80,7 +87,9 @@ class StructuredEssayContentTest extends TestCase
         $question = Question::where('teks', 'Analisis diagram berikut.')->firstOrFail();
         $this->assertCount(4, $question->content_blocks_json);
         $this->assertSame('table', $question->sub_soal_json[0]['answer_format']);
+        $this->assertSame('Komponen', $question->sub_soal_json[0]['answer_config']['row_header']);
         $this->assertSame(['Temuan', 'Alasan'], $question->sub_soal_json[0]['answer_config']['columns']);
+        $this->assertSame('Contoh temuan', $question->sub_soal_json[0]['answer_config']['cell_hints'][0][0]);
         $media = QuestionMedia::firstOrFail();
         $this->assertSame($question->id, $media->question_id);
         Storage::disk('local')->assertExists($media->path);
@@ -111,6 +120,8 @@ class StructuredEssayContentTest extends TestCase
         $answer = Answer::firstOrFail();
         $this->assertSame('table', $answer->jawaban_data_json['__main']['format']);
         $this->assertStringContainsString('| Baris 1 | TCP |  |', $answer->jawaban_teks);
+        $this->assertStringContainsString('| Jenis | Protokol | Karakteristik |', $answer->jawaban_teks);
+        $this->assertStringNotContainsString('Misalnya TCP', $answer->jawaban_teks);
 
         $this->actingAs($participant)->withSession(['auth_token' => 'participant-token'])
             ->postJson($url, [
@@ -124,6 +135,19 @@ class StructuredEssayContentTest extends TestCase
             ->postJson($url, ['question_id' => $question->id, 'jawaban_teks' => 'bukan tabel'])
             ->assertStatus(422)
             ->assertJsonPath('message', 'Soal ini harus dijawab melalui tabel yang tersedia.');
+    }
+
+    public function test_participant_table_receives_editable_row_header_and_cell_hints(): void
+    {
+        [$participant, $attempt] = $this->runningTableAttempt();
+
+        $this->actingAs($participant)->withSession(['auth_token' => 'participant-token'])
+            ->get(route('peserta.attempt.show', $attempt))
+            ->assertOk()
+            ->assertSee('Jenis')
+            ->assertSee('Misalnya TCP')
+            ->assertSee('cell_hints', false)
+            ->assertSee("row_header || 'Baris'", false);
     }
 
     public function test_question_media_requires_signature_or_authorized_attempt(): void
@@ -231,7 +255,12 @@ class StructuredEssayContentTest extends TestCase
             'bobot' => 10,
             'durasi_detik' => 120,
             'answer_format' => 'table',
-            'answer_config_json' => ['columns' => ['Protokol', 'Karakteristik'], 'rows' => ['Baris 1', 'Baris 2']],
+            'answer_config_json' => [
+                'row_header' => 'Jenis',
+                'columns' => ['Protokol', 'Karakteristik'],
+                'rows' => ['Baris 1', 'Baris 2'],
+                'cell_hints' => [['Misalnya TCP', 'Misalnya andal'], ['', '']],
+            ],
         ]);
         $session = QuizSession::create([
             'quiz_id' => $quiz->id,

@@ -74,15 +74,23 @@ class QuestionContent
         }
 
         if ($format === 'table') {
+            $columns = array_values(array_map(
+                fn ($value) => trim((string) $value),
+                array_slice((array) ($config['columns'] ?? []), 0, 10),
+            ));
+            $rows = array_values(array_map(
+                fn ($value) => trim((string) $value),
+                array_slice((array) ($config['rows'] ?? []), 0, 20),
+            ));
+            $hints = (array) ($config['cell_hints'] ?? []);
+
             return [
-                'columns' => array_values(array_map(
-                    fn ($value) => trim((string) $value),
-                    array_slice((array) ($config['columns'] ?? []), 0, 10),
-                )),
-                'rows' => array_values(array_map(
-                    fn ($value) => trim((string) $value),
-                    array_slice((array) ($config['rows'] ?? []), 0, 20),
-                )),
+                'row_header' => trim((string) ($config['row_header'] ?? '')) ?: 'Baris',
+                'columns' => $columns,
+                'rows' => $rows,
+                'cell_hints' => collect($rows)->keys()->map(fn ($row) => collect($columns)->keys()
+                    ->map(fn ($column) => trim((string) ($hints[$row][$column] ?? '')))
+                    ->all())->all(),
             ];
         }
 
@@ -190,7 +198,7 @@ class QuestionContent
 
         return [
             'data' => ['format' => 'table', 'value' => ['cells' => $cells]],
-            'text' => $empty ? '' : self::tableToMarkdown(['', ...($config['columns'] ?? [])], self::answerRows($config, $cells)),
+            'text' => $empty ? '' : self::tableToMarkdown([$config['row_header'] ?? 'Baris', ...($config['columns'] ?? [])], self::answerRows($config, $cells)),
             'empty' => $empty,
             'complete' => $complete,
             'total_length' => $totalLength,
@@ -215,7 +223,7 @@ class QuestionContent
             $cells = is_array($value) ? (array) ($value['cells'] ?? []) : [];
 
             return self::renderTable(
-                ['', ...(array) ($config['columns'] ?? [])],
+                [$config['row_header'] ?? 'Baris', ...(array) ($config['columns'] ?? [])],
                 self::answerRows($config, $cells),
             );
         }

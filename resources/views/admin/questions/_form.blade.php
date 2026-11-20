@@ -15,11 +15,15 @@
             return $blok;
         })->values()->all();
     $formatJawabanAwal = old('answer_format', $question?->answer_format ?? 'rich_text');
-    $konfigurasiJawabanAwal = old('answer_config', $question?->answer_config_json ?? []);
+    $konfigurasiJawabanAwal = \App\Support\QuestionContent::normalizeAnswerConfig(
+        $formatJawabanAwal,
+        old('answer_config', $question?->answer_config_json ?? []),
+    );
     $subSoalAwal = collect(old('sub_soal', $question?->subSoalTerstruktur() ?? []))
         ->map(function ($bagian, $index) {
             $bagian = is_array($bagian) ? $bagian : [];
             $petunjuk = $bagian['petunjuk'] ?? [];
+            $formatJawaban = $bagian['answer_format'] ?? 'rich_text';
 
             return [
                 'key' => ($bagian['legacy'] ?? false) ? 'legacy-'.$index : ($bagian['key'] ?? 'legacy-'.$index),
@@ -34,8 +38,8 @@
                     }
                     return $blok;
                 })->values()->all(),
-                'answer_format' => $bagian['answer_format'] ?? 'rich_text',
-                'answer_config' => $bagian['answer_config'] ?? [],
+                'answer_format' => $formatJawaban,
+                'answer_config' => \App\Support\QuestionContent::normalizeAnswerConfig($formatJawaban, $bagian['answer_config'] ?? []),
             ];
         })
         ->values()
@@ -151,10 +155,16 @@
         },
         pastikanConfig(target, format) {
             if (format === 'code') return { language: target?.language || 'text' };
-            if (format === 'table') return {
-                columns: target?.columns?.length ? target.columns : ['Kolom 1', 'Kolom 2'],
-                rows: target?.rows?.length ? target.rows : ['Baris 1']
-            };
+            if (format === 'table') {
+                const columns = target?.columns?.length ? target.columns : ['Kolom 1', 'Kolom 2'];
+                const rows = target?.rows?.length ? target.rows : ['Baris 1'];
+                return {
+                    row_header: target?.row_header || 'Baris',
+                    columns,
+                    rows,
+                    cell_hints: rows.map((row, rowIndex) => columns.map((column, columnIndex) => target?.cell_hints?.[rowIndex]?.[columnIndex] || ''))
+                };
+            }
             return {};
         },
         ubahFormatUtama() {
@@ -164,10 +174,24 @@
             bagian.answer_config = this.pastikanConfig(bagian.answer_config, bagian.answer_format);
         },
         tambahKolomJawaban(config) {
-            if (config.columns.length < 10) config.columns.push('Kolom ' + (config.columns.length + 1));
+            if (config.columns.length >= 10) return;
+            config.columns.push('Kolom ' + (config.columns.length + 1));
+            config.cell_hints.forEach((row) => row.push(''));
         },
         tambahBarisJawaban(config) {
-            if (config.rows.length < 20) config.rows.push('Baris ' + (config.rows.length + 1));
+            if (config.rows.length >= 20) return;
+            config.rows.push('Baris ' + (config.rows.length + 1));
+            config.cell_hints.push(Array(config.columns.length).fill(''));
+        },
+        hapusKolomJawaban(config, index) {
+            if (config.columns.length <= 1) return;
+            config.columns.splice(index, 1);
+            config.cell_hints.forEach((row) => row.splice(index, 1));
+        },
+        hapusBarisJawaban(config, index) {
+            if (config.rows.length <= 1) return;
+            config.rows.splice(index, 1);
+            config.cell_hints.splice(index, 1);
         },
         tambahSubSoal(parentKey = null) {
             if (this.subSoal.length >= 50 || this.anak(parentKey).length >= 10) return;
