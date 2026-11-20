@@ -8,7 +8,9 @@ use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
 use App\Models\User;
-use App\Services\AiQuestionService;
+use App\Services\Ai\AiConfig;
+use App\Services\Ai\AiManager;
+use App\Services\Ai\ConnectionTester;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
@@ -206,7 +208,7 @@ class SettingController extends Controller
             ->with('settings_tab', $section ?? 'identitas');
     }
 
-    public function testAiConnection(Request $request, AiQuestionService $ai): JsonResponse
+    public function testAiConnection(Request $request, ConnectionTester $tester): JsonResponse
     {
         $data = $request->validate([
             'ai_base_url' => ['nullable', 'url', 'max:255'],
@@ -215,11 +217,16 @@ class SettingController extends Controller
             'ai_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
         ]);
 
-        return response()->json($ai->testConnection(
-            $data['ai_base_url'] ?? null,
-            filled($data['ai_api_key'] ?? null) ? $data['ai_api_key'] : null,
-            isset($data['ai_timeout']) ? (int) $data['ai_timeout'] : null,
+        $config = AiConfig::fromSettings(app('app.settings'), [
+            'ai_base_url' => $data['ai_base_url'] ?? null,
+            'ai_api_key' => $data['ai_api_key'] ?? null,
+            'ai_default_model' => $data['ai_default_model'] ?? null,
+            'ai_timeout' => $data['ai_timeout'] ?? null,
+        ]);
+
+        return response()->json((new ConnectionTester(new AiManager($config)))->test(
             $data['ai_default_model'] ?? null,
+            isset($data['ai_timeout']) ? (int) $data['ai_timeout'] : 25,
         ));
     }
 

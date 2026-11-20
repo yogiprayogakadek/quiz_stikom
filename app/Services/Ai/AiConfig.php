@@ -66,6 +66,19 @@ final class AiConfig
         return $this->provider === 'opencode' ? $this->opencode['base_url'] : $this->openai['base_url'];
     }
 
+    public function withTimeout(int $seconds): self
+    {
+        $seconds = max(1, $seconds);
+
+        $openai = $this->openai;
+        $openai['timeout'] = $seconds;
+
+        $opencode = $this->opencode;
+        $opencode['timeout'] = $seconds;
+
+        return new self($this->provider, $openai, $opencode, $this->image);
+    }
+
     public function defaultModel(): string
     {
         return $this->provider === 'opencode' ? $this->opencode['model'] : $this->openai['model'];

@@ -3,11 +3,11 @@
 namespace App\Jobs;
 
 use App\Models\Kelas;
+use App\Services\Ai\AiManager;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -38,9 +38,9 @@ class GenerateClassCoverJob implements ShouldQueue
                 return;
             }
 
-            $baseUrl = rtrim((string) ($settings->image_base_url ?: $settings->ai_base_url), '/');
-            $apiKey = $settings->image_api_key ?: $settings->ai_api_key;
-            if ($baseUrl === '' || blank($apiKey) || blank($settings->image_model)) {
+            $image = app(AiManager::class)->image();
+
+            if ($image === null) {
                 Log::warning('Cover AI dilewati karena konfigurasi image API belum lengkap.', ['kelas_id' => $this->kelasId]);
 
                 return;
@@ -60,31 +60,14 @@ class GenerateClassCoverJob implements ShouldQueue
             }
 
             try {
-                $response = Http::withToken($apiKey)
-                    ->timeout(150)
-                    ->post($baseUrl.'/images/generations', [
-                        'model' => $settings->image_model,
-                        'prompt' => "Wide editorial cover for an education class named '{$kelas->nama}'. Abstract academic objects and structured learning modules, confident composition, no people, no logos, no letters, no text, landscape format.",
-                        'size' => '1536x1024',
-                        'n' => 1,
-                    ]);
-
-                if (! $response->successful()) {
-                    throw new RuntimeException('Image API merespons status '.$response->status());
-                }
+                $bytes = $image->generate(
+                    "Wide editorial cover for an education class named '{$kelas->nama}'. Abstract academic objects and structured learning modules, confident composition, no people, no logos, no letters, no text, landscape format.",
+                    (string) $settings->image_model,
+                    '1536x1024',
+                );
 
                 if ($kelas->organization_id !== null) {
                     $usage->recordAi($kelas->organization_id, 'cover');
-                }
-
-                $base64 = $response->json('data.0.b64_json');
-                $url = $response->json('data.0.url');
-                $bytes = is_string($base64) && $base64 !== ''
-                    ? base64_decode($base64, true)
-                    : (is_string($url) && $url !== '' ? Http::timeout(90)->get($url)->throw()->body() : false);
-
-                if (! is_string($bytes) || $bytes === '') {
-                    throw new RuntimeException('Image API tidak mengembalikan gambar.');
                 }
 
                 $imageInfo = getimagesizefromstring($bytes);

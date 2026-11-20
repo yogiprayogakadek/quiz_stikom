@@ -2,10 +2,8 @@
 
 namespace App\Services;
 
-use App\Exceptions\AiRequestException;
-use Illuminate\Http\Client\Response;
+use App\Services\Ai\AiManager;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -13,31 +11,26 @@ use Throwable;
 
 class AiQuestionService
 {
-    protected string $baseUrl;
+    protected ?AiManager $manager;
 
-    protected ?string $apiKey;
-
-    protected string $defaultModel;
-
-    protected int $timeout;
-
-    public function __construct()
+    public function __construct(?AiManager $ai = null)
     {
-        $settings = app('app.settings');
-        $this->baseUrl = rtrim((string) ($settings->ai_base_url ?: config('services.ai.base_url', 'https://api.9router.com/v1')), '/');
-        $this->apiKey = $settings->ai_api_key ?: config('services.ai.api_key');
-        $this->defaultModel = (string) ($settings->ai_default_model ?: config('services.ai.default_model', 'ag/gemini-3.8-flash-medium'));
-        $this->timeout = (int) ($settings->ai_timeout ?: config('services.ai.timeout', 60));
+        $this->manager = $ai;
+    }
+
+    protected function ai(): AiManager
+    {
+        return $this->manager ??= new AiManager;
     }
 
     /**
-     * Mendapatkan daftar model AI yang tersedia dari 9router, dikelompokkan per provider.
+     * Mendapatkan daftar model AI yang tersedia dari provider aktif, dikelompokkan per provider.
      *
      * @return array<string, array<string>>
      */
     public function getAvailableModels(bool $forceRefresh = false): array
     {
-        $cacheKey = 'ai_models_'.sha1($this->baseUrl);
+        $cacheKey = 'ai_models_'.sha1($this->ai()->config()->textBaseUrl());
 
         if ($forceRefresh) {
             Cache::forget($cacheKey);
@@ -45,251 +38,11 @@ class AiQuestionService
 
         return Cache::remember($cacheKey, 3600, function () {
             try {
-                $response = Http::withToken($this->apiKey ?? '')
-                    ->timeout($this->timeout)
-                    ->get("{$this->baseUrl}/models");
-
-                if (! $response->successful()) {
-                    return $this->fallbackModels();
-                }
-
-                return $this->parseModels($response->json()) ?: $this->fallbackModels();
+                return $this->ai()->text()->models(10) ?: $this->fallbackModels();
             } catch (Throwable) {
                 return $this->fallbackModels();
             }
         });
-    }
-
-    /**
-     * Menguji endpoint AI, daftar model, dan apakah model default benar-benar bisa menjawab.
-     * Tidak memakai cache maupun fallback agar hasil tes jujur.
-     *
-     * @return array{
-     *     ok: bool,
-     *     endpoint: array{ok: bool, status: int|null, pesan: string},
-     *     probe: array{ok: bool, status: int|null, pesan: string}|null,
-     *     model: array<string, array<string>>
-     * }
-     */
-    public function testConnection(?string $baseUrl = null, ?string $apiKey = null, ?int $timeout = null, ?string $model = null): array
-    {
-        $baseUrl = rtrim($baseUrl ?: $this->baseUrl, '/');
-        $apiKey = $apiKey ?: $this->apiKey;
-        $model = trim($model ?: $this->defaultModel);
-        // ponytail: total tes dibatasi 25 detik agar tidak kena batas eksekusi PHP.
-        $timeout = min(max($timeout ?: $this->timeout, 5), 30);
-        $host = parse_url($baseUrl, PHP_URL_HOST) ?: $baseUrl;
-
-        try {
-            $response = Http::withToken($apiKey ?? '')
-                ->timeout(min($timeout, 10))
-                ->get("{$baseUrl}/models");
-        } catch (Throwable $e) {
-            Log::warning('Tes koneksi AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl]);
-
-            return [
-                'ok' => false,
-                'endpoint' => [
-                    'ok' => false,
-                    'status' => null,
-                    'pesan' => 'Tidak bisa menghubungi endpoint. Periksa Base URL dan koneksi server.',
-                ],
-                'probe' => null,
-                'model' => [],
-            ];
-        }
-
-        if (! $response->successful()) {
-            return [
-                'ok' => false,
-                'endpoint' => [
-                    'ok' => false,
-                    'status' => $response->status(),
-                    'pesan' => $this->pesanGagal($response->status()),
-                ],
-                'probe' => null,
-                'model' => [],
-            ];
-        }
-
-        $models = $this->parseModels($response->json());
-        $jumlah = array_sum(array_map('count', $models));
-        $probe = $this->probeModel($baseUrl, $apiKey, $model, min($timeout, 15));
-
-        return [
-            'ok' => $probe['ok'],
-            'endpoint' => [
-                'ok' => true,
-                'status' => $response->status(),
-                'pesan' => $models === []
-                    ? "Endpoint {$host} merespons, tetapi tidak ada model yang dikembalikan."
-                    : "Terhubung ke {$host}. {$jumlah} model ditemukan.",
-            ],
-            'probe' => $probe,
-            'model' => $models,
-        ];
-    }
-
-    /**
-     * @return array{ok: bool, status: int|null, pesan: string}
-     */
-    protected function probeModel(string $baseUrl, ?string $apiKey, string $model, int $timeout): array
-    {
-        if ($model === '') {
-            return [
-                'ok' => false,
-                'status' => null,
-                'pesan' => 'Model default belum diisi.',
-            ];
-        }
-
-        try {
-            $response = Http::withToken($apiKey ?? '')
-                ->timeout($timeout)
-                ->post("{$baseUrl}/chat/completions", [
-                    'model' => $model,
-                    'messages' => [
-                        ['role' => 'user', 'content' => 'Balas hanya: ok'],
-                    ],
-                    'max_tokens' => 8,
-                    'temperature' => 0,
-                    'stream' => false,
-                ]);
-        } catch (Throwable $e) {
-            Log::warning('Probe model AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl, 'model' => $model]);
-
-            return [
-                'ok' => false,
-                'status' => null,
-                'pesan' => 'Tidak bisa menghubungi endpoint saat menguji model default.',
-            ];
-        }
-
-        if (! $response->successful()) {
-            return [
-                'ok' => false,
-                'status' => $response->status(),
-                'pesan' => $this->pesanChatGagal($response, $model),
-            ];
-        }
-
-        return [
-            'ok' => true,
-            'status' => $response->status(),
-            'pesan' => "Model default {$model} merespons.",
-        ];
-    }
-
-    protected function pesanChatGagal(Response $response, ?string $model = null): string
-    {
-        $status = $response->status();
-        $alasan = $this->alasanProvider($response);
-        $model = $model ?: $this->defaultModel;
-        $retryAfter = (int) $response->header('Retry-After');
-        $detail = $alasan === '' ? '' : ': '.$alasan;
-
-        return match (true) {
-            in_array($status, [401, 403], true) => "API key ditolak (status {$status}){$detail}. Periksa kembali API key.",
-            $status === 404 => "Model {$model} tidak ditemukan (404){$detail}. Pilih model lain di daftar.",
-            $status === 429 => "Layanan AI membatasi permintaan (429){$detail}. "
-                .($retryAfter > 0 ? "Coba lagi dalam {$retryAfter} detik" : 'Coba lagi beberapa saat')
-                .' atau ganti model default di Pengaturan > AI.',
-            $status >= 500 => "Layanan AI bermasalah (status {$status}){$detail}. Coba lagi beberapa saat.",
-            default => "Layanan AI menolak permintaan (status {$status}){$detail}.",
-        };
-    }
-
-    /**
-     * Mengambil alasan singkat dari body error provider.
-     */
-    protected function alasanProvider(Response $response): string
-    {
-        $json = $response->json();
-        $alasan = '';
-
-        if (is_array($json)) {
-            $error = $json['error'] ?? null;
-            $kandidat = [
-                is_array($error) ? ($error['message'] ?? null) : $error,
-                $json['message'] ?? null,
-                $json['detail'] ?? null,
-            ];
-
-            foreach ($kandidat as $nilai) {
-                if (is_string($nilai) && trim($nilai) !== '') {
-                    $alasan = $nilai;
-                    break;
-                }
-            }
-        }
-
-        if ($alasan === '') {
-            $alasan = strip_tags($response->body());
-        }
-
-        $alasan = Str::limit(trim((string) preg_replace('/\s+/', ' ', $alasan)), 200, '...');
-
-        if (! str_ends_with($alasan, '...')) {
-            $alasan = rtrim($alasan, '. ');
-        }
-
-        return $alasan;
-    }
-
-    protected function pesanGagal(int $status): string
-    {
-        return match (true) {
-            in_array($status, [401, 403], true) => "API key ditolak (status {$status}). Periksa kembali API key.",
-            $status === 404 => 'Endpoint /models tidak ditemukan (404). Periksa Base URL.',
-            $status === 429 => 'Layanan AI membatasi permintaan (429). Coba lagi nanti.',
-            $status >= 500 => "Layanan AI bermasalah (status {$status}).",
-            default => "Endpoint merespons dengan status {$status}.",
-        };
-    }
-
-    /**
-     * Mengelompokkan daftar model dari respons /models per provider.
-     *
-     * @return array<string, array<string>>
-     */
-    protected function parseModels(mixed $json): array
-    {
-        $items = is_array($json) && isset($json['data']) && is_array($json['data'])
-            ? $json['data']
-            : (is_array($json) ? $json : []);
-
-        $grouped = [];
-        foreach ($items as $item) {
-            $id = is_array($item) ? ($item['id'] ?? null) : (is_string($item) ? $item : null);
-            if (! $id) {
-                continue;
-            }
-
-            $ownedBy = is_array($item) ? ($item['owned_by'] ?? '') : '';
-            $provider = $this->detectProvider((string) $id, (string) $ownedBy);
-
-            $grouped[$provider][] = (string) $id;
-        }
-
-        // Urutkan model di dalam tiap provider
-        foreach ($grouped as $provider => &$models) {
-            sort($models);
-        }
-        unset($models);
-
-        // Urutkan provider dengan urutan prioritas
-        uksort($grouped, function ($a, $b) {
-            $priority = ['Google' => 1, 'OpenAI' => 2, 'Anthropic' => 3, 'DeepSeek' => 4, 'Meta' => 5];
-            $pA = $priority[$a] ?? 99;
-            $pB = $priority[$b] ?? 99;
-            if ($pA === $pB) {
-                return strcmp($a, $b);
-            }
-
-            return $pA <=> $pB;
-        });
-
-        return $grouped;
     }
 
     /**
@@ -302,7 +55,7 @@ class AiQuestionService
      */
     public function generateQuestions(array $params): array
     {
-        $model = (string) ($params['model'] ?? $this->defaultModel);
+        $model = (string) ($params['model'] ?? $this->ai()->config()->defaultModel());
         $rpsText = (string) ($params['rps_text'] ?? '');
         $topik = (string) ($params['topik'] ?? '');
         $jumlahPg = (int) ($params['jumlah_pg'] ?? 0);
@@ -365,31 +118,10 @@ PROMPT;
         $userPrompt .= "Jumlah Essay: {$jumlahEssay}\n\n";
         $userPrompt .= "Konteks Silabus / RPS / CPMK:\n{$rpsText}";
 
-        try {
-            $response = Http::withToken($this->apiKey ?? '')
-                ->timeout($this->timeout)
-                ->post("{$this->baseUrl}/chat/completions", [
-                    'model' => $model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $userPrompt],
-                    ],
-                    'temperature' => 0.7,
-                    'stream' => false,
-                ]);
-        } catch (Throwable $e) {
-            throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
-        }
-
-        if (! $response->successful()) {
-            throw new AiRequestException(
-                $this->pesanChatGagal($response, $model),
-                $response->status(),
-                (int) $response->header('Retry-After') ?: null,
-            );
-        }
-
-        $rawContent = $this->extractRawContent($response);
+        $rawContent = $this->ai()->text()->chat([
+            ['role' => 'system', 'content' => $systemPrompt],
+            ['role' => 'user', 'content' => $userPrompt],
+        ], $model, 0.7);
 
         $cleanedJson = $this->extractJson($rawContent);
         $data = json_decode($cleanedJson, true);
@@ -407,10 +139,6 @@ PROMPT;
      */
     public function evaluateEssay(string $question, ?string $referenceAnswer, array $criteria, string $answer, int $maxScore, string $mode = 'seimbang'): array
     {
-        if (blank($this->apiKey)) {
-            throw new RuntimeException('API key AI belum dikonfigurasi.');
-        }
-
         $mode = in_array($mode, ['ketat', 'seimbang', 'longgar'], true) ? $mode : 'seimbang';
         $modeInstruction = match ($mode) {
             'ketat' => "Mode penilaian: Ketat.\nBeri poin hanya untuk bagian yang secara eksplisit memenuhi kriteria rubrik. Bagian yang hilang, salah, atau hanya berupa kata kunci tanpa penjelasan tidak mendapat poin.",
@@ -441,31 +169,11 @@ PROMPT;
                 ? $userPrompt
                 : $userPrompt."\n\nPENTING: Kembalikan HANYA satu objek JSON valid tanpa markdown dan tanpa teks lain. Wajib memuat kunci score, confidence, dan feedback. Tulis feedback dalam satu baris.";
 
-            try {
-                $response = Http::withToken($this->apiKey)
-                    ->timeout($this->timeout)
-                    ->post("{$this->baseUrl}/chat/completions", [
-                        'model' => $this->defaultModel,
-                        'messages' => [
-                            ['role' => 'system', 'content' => $systemPrompt],
-                            ['role' => 'user', 'content' => $prompt],
-                        ],
-                        'temperature' => 0.1,
-                        'stream' => false,
-                    ]);
-            } catch (Throwable $e) {
-                throw new AiRequestException("Gagal menghubungi layanan AI: {$e->getMessage()}");
-            }
+            $rawContent = $this->ai()->text()->chat([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $prompt],
+            ], null, 0.1);
 
-            if (! $response->successful()) {
-                throw new AiRequestException(
-                    $this->pesanChatGagal($response),
-                    $response->status(),
-                    (int) $response->header('Retry-After') ?: null,
-                );
-            }
-
-            $rawContent = $this->extractRawContent($response);
             $data = json_decode($this->extractJson($rawContent), true);
 
             if (is_array($data) && isset($data['score'], $data['confidence'])) {
@@ -475,8 +183,7 @@ PROMPT;
             Log::warning('Saran penilaian essay tidak valid.', [
                 'attempt' => $attempt,
                 'mode' => $mode,
-                'model' => $this->defaultModel,
-                'finish_reason' => $response->json('choices.0.finish_reason'),
+                'model' => $this->ai()->config()->defaultModel(),
                 'keys' => is_array($data) ? array_keys($data) : [],
                 'preview' => Str::limit($rawContent, 1000),
             ]);
@@ -494,8 +201,8 @@ PROMPT;
             'score' => max(0, min($maxScore, (int) $data['score'])),
             'confidence' => max(0, min(100, (int) $data['confidence'])),
             'feedback' => Str::limit($feedback, 1500, '') ?: 'AI tidak memberikan alasan.',
-            'model' => $this->defaultModel,
-            'provider' => parse_url($this->baseUrl, PHP_URL_HOST) ?: $this->baseUrl,
+            'model' => $this->ai()->config()->defaultModel(),
+            'provider' => parse_url($this->ai()->config()->textBaseUrl(), PHP_URL_HOST) ?: $this->ai()->config()->textBaseUrl(),
             'mode' => $mode,
         ];
     }
@@ -573,87 +280,6 @@ PROMPT;
         }
 
         return $weights;
-    }
-
-    /**
-     * Mengekstrak konten teks dari respons API secara defensif (mendukung standard, array part, atau SSE chunk).
-     */
-    protected function extractRawContent(Response $response): string
-    {
-        $json = $response->json();
-
-        if (is_array($json)) {
-            // 1. Format standar: choices.0.message.content (string)
-            $content = $json['choices'][0]['message']['content'] ?? null;
-            if (is_string($content) && trim($content) !== '') {
-                return trim($content);
-            }
-
-            // 2. Format multi-part array: choices.0.message.content = [['type' => 'text', 'text' => '...']]
-            if (is_array($content)) {
-                $pieces = [];
-                foreach ($content as $part) {
-                    if (is_array($part) && isset($part['text']) && is_string($part['text'])) {
-                        $pieces[] = $part['text'];
-                    } elseif (is_string($part)) {
-                        $pieces[] = $part;
-                    }
-                }
-                $combined = trim(implode('', $pieces));
-                if ($combined !== '') {
-                    return $combined;
-                }
-            }
-
-            // 3. Format completion biasa: choices.0.text
-            $text = $json['choices'][0]['text'] ?? null;
-            if (is_string($text) && trim($text) !== '') {
-                return trim($text);
-            }
-
-            // 4. Format reasoning content (thinking models) jika content utama kosong
-            $reasoning = $json['choices'][0]['message']['reasoning_content'] ?? null;
-            if (is_string($reasoning) && trim($reasoning) !== '') {
-                return trim($reasoning);
-            }
-
-            // 5. Cek refusal jika ada penolakan keselamatan
-            $refusal = $json['choices'][0]['message']['refusal'] ?? null;
-            if (is_string($refusal) && trim($refusal) !== '') {
-                throw new RuntimeException("Layanan AI menolak permintaan: {$refusal}");
-            }
-        }
-
-        // 6. Fallback jika respons berupa SSE stream (data: {...})
-        $body = $response->body();
-        if (str_contains($body, 'data:')) {
-            $accumulated = '';
-            $lines = explode("\n", $body);
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if (! str_starts_with($line, 'data:')) {
-                    continue;
-                }
-                $payload = trim(substr($line, 5));
-                if ($payload === '' || $payload === '[DONE]') {
-                    continue;
-                }
-                $chunk = json_decode($payload, true);
-                if (is_array($chunk)) {
-                    $delta = $chunk['choices'][0]['delta']['content'] ?? ($chunk['choices'][0]['text'] ?? '');
-                    if (is_string($delta)) {
-                        $accumulated .= $delta;
-                    }
-                }
-            }
-
-            if (trim($accumulated) !== '') {
-                return trim($accumulated);
-            }
-        }
-
-        $preview = Str::limit(trim($body), 150);
-        throw new RuntimeException("Layanan AI mengembalikan konten kosong. (Respons: {$preview})");
     }
 
     /**
@@ -761,39 +387,6 @@ PROMPT;
     }
 
     /**
-     * Deteksi nama provider dari ID model atau atribut owned_by.
-     */
-    protected function detectProvider(string $id, string $ownedBy): string
-    {
-        $idLower = Str::lower($id);
-        $ownedLower = Str::lower($ownedBy);
-
-        if (Str::contains($idLower, ['gemini', 'google', 'ag/gemini']) || $ownedLower === 'google') {
-            return 'Google';
-        }
-        if (Str::contains($idLower, ['gpt', 'openai', 'o1', 'o3', 'ag/gpt']) || $ownedLower === 'openai') {
-            return 'OpenAI';
-        }
-        if (Str::contains($idLower, ['claude', 'anthropic', 'ag/claude']) || $ownedLower === 'anthropic') {
-            return 'Anthropic';
-        }
-        if (Str::contains($idLower, ['deepseek']) || $ownedLower === 'deepseek') {
-            return 'DeepSeek';
-        }
-        if (Str::contains($idLower, ['llama', 'meta']) || $ownedLower === 'meta') {
-            return 'Meta';
-        }
-        if (Str::contains($idLower, ['qwen', 'alibaba'])) {
-            return 'Qwen';
-        }
-        if (Str::contains($idLower, ['mistral'])) {
-            return 'Mistral';
-        }
-
-        return $ownedBy !== '' ? ucfirst($ownedBy) : 'Lainnya';
-    }
-
-    /**
      * Fallback default model jika discovery gagal.
      *
      * @return array<string, array<string>>
@@ -801,7 +394,7 @@ PROMPT;
     protected function fallbackModels(): array
     {
         return [
-            'Default' => [$this->defaultModel],
+            'Default' => [$this->ai()->config()->defaultModel()],
         ];
     }
 }
