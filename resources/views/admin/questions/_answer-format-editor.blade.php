@@ -29,20 +29,24 @@
                 <div>
                     <p class="label">Struktur tabel jawaban</p>
                     <p class="help mt-1">Edit nama kolom dan baris langsung pada tabel. Sel jawaban menunjukkan tampilan yang diterima peserta.</p>
+                    <p class="help mt-1">
+                        <span x-text="{{ $configExpression }}.columns.length"></span>/10 kolom ·
+                        <span x-text="{{ $configExpression }}.rows.length"></span>/20 baris
+                    </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahKolomJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.columns.length >= 10">Tambah kolom</button>
-                    <button type="button" class="btn btn-secondary min-h-11 px-3" x-on:click="tambahBarisJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.rows.length >= 20">Tambah baris</button>
+                <div class="grid w-full grid-cols-2 gap-2 sm:w-auto">
+                    <button type="button" class="btn btn-secondary min-h-11 whitespace-nowrap px-2 sm:px-3" x-on:click="tambahKolomJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.columns.length >= 10">Tambah kolom</button>
+                    <button type="button" class="btn btn-secondary min-h-11 whitespace-nowrap px-2 sm:px-3" x-on:click="tambahBarisJawaban({{ $configExpression }})" x-bind:disabled="{{ $disabledExpression ?? 'false' }} || {{ $configExpression }}.rows.length >= 20">Tambah baris</button>
                 </div>
             </div>
 
-            <div class="max-w-full overflow-x-auto rounded-xl border border-outline" tabindex="0" aria-label="Pratinjau struktur tabel jawaban">
+            <div class="max-h-[28rem] max-w-full overflow-auto overscroll-contain rounded-xl border border-outline" tabindex="0" aria-label="Pratinjau struktur tabel jawaban">
                 <table class="answer-table min-w-[42rem]">
                     <thead>
                         <tr>
-                            <th scope="col" class="min-w-52">Baris</th>
+                            <th scope="col" class="sticky left-0 top-0 z-30 min-w-52">Baris</th>
                             <template x-for="(column, columnIndex) in {{ $configExpression }}.columns" :key="columnIndex">
-                                <th scope="col" class="min-w-56">
+                                <th scope="col" class="sticky top-0 z-20 min-w-56">
                                     <div class="flex items-center gap-2">
                                         <label class="sr-only" x-bind:for="{{ $idExpression }} + '-column-' + columnIndex">Nama kolom <span x-text="columnIndex + 1"></span></label>
                                         <input
@@ -71,7 +75,7 @@
                     <tbody>
                         <template x-for="(row, rowIndex) in {{ $configExpression }}.rows" :key="rowIndex">
                             <tr>
-                                <th scope="row" class="min-w-56">
+                                <th scope="row" class="sticky left-0 z-10 min-w-56">
                                     <div class="flex items-center gap-2">
                                         <label class="sr-only" x-bind:for="{{ $idExpression }} + '-row-' + rowIndex">Nama baris <span x-text="rowIndex + 1"></span></label>
                                         <input

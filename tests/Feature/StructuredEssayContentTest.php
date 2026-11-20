@@ -36,6 +36,9 @@ class StructuredEssayContentTest extends TestCase
             ->assertSee('Tambah kolom')
             ->assertSee('Tambah baris')
             ->assertSee('aria-label="Pratinjau struktur tabel jawaban"', false)
+            ->assertSee('max-h-[28rem]', false)
+            ->assertSee('grid-cols-2', false)
+            ->assertSee('sticky left-0 top-0', false)
             ->assertSee('class="answer-table min-w-[42rem]"', false)
             ->assertSee('placeholder="Jawaban peserta"', false);
     }
