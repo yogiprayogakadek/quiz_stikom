@@ -52,9 +52,11 @@ class SettingsSectionTest extends TestCase
             ->from(route('admin.settings.edit'))
             ->put(route('admin.settings.update'), [
                 '_section' => 'ai',
+                'ai_provider' => 'openai',
                 'ai_base_url' => 'https://ai.example.test/v1',
                 'ai_default_model' => 'model-baru',
                 'ai_timeout' => 45,
+                'opencode_timeout' => 120,
             ])
             ->assertRedirect(route('admin.settings.edit'))
             ->assertSessionHas('settings_tab', 'ai');

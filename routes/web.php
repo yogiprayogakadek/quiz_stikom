@@ -149,6 +149,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('settings/ai/test', [SettingController::class, 'testAiConnection'])
         ->middleware('throttle:5,1')
         ->name('settings.ai.test');
+    Route::post('settings/opencode/test', [SettingController::class, 'testOpenCodeConnection'])
+        ->middleware('throttle:5,1')
+        ->name('settings.opencode.test');
+    Route::post('settings/opencode/image-models', [SettingController::class, 'openCodeImageModels'])
+        ->middleware('throttle:5,1')
+        ->name('settings.opencode.image-models');
     Route::middleware('organization_owner')->group(function () {
         Route::get('team', [TeamController::class, 'index'])->name('team.index');
         Route::post('team', [TeamController::class, 'store'])->name('team.store');

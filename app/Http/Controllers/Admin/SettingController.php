@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exceptions\AiRequestException;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\AuditLog;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Services\Ai\AiConfig;
 use App\Services\Ai\AiManager;
 use App\Services\Ai\ConnectionTester;
+use App\Services\Ai\OpenCodeTextClient;
 use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
@@ -107,10 +109,16 @@ class SettingController extends Controller
 
         if (in_array('ai', $sections, true)) {
             $rules += [
+                'ai_provider' => ['required', 'in:openai,opencode'],
                 'ai_base_url' => ['nullable', 'url', 'max:255'],
                 'ai_api_key' => ['nullable', 'string', 'max:500'],
                 'ai_default_model' => ['nullable', 'string', 'max:150'],
                 'ai_timeout' => ['required', 'integer', 'min:10', 'max:300'],
+                'opencode_base_url' => ['nullable', 'url', 'max:255'],
+                'opencode_username' => ['nullable', 'string', 'max:100'],
+                'opencode_password' => ['nullable', 'string', 'max:500'],
+                'opencode_model' => ['nullable', 'string', 'max:150'],
+                'opencode_timeout' => ['required', 'integer', 'min:10', 'max:300'],
             ];
         }
 
@@ -182,7 +190,7 @@ class SettingController extends Controller
 
         unset($data['logo']);
 
-        foreach (['ai_api_key', 'image_api_key'] as $secret) {
+        foreach (['ai_api_key', 'image_api_key', 'opencode_password'] as $secret) {
             if (blank($data[$secret] ?? null)) {
                 unset($data[$secret]);
             }
@@ -228,6 +236,42 @@ class SettingController extends Controller
             $data['ai_default_model'] ?? null,
             isset($data['ai_timeout']) ? (int) $data['ai_timeout'] : 25,
         ));
+    }
+
+    public function testOpenCodeConnection(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'opencode_base_url' => ['nullable', 'url', 'max:255'],
+            'opencode_username' => ['nullable', 'string', 'max:100'],
+            'opencode_password' => ['nullable', 'string', 'max:500'],
+            'opencode_model' => ['nullable', 'string', 'max:150'],
+            'opencode_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
+        ]);
+
+        $config = AiConfig::fromSettings(app('app.settings'), [
+            'ai_provider' => 'opencode',
+            'opencode_base_url' => $data['opencode_base_url'] ?? null,
+            'opencode_username' => $data['opencode_username'] ?? null,
+            'opencode_password' => $data['opencode_password'] ?? null,
+            'opencode_model' => $data['opencode_model'] ?? null,
+            'opencode_timeout' => $data['opencode_timeout'] ?? null,
+        ]);
+
+        return response()->json((new ConnectionTester(new AiManager($config)))->test(
+            $data['opencode_model'] ?? null,
+            isset($data['opencode_timeout']) ? (int) $data['opencode_timeout'] : 25,
+        ));
+    }
+
+    public function openCodeImageModels(): JsonResponse
+    {
+        try {
+            $models = (new OpenCodeTextClient(AiConfig::current()))->modelsOfType('image', 15);
+        } catch (AiRequestException $e) {
+            return response()->json(['model' => [], 'pesan' => $e->getMessage()]);
+        }
+
+        return response()->json(['model' => $models]);
     }
 
     private function isOwner(?User $user, ?Organization $organization): bool
