@@ -79,6 +79,57 @@ class EssayGrader
         return $suggestion;
     }
 
+    /**
+     * @return array{score: int, reason: string, model: string, provider: string}
+     */
+    public function detectAi(Answer $answer): array
+    {
+        $answer->loadMissing(['question', 'attempt']);
+
+        $question = $answer->question;
+        $attempt = $answer->attempt;
+
+        if ($question === null || ! $question->isEssay()) {
+            throw new RuntimeException('Jawaban ini bukan soal essay.');
+        }
+
+        if (blank($answer->jawaban_teks)) {
+            throw new RuntimeException('Jawaban essay kosong.');
+        }
+
+        $organizationId = $attempt?->organization_id;
+
+        if ($organizationId !== null) {
+            $this->usage->assertAiQuota($organizationId);
+        }
+
+        $result = $this->ai->detectAiGenerated(
+            $question->teksUntukPenilaian(),
+            QuestionContent::answerForGrading($question, $answer),
+        );
+
+        if ($organizationId !== null) {
+            $this->usage->recordAi($organizationId, 'essay');
+        }
+
+        $answer->update([
+            'ai_generated_score' => $result['score'],
+            'ai_generated_reason' => $result['reason'],
+            'ai_generated_at' => now(),
+        ]);
+
+        AuditLog::record('essay_ai_detected', 'answer', $answer->id, [
+            'attempt_id' => $answer->attempt_id,
+            'question_id' => $answer->question_id,
+            'score' => $result['score'],
+            'reason' => $result['reason'],
+            'model' => $result['model'],
+            'provider' => $result['provider'],
+        ], $organizationId);
+
+        return $result;
+    }
+
     public function applyFinal(
         Answer $answer,
         int $score,

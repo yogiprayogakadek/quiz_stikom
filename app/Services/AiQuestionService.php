@@ -208,6 +208,58 @@ PROMPT;
     }
 
     /**
+     * Analisis probabilitas jawaban essay dibuat oleh AI (skor 0-100 dan alasan).
+     *
+     * @return array{score: int, reason: string, model: string, provider: string}
+     */
+    public function detectAiGenerated(string $question, string $answer): array
+    {
+        $systemPrompt = <<<PROMPT
+Anda adalah sistem audit integritas akademik. Analisis apakah teks jawaban peserta ditulis oleh manusia atau dihasilkan oleh model AI/LLM.
+Periksa pola kalimat, burstiness, variasi leksikal, dan transisi khas AI.
+Kembalikan HANYA satu objek JSON valid dengan bentuk:
+{"score":0,"reason":"Alasan ringkas 1-2 kalimat dalam bahasa Indonesia."}
+score adalah bilangan bulat dari 0 (pasti murni manusia) sampai 100 (pasti dibuat oleh AI).
+PROMPT;
+
+        $userPrompt = "Pertanyaan:\n{$question}\n\nJawaban peserta:\n{$answer}";
+
+        $data = null;
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $prompt = $attempt === 1
+                ? $userPrompt
+                : $userPrompt."\n\nPENTING: Kembalikan HANYA format JSON valid tanpa markdown. Wajib memuat kunci score dan reason.";
+
+            $rawContent = $this->ai()->text()->chat([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $prompt],
+            ], null, 0.1);
+
+            $data = json_decode($this->extractJson($rawContent), true);
+
+            if (is_array($data) && isset($data['score'])) {
+                break;
+            }
+
+            $data = null;
+        }
+
+        if (! is_array($data) || ! isset($data['score'])) {
+            throw new RuntimeException('Layanan AI tidak mengembalikan format analisis yang valid.');
+        }
+
+        $reason = is_scalar($data['reason'] ?? null) ? trim((string) $data['reason']) : '';
+
+        return [
+            'score' => max(0, min(100, (int) $data['score'])),
+            'reason' => Str::limit($reason, 1500, '') ?: 'AI tidak memberikan alasan.',
+            'model' => $this->ai()->config()->defaultModel(),
+            'provider' => parse_url($this->ai()->config()->textBaseUrl(), PHP_URL_HOST) ?: $this->ai()->config()->textBaseUrl(),
+        ];
+    }
+
+    /**
      * Membagi total nilai maksimal kuis ke tiap butir soal PG dan Essay.
      *
      * @return array{pg: array<int>, essay: array<int>, total: int}
