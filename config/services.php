@@ -43,11 +43,21 @@ return [
     ],
 
     'opencode' => [
-        'base_url' => env('OPENCODE_URL'),
+        'base_url' => env('OPENCODE_URL', 'http://192.168.0.247:4096'),
+        'url' => env('OPENCODE_URL', 'http://192.168.0.247:4096'),
         'username' => env('OPENCODE_USERNAME', 'opencode'),
         'password' => env('OPENCODE_PASSWORD'),
-        'model' => env('OPENCODE_MODEL'),
-        'timeout' => (int) env('OPENCODE_TIMEOUT', 120),
+        'agent' => env('OPENCODE_AGENT', 'data-processor'),
+        'model' => env('OPENCODE_MODEL', 'deepseek-v4.1-flash-free'),
+        'model_fallbacks' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('OPENCODE_MODEL_FALLBACKS', 'big-pickle,iceman-free')),
+        ))),
+        'directory' => env('OPENCODE_DIRECTORY', '/srv/opencode-web'),
+        'timeout' => (int) env('OPENCODE_TIMEOUT', 30),
+        'poll_interval' => (int) env('OPENCODE_POLL_INTERVAL', 2),
+        'session_timeout' => (int) env('OPENCODE_SESSION_TIMEOUT', 120),
+        'max_attempts' => (int) env('OPENCODE_MAX_ATTEMPTS', 3),
     ],
 
 ];
