@@ -130,6 +130,88 @@ class EssayGrader
         return $result;
     }
 
+    /**
+     * @return array{
+     *     ai_detection: array{score: int, reason: string},
+     *     suggestions: array{
+     *         ketat: array{score: int, feedback: string},
+     *         seimbang: array{score: int, confidence: int, feedback: string},
+     *         longgar: array{score: int, feedback: string}
+     *     },
+     *     model: string,
+     *     provider: string
+     * }
+     */
+    public function auditAndEvaluate(Answer $answer): array
+    {
+        $answer->loadMissing(['question', 'attempt']);
+
+        $question = $answer->question;
+        $attempt = $answer->attempt;
+
+        if ($question === null || ! $question->isEssay()) {
+            throw new RuntimeException('Jawaban ini bukan soal essay.');
+        }
+
+        if (blank($answer->jawaban_teks)) {
+            throw new RuntimeException('Jawaban essay kosong.');
+        }
+
+        $imageBlocks = collect($question->content_blocks_json ?? [])
+            ->merge(collect($question->sub_soal_json ?? [])->flatMap(fn ($part) => $part['content_blocks'] ?? []))
+            ->where('type', 'image');
+        if ($imageBlocks->contains(fn ($block) => blank($block['ai_context'] ?? null))) {
+            throw new RuntimeException('Tambahkan konteks gambar untuk AI sebelum meminta saran penilaian.');
+        }
+
+        $organizationId = $attempt?->organization_id;
+
+        if ($organizationId !== null) {
+            $this->usage->assertAiQuota($organizationId);
+        }
+
+        $result = $this->ai->auditAndEvaluateEssay(
+            $question->teksUntukPenilaian(),
+            $question->kunci_essay,
+            $question->rubrik_essay ?? [],
+            QuestionContent::answerForGrading($question, $answer),
+            (int) $question->bobot,
+        );
+
+        if ($organizationId !== null) {
+            $this->usage->recordAi($organizationId, 'essay');
+        }
+
+        $seimbang = $result['suggestions']['seimbang'];
+
+        $answer->update([
+            'ai_generated_score' => $result['ai_detection']['score'],
+            'ai_generated_reason' => $result['ai_detection']['reason'],
+            'ai_generated_at' => now(),
+            'ai_suggested_score' => $seimbang['score'],
+            'ai_confidence' => $seimbang['confidence'] ?? 80,
+            'ai_feedback' => $seimbang['feedback'],
+            'ai_suggestions_json' => $result['suggestions'],
+            'ai_model' => $result['model'],
+            'ai_reviewed_at' => now(),
+        ]);
+
+        AuditLog::record('essay_audit_and_evaluated', 'answer', $answer->id, [
+            'attempt_id' => $answer->attempt_id,
+            'question_id' => $answer->question_id,
+            'ai_detection_score' => $result['ai_detection']['score'],
+            'suggested_scores' => [
+                'ketat' => $result['suggestions']['ketat']['score'],
+                'seimbang' => $seimbang['score'],
+                'longgar' => $result['suggestions']['longgar']['score'],
+            ],
+            'model' => $result['model'],
+            'provider' => $result['provider'],
+        ], $organizationId);
+
+        return $result;
+    }
+
     public function applyFinal(
         Answer $answer,
         int $score,
