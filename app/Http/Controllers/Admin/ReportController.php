@@ -6,6 +6,7 @@ use App\Events\EssayDinilai;
 use App\Events\SessionMonitorUpdated;
 use App\Exceptions\AiRequestException;
 use App\Http\Controllers\Controller;
+use App\Jobs\ScanSessionPlagiarismJob;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptQuestion;
@@ -16,6 +17,7 @@ use App\Services\AttemptResetService;
 use App\Services\EssayGrader;
 use App\Services\NilaiService;
 use App\Services\QuizEngine;
+use App\Services\TextSimilarityService;
 use App\Support\OrganizationContext;
 use App\Support\QuestionContent;
 use Illuminate\Database\Eloquent\Collection;
@@ -421,6 +423,57 @@ class ReportController extends Controller
         }
 
         return back()->with('sukses', 'Saran AI dibuat. Periksa hasilnya sebelum menyimpan nilai final.');
+    }
+
+    public function detectAi(Request $request, Answer $answer, EssayGrader $grader): RedirectResponse|JsonResponse
+    {
+        $answer->loadMissing(['question', 'attempt.quizSession']);
+        abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
+        abort_unless(filled($answer->jawaban_teks), 422);
+
+        try {
+            $result = $grader->detectAi($answer);
+        } catch (\Throwable $e) {
+            Log::warning('Deteksi AI essay gagal: '.$e->getMessage(), [
+                'answer_id' => $answer->id,
+                'attempt_id' => $answer->attempt_id,
+                'question_id' => $answer->question_id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'ok' => false,
+                    'pesan' => $e->getMessage(),
+                ], 422);
+            }
+
+            return back()->withErrors(['ai_detect' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'score' => $result['score'],
+                'reason' => $result['reason'],
+                'model' => $result['model'],
+            ]);
+        }
+
+        return back()->with('status', 'Audit AI selesai.');
+    }
+
+    public function scanPlagiarism(Request $request, QuizSession $session, TextSimilarityService $service): RedirectResponse|JsonResponse
+    {
+        (new ScanSessionPlagiarismJob($session->id))->handle($service);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'pesan' => 'Pemindaian kemiripan selesai.',
+            ]);
+        }
+
+        return back()->with('status', 'Pemindaian kemiripan selesai.');
     }
 
     public function export(QuizSession $session): StreamedResponse

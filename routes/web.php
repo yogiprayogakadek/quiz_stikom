@@ -192,11 +192,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('classes/{kelas}/regenerate-cover', [KelasController::class, 'regenerateCover'])->name('classes.regenerate-cover');
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
+    Route::post('sessions/{session}/laporan/scan-plagiarisme', [ReportController::class, 'scanPlagiarism'])->name('reports.session.scan-plagiarism');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');
     Route::get('sessions/{session}/laporan/berita-acara', [ReportController::class, 'beritaAcara'])->name('reports.berita-acara');
     Route::get('attempts/{attempt}', [ReportController::class, 'attempt'])->name('reports.attempt');
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('answers/{answer}/saran-ai', [ReportController::class, 'saranNilaiEssay'])->name('answers.ai-suggestion');
+    Route::post('answers/{answer}/detect-ai', [ReportController::class, 'detectAi'])->name('answers.detect-ai');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
 
     Route::get('sessions/{session}/remidi', [RemedialController::class, 'create'])->name('sessions.remidi.create');
