@@ -104,12 +104,11 @@ class OpenCodeSettingsTest extends TestCase
     {
         [$admin, $organization] = $this->adminWorkspace();
 
-        Http::fake([
+        Http::fake(array_merge([
             'https://oc.example.test/api/model*' => Http::response(['data' => [
                 ['id' => 'nemotron-3.5-super-vl-free', 'providerID' => 'opencode', 'type' => 'chat'],
             ]]),
-            'https://oc.example.test/api/experimental/generate/text' => Http::response(['data' => ['text' => 'ok']]),
-        ]);
+        ], $this->fakeSessionResponses('https://oc.example.test')));
 
         $response = $this->actingAs($admin)
             ->withSession($this->sesi($admin, $organization))
@@ -144,12 +143,11 @@ class OpenCodeSettingsTest extends TestCase
             'opencode_timeout' => 30,
         ]);
 
-        Http::fake([
+        Http::fake(array_merge([
             'https://saved.example.test/api/model*' => Http::response(['data' => [
                 ['id' => 'model-tersimpan', 'providerID' => 'opencode', 'type' => 'chat'],
             ]]),
-            'https://saved.example.test/api/experimental/generate/text' => Http::response(['data' => ['text' => 'ok']]),
-        ]);
+        ], $this->fakeSessionResponses('https://saved.example.test')));
 
         $response = $this->actingAs($admin)
             ->withSession($this->sesi($admin, $organization))
@@ -256,6 +254,30 @@ class OpenCodeSettingsTest extends TestCase
         ]);
 
         return [$admin, $organization];
+    }
+
+    private function fakeSessionResponses(string $baseUrl, string $sessionId = 'ses_test', string $text = 'ok'): array
+    {
+        $baseUrl = rtrim($baseUrl, '/');
+
+        return [
+            $baseUrl."/api/session/{$sessionId}/prompt" => Http::response(['data' => ['id' => 'msg_1']]),
+            $baseUrl."/api/session/{$sessionId}/message" => Http::response(['data' => [
+                [
+                    'type' => 'assistant',
+                    'time' => ['created' => 100],
+                    'content' => [['type' => 'text', 'text' => $text]],
+                ],
+            ]]),
+            $baseUrl."/api/session/{$sessionId}" => function ($request) {
+                if ($request->method() === 'DELETE') {
+                    return Http::response([], 204);
+                }
+
+                return Http::response(['data' => ['outcome' => 'succeeded', 'time' => ['idle' => 1]]]);
+            },
+            $baseUrl.'/api/session' => Http::response(['data' => ['id' => $sessionId]], 201),
+        ];
     }
 
     private function sesi(User $user, Organization $organization): array

@@ -78,19 +78,116 @@ class OpenCodeTextClient implements TextClient
             $messages,
         ));
 
-        $response = $this->send('post', '/api/experimental/generate/text', [
-            'prompt' => $prompt,
+        $timeout = max(5, (int) ($this->config->opencode['timeout'] ?? 120));
+        $pollInterval = max(1, (int) config('services.opencode.poll_interval', 2));
+        $directory = (string) config('services.opencode.directory', '/srv/opencode-web');
+        $agent = (string) config('services.opencode.agent', 'data-processor');
+
+        // ponytail: siklus hidup sesi langsung via HTTP tanpa wrapper terpisah
+        $sessionResponse = $this->send('post', '/api/session', [
+            'directory' => $directory,
+            'agent' => $agent,
             'model' => ['id' => $model, 'providerID' => 'opencode'],
-        ], $this->config->opencode['timeout'], $model);
+        ], $timeout, $model);
 
-        $text = $response->json('data.text');
+        $sessionId = (string) ($sessionResponse->json('data.id') ?? '');
 
-        if (! is_string($text) || trim($text) === '') {
-            $preview = Str::limit(trim($response->body()), 150);
-            throw new RuntimeException("Server OpenCode mengembalikan konten kosong. (Respons: {$preview})");
+        if ($sessionId === '') {
+            throw new AiRequestException('Server OpenCode tidak mengembalikan ID sesi.');
         }
 
-        return trim($text);
+        try {
+            $this->send('post', "/api/session/{$sessionId}/prompt", [
+                'text' => $prompt,
+            ], $timeout, $model);
+
+            $this->waitForSession($sessionId, $timeout, $pollInterval);
+
+            return $this->readAssistantMessage($sessionId, $timeout);
+        } finally {
+            try {
+                $this->send('delete', "/api/session/{$sessionId}", [], $timeout);
+            } catch (Throwable) {
+                // Pembersihan sesi tidak boleh menyembunyikan hasil atau exception utama.
+            }
+        }
+    }
+
+    private function waitForSession(string $sessionId, int $timeout, int $pollInterval): void
+    {
+        $deadline = microtime(true) + $timeout;
+
+        do {
+            $payload = $this->send('get', "/api/session/{$sessionId}", [], $timeout)->json('data');
+            $outcome = is_array($payload) ? ($payload['outcome'] ?? null) : null;
+            $idle = is_array($payload) && isset($payload['time']['idle']);
+
+            if (in_array($outcome, ['succeeded', 'failed'], true) || $idle) {
+                return;
+            }
+
+            usleep($pollInterval * 1_000_000);
+        } while (microtime(true) < $deadline);
+
+        throw new RuntimeException('Waktu tunggu respons sesi OpenCode habis.');
+    }
+
+    private function readAssistantMessage(string $sessionId, int $timeout): string
+    {
+        $payload = $this->send('get', "/api/session/{$sessionId}/message", [], $timeout)->json('data');
+        $messages = is_array($payload) ? $payload : [];
+        $assistants = [];
+        $error = null;
+
+        foreach ($messages as $message) {
+            if (! is_array($message)) {
+                continue;
+            }
+
+            $type = $message['type'] ?? '';
+
+            if ($type === 'assistant') {
+                $assistants[] = $message;
+
+                if (! empty($message['error'])) {
+                    $error = $message['error'];
+                }
+            }
+
+            if ($type === 'idle' && ! empty($message['error'])) {
+                $error = $message['error'];
+            }
+        }
+
+        if (is_array($error)) {
+            $errorMessage = (string) ($error['message'] ?? $error['type'] ?? 'terjadi kesalahan pada sesi OpenCode');
+            $status = (int) ($error['status'] ?? 0);
+            throw new AiRequestException("Sesi OpenCode gagal: {$errorMessage}", $status > 0 ? $status : null);
+        }
+
+        usort($assistants, fn (array $a, array $b): int => ((int) ($a['time']['created'] ?? 0)) <=> ((int) ($b['time']['created'] ?? 0)));
+
+        $text = '';
+        foreach ($assistants as $assistant) {
+            $chunk = '';
+            foreach (($assistant['content'] ?? []) as $part) {
+                if (($part['type'] ?? '') === 'text') {
+                    $chunk .= (string) ($part['text'] ?? '');
+                }
+            }
+
+            if (trim($chunk) !== '') {
+                $text = $chunk;
+            }
+        }
+
+        $trimmed = trim($text);
+
+        if ($trimmed === '') {
+            throw new RuntimeException('Server OpenCode mengembalikan konten kosong.');
+        }
+
+        return $trimmed;
     }
 
     /**
@@ -110,9 +207,11 @@ class OpenCodeTextClient implements TextClient
             ->timeout(max(1, min($timeout, max(1, $this->config->opencode['timeout']))));
 
         try {
-            $response = $method === 'get'
-                ? $pending->get($baseUrl.$path, $payload)
-                : $pending->post($baseUrl.$path, $payload);
+            $response = match ($method) {
+                'get' => $pending->get($baseUrl.$path, $payload),
+                'delete' => $pending->delete($baseUrl.$path, $payload),
+                default => $pending->post($baseUrl.$path, $payload),
+            };
         } catch (Throwable $e) {
             throw new AiRequestException("Gagal menghubungi server OpenCode: {$e->getMessage()}");
         }

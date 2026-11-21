@@ -54,7 +54,7 @@ return [
             explode(',', (string) env('OPENCODE_MODEL_FALLBACKS', 'big-pickle,iceman-free')),
         ))),
         'directory' => env('OPENCODE_DIRECTORY', '/srv/opencode-web'),
-        'timeout' => (int) env('OPENCODE_TIMEOUT', 30),
+        'timeout' => (int) env('OPENCODE_TIMEOUT', 120),
         'poll_interval' => (int) env('OPENCODE_POLL_INTERVAL', 2),
         'session_timeout' => (int) env('OPENCODE_SESSION_TIMEOUT', 120),
         'max_attempts' => (int) env('OPENCODE_MAX_ATTEMPTS', 3),

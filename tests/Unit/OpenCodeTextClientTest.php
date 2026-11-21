@@ -57,9 +57,30 @@ class OpenCodeTextClientTest extends TestCase
         Http::assertSent(fn ($r) => ! str_contains($r->url(), '?'));
     }
 
-    public function test_chat_menggabungkan_prompt_dan_memakai_provider_opencode(): void
+    public function test_chat_menggunakan_siklus_hidup_sesi_dan_membersihkan_sesi(): void
     {
-        Http::fake(['https://oc.example.test/api/experimental/generate/text' => Http::response(['data' => ['text' => '{"ok":true}']])]);
+        $deleted = false;
+
+        Http::fake([
+            'https://oc.example.test/api/session/ses_quiz_123/prompt' => Http::response(['data' => ['id' => 'msg_1']]),
+            'https://oc.example.test/api/session/ses_quiz_123/message' => Http::response(['data' => [
+                [
+                    'type' => 'assistant',
+                    'time' => ['created' => 100],
+                    'content' => [['type' => 'text', 'text' => '{"ok":true}']],
+                ],
+            ]]),
+            'https://oc.example.test/api/session/ses_quiz_123' => function ($request) use (&$deleted) {
+                if ($request->method() === 'DELETE') {
+                    $deleted = true;
+
+                    return Http::response([], 204);
+                }
+
+                return Http::response(['data' => ['outcome' => 'succeeded', 'time' => ['idle' => 1]]]);
+            },
+            'https://oc.example.test/api/session' => Http::response(['data' => ['id' => 'ses_quiz_123']], 201),
+        ]);
 
         $text = $this->client()->chat([
             ['role' => 'system', 'content' => 'SISTEM'],
@@ -67,11 +88,48 @@ class OpenCodeTextClientTest extends TestCase
         ], null, 0.7);
 
         $this->assertSame('{"ok":true}', $text);
-        Http::assertSent(function ($r) {
-            return $r['model'] === ['id' => 'pilihan-saya', 'providerID' => 'opencode']
-                && str_contains($r['prompt'], 'SISTEM')
-                && str_contains($r['prompt'], 'PENGGUNA');
+        $this->assertTrue($deleted, 'Sesi OpenCode harus dihapus pada blok finally.');
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://oc.example.test/api/session'
+                && $request->method() === 'POST'
+                && ($request['model']['id'] ?? null) === 'pilihan-saya';
         });
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://oc.example.test/api/session/ses_quiz_123/prompt'
+                && $request->method() === 'POST'
+                && str_contains($request['text'] ?? '', 'SISTEM')
+                && str_contains($request['text'] ?? '', 'PENGGUNA');
+        });
+    }
+
+    public function test_chat_tetap_menghapus_sesi_saat_terjadi_kesalahan(): void
+    {
+        $deleted = false;
+
+        Http::fake([
+            'https://oc.example.test/api/session/ses_err_123/prompt' => Http::response(['message' => 'Prompt error'], 500),
+            'https://oc.example.test/api/session/ses_err_123' => function ($request) use (&$deleted) {
+                if ($request->method() === 'DELETE') {
+                    $deleted = true;
+
+                    return Http::response([], 204);
+                }
+
+                return Http::response(['data' => []]);
+            },
+            'https://oc.example.test/api/session' => Http::response(['data' => ['id' => 'ses_err_123']], 201),
+        ]);
+
+        try {
+            $this->client()->chat([['role' => 'user', 'content' => 'halo']], null, 0.7);
+            $this->fail('Harus melempar AiRequestException');
+        } catch (AiRequestException $e) {
+            $this->assertStringContainsString('500', $e->getMessage());
+        }
+
+        $this->assertTrue($deleted, 'DELETE session harus dipanggil meskipun prompt gagal.');
     }
 
     public function test_401_menyebut_kredensial_ditolak(): void
