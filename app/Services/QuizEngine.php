@@ -12,6 +12,7 @@ use App\Jobs\AutoGradeEssayJob;
 use App\Jobs\CloseQuestionJob;
 use App\Jobs\CloseScheduledSessionJob;
 use App\Jobs\NextQuestionJob;
+use App\Jobs\ScanSessionPlagiarismJob;
 use App\Jobs\StartScheduledSessionJob;
 use App\Models\Answer;
 use App\Models\Attempt;
@@ -607,6 +608,7 @@ class QuizEngine
         if ($fresh->status === 'selesai') {
             app(NilaiService::class)->terapkanUntukSesi($fresh);
             $this->bukaPembahasanOtomatis($fresh);
+            $this->antrekanPlagiarisme($fresh);
             $fresh = $session->fresh();
         }
 
@@ -642,6 +644,7 @@ class QuizEngine
         $fresh = $session->fresh();
         app(NilaiService::class)->terapkanUntukSesi($fresh);
         $this->bukaPembahasanOtomatis($fresh);
+        $this->antrekanPlagiarisme($fresh);
         $fresh = $session->fresh();
 
         try {
@@ -676,6 +679,19 @@ class QuizEngine
 
         SesiStatusUpdated::safeDispatch($session, ['action' => 'pembahasan_updated']);
         $this->siarkanDisplay($session);
+    }
+
+    public function antrekanPlagiarisme(?QuizSession $session): void
+    {
+        if ($session === null) {
+            return;
+        }
+
+        $hasEssay = Question::where('quiz_id', $session->quiz_id)->where('tipe', 'essay')->exists();
+
+        if ($hasEssay) {
+            ScanSessionPlagiarismJob::dispatch($session->id);
+        }
     }
 
     private function tutupSesiTerkunci(QuizSession $session): void
