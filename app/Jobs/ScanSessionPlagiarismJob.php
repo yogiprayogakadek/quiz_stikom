@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Answer;
 use App\Models\QuizSession;
 use App\Services\TextSimilarityService;
+use App\Support\OrganizationContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -20,10 +21,14 @@ class ScanSessionPlagiarismJob implements ShouldQueue
 
     public function handle(TextSimilarityService $similarityService): void
     {
-        $session = QuizSession::withoutGlobalScopes()->find($this->sessionId);
+        $session = QuizSession::withoutGlobalScopes()->with('organization')->find($this->sessionId);
 
         if ($session === null) {
             return;
+        }
+
+        if ($session->organization !== null) {
+            app(OrganizationContext::class)->force($session->organization);
         }
 
         $answers = Answer::whereHas('attempt', function ($query) {

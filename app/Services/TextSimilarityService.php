@@ -76,11 +76,13 @@ class TextSimilarityService
 
         foreach ($answers as $item) {
             $id = $item['id'];
-            $norm = $this->normalize($item['text'] ?? '');
+            $rawText = (string) ($item['text'] ?? '');
+            $norm = $this->normalize($rawText);
             $preprocessed[$id] = [
                 'id' => $id,
                 'user_id' => $item['user_id'] ?? null,
                 'student_name' => (string) ($item['student_name'] ?? 'Peserta #'.$id),
+                'raw_text' => $rawText,
                 'norm' => $norm,
                 'tokens' => $this->tokenize($norm),
             ];
@@ -109,19 +111,23 @@ class TextSimilarityService
 
                 $score = $this->scoreTokens($itemA['norm'], $itemB['norm'], $itemA['tokens'], $itemB['tokens']);
 
-                $matchesByItem[$idA][] = [
-                    'id' => $idB,
-                    'answer_id' => $idB,
-                    'student_name' => $itemB['student_name'],
-                    'score' => $score,
-                ];
+                if ($score > 0) {
+                    $matchesByItem[$idA][] = [
+                        'id' => $idB,
+                        'answer_id' => $idB,
+                        'student_name' => $itemB['student_name'],
+                        'score' => $score,
+                        'text' => $itemB['raw_text'],
+                    ];
 
-                $matchesByItem[$idB][] = [
-                    'id' => $idA,
-                    'answer_id' => $idA,
-                    'student_name' => $itemA['student_name'],
-                    'score' => $score,
-                ];
+                    $matchesByItem[$idB][] = [
+                        'id' => $idA,
+                        'answer_id' => $idA,
+                        'student_name' => $itemA['student_name'],
+                        'score' => $score,
+                        'text' => $itemA['raw_text'],
+                    ];
+                }
             }
         }
 
@@ -129,6 +135,7 @@ class TextSimilarityService
 
         foreach ($matchesByItem as $id => $matches) {
             usort($matches, fn (array $x, array $y): int => $y['score'] <=> $x['score']);
+            $matches = array_slice($matches, 0, 10);
 
             $results[$id] = [
                 'highest_score' => $matches !== [] ? $matches[0]['score'] : null,

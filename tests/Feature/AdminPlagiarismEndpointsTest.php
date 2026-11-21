@@ -30,7 +30,7 @@ class AdminPlagiarismEndpointsTest extends TestCase
             ->post(route('admin.reports.session.scan-plagiarism', $session->id));
 
         $response->assertRedirect();
-        $response->assertSessionHas('status');
+        $response->assertSessionHas('sukses');
     }
 
     public function test_admin_can_trigger_ai_detection_for_single_answer(): void

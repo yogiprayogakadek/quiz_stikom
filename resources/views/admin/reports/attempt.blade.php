@@ -475,11 +475,13 @@
                                             @else
                                                 <span class="pill pill-leaf text-xs">{{ $simScore }}% mirip (aman)</span>
                                             @endif
+                                        @elseif ($aktifEssay['similarity_checked_at'])
+                                            <span class="pill pill-neutral text-xs">Tidak ada pembanding</span>
                                         @else
                                             <span class="pill pill-neutral text-xs">Belum dipindai</span>
                                         @endif
                                     </div>
-                                    @if ($topMatch)
+                                    @if ($topMatch && ($topMatch['score'] ?? 0) >= 20)
                                         <button
                                             type="button"
                                             class="btn btn-secondary text-xs !py-1 !px-2.5 min-h-8"

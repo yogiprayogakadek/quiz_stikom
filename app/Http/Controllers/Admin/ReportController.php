@@ -473,7 +473,7 @@ class ReportController extends Controller
             ]);
         }
 
-        return back()->with('status', 'Audit AI selesai.');
+        return back()->with('sukses', 'Audit AI selesai.');
     }
 
     public function scanPlagiarism(Request $request, QuizSession $session, TextSimilarityService $service): RedirectResponse|JsonResponse
@@ -487,7 +487,7 @@ class ReportController extends Controller
             ]);
         }
 
-        return back()->with('status', 'Pemindaian kemiripan selesai.');
+        return back()->with('sukses', 'Pemindaian kemiripan selesai.');
     }
 
     public function export(QuizSession $session): StreamedResponse

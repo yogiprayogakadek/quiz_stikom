@@ -31,6 +31,9 @@ class PlagiarismUiTest extends TestCase
 
         $response->assertOk()
             ->assertSee('85% mirip')
+            ->assertSee('Bandingkan')
+            ->assertSee('Perbandingan Jawaban Essay')
+            ->assertSee('Budi Santoso')
             ->assertSee('Audit AI');
     }
 

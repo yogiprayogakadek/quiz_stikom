@@ -69,4 +69,25 @@ class TextSimilarityServiceTest extends TestCase
         $this->assertNull($res[10]['highest_score']);
         $this->assertSame([], $res[10]['matches']);
     }
+
+    public function test_find_matches_includes_text_and_excludes_zero_scores(): void
+    {
+        $service = new TextSimilarityService();
+        $answers = [
+            ['id' => 1, 'user_id' => 1, 'student_name' => 'Ali', 'text' => 'Algoritma Dijkstra mencari lintasan terpendek graf.'],
+            ['id' => 2, 'user_id' => 2, 'student_name' => 'Budi', 'text' => 'Algoritma Dijkstra menemukan rute lintasan terpendek graf berbobot.'],
+            ['id' => 3, 'user_id' => 3, 'student_name' => 'Cici', 'text' => 'Bunga mawar merah harum mewangi sepanjang hari.'],
+        ];
+
+        $matches = $service->findMatches($answers);
+
+        // Ali and Budi should match and contain text
+        $this->assertNotEmpty($matches[1]['matches']);
+        $this->assertArrayHasKey('text', $matches[1]['matches'][0]);
+        $this->assertSame('Algoritma Dijkstra menemukan rute lintasan terpendek graf berbobot.', $matches[1]['matches'][0]['text']);
+
+        // Ali and Cici share 0 similarity, so Cici should not be in Ali's matches
+        $matchedIds = array_column($matches[1]['matches'], 'id');
+        $this->assertNotContains(3, $matchedIds);
+    }
 }
