@@ -12,8 +12,16 @@ class OpenCodeHealthCommand extends Command
 
     protected $description = 'Check the OpenCode API and list the free models';
 
-    public function handle(OpenCodeClient $client): int
+    public function handle(): int
     {
+        try {
+            $client = app(OpenCodeClient::class);
+        } catch (OpenCodeException $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
+
         if (! $client->health()) {
             $this->error('OpenCode API is not reachable.');
 
