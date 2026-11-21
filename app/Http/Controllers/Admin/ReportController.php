@@ -159,6 +159,7 @@ class ReportController extends Controller
                 'ai_suggested_score' => $answer?->ai_suggested_score,
                 'ai_confidence' => $answer?->ai_confidence,
                 'ai_feedback' => $answer?->ai_feedback,
+                'ai_suggestions_json' => $answer?->ai_suggestions_json ?? [],
                 'ai_reviewed_at' => $answer?->ai_reviewed_at,
                 'ai_mode' => $saranTerakhir?->metadata['mode'] ?? null,
                 'similarity_score' => $answer?->similarity_score,
@@ -192,6 +193,14 @@ class ReportController extends Controller
             ->map(fn (array $baris) => [
                 'id' => $baris['answer_id'],
                 'url' => route('admin.answers.ai-suggestion', $baris['answer_id']),
+            ])
+            ->values();
+
+        $auditTujuan = $essayRincian
+            ->filter(fn (array $baris) => $baris['dijawab'])
+            ->map(fn (array $baris) => [
+                'id' => $baris['answer_id'],
+                'url' => route('admin.answers.audit-and-evaluate', $baris['answer_id']),
             ])
             ->values();
 
@@ -251,6 +260,7 @@ class ReportController extends Controller
             'pesertaBerikutnya',
             'saranEssay',
             'saranTujuan',
+            'auditTujuan',
         ));
     }
 

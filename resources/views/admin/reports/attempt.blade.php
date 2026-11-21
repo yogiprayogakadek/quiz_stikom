@@ -135,12 +135,14 @@
             class="mt-6 card"
             aria-labelledby="judul-ruang-penilaian"
             data-saran-tujuan='@json($saranTujuan)'
+            data-audit-tujuan='@json($auditTujuan)'
             x-data="{
                 awal: '',
                 kini: '',
                 catatanAwal: '',
                 catatanKini: '',
                 saranTujuan: [],
+                auditTujuan: [],
                 saranTotal: 0,
                 saranMassal: false,
                 saranBerhenti: false,
@@ -152,6 +154,7 @@
                     this.awal = this.kini = this.$refs.nilai?.value ?? '';
                     this.catatanAwal = this.catatanKini = this.$refs.catatan?.value ?? '';
                     this.saranTujuan = JSON.parse(this.$el.dataset.saranTujuan || '[]');
+                    this.auditTujuan = JSON.parse(this.$el.dataset.auditTujuan || '[]');
                     this.saranTotal = this.saranTujuan.length;
                 },
                 get kotor() {
@@ -159,6 +162,89 @@
                 },
                 get saranPersen() {
                     return this.saranTotal > 0 ? Math.round((this.saranSelesai / this.saranTotal) * 100) : 0;
+                },
+                terapkanMode(mode, score, feedback) {
+                    this.kini = score;
+                    if (this.$refs.nilai) {
+                        this.$refs.nilai.value = score;
+                    }
+                    if (this.$refs.catatan && feedback) {
+                        this.$refs.catatan.value = feedback;
+                        this.catatanKini = feedback;
+                    }
+                },
+                async auditSemuaEssay() {
+                    if (this.saranMassal || this.auditTujuan.length === 0) return;
+                    if (this.kotor) return;
+
+                    const dialog = this.$refs.dialogSaran;
+                    if (dialog.open) dialog.close();
+
+                    this.saranMassal = true;
+                    this.saranBerhenti = false;
+                    this.saranSelesai = 0;
+                    this.saranGagal = 0;
+                    this.saranPesan = '';
+                    this.saranTotal = this.auditTujuan.length;
+                    dialog.showModal();
+                    let pesanTerakhir = '';
+
+                    for (const tujuan of [...this.auditTujuan]) {
+                        if (this.saranBerhenti) break;
+
+                        let hasil;
+                        try {
+                            hasil = await window.kuisFetch(tujuan.url, {
+                                method: 'POST',
+                                progress: false,
+                                headers: { Accept: 'application/json' },
+                            });
+                        } catch {
+                            this.saranMassal = false;
+                            this.saranPesan = 'Koneksi terputus saat audit & saran. Data yang sudah diproses tetap tersimpan.';
+                            return;
+                        }
+
+                        if (!hasil.ok || !hasil.data?.ok) {
+                            const pesan = hasil.data?.pesan ?? 'Audit & saran gagal diproses.';
+                            if (!hasil.ok || hasil.data?.transient) {
+                                this.saranMassal = false;
+                                this.saranPesan = pesan;
+                                return;
+                            }
+
+                            this.saranGagal++;
+                            pesanTerakhir = pesan;
+                            this.auditTujuan = this.auditTujuan.filter((item) => item.id !== tujuan.id);
+                            if (this.saranBerhenti) break;
+
+                            continue;
+                        }
+
+                        this.saranSelesai++;
+                        this.auditTujuan = this.auditTujuan.filter((item) => item.id !== tujuan.id);
+                        if (this.saranBerhenti) break;
+                    }
+
+                    this.saranMassal = false;
+
+                    if (this.saranBerhenti) {
+                        const lewat = this.saranGagal > 0 ? ` ${this.saranGagal} essay dilewati.` : '';
+                        this.saranPesan = `${this.saranSelesai} selesai.${lewat} Proses dihentikan. Data yang sudah diproses tetap tersimpan.`;
+                        return;
+                    }
+
+                    if (this.saranGagal > 0) {
+                        this.saranPesan = `${this.saranSelesai} selesai, ${this.saranGagal} essay dilewati. ${pesanTerakhir}`;
+                        return;
+                    }
+
+                    if (this.kotor) {
+                        this.saranPesan = 'Audit & saran selesai. Simpan penilaian manual dulu, lalu muat ulang halaman.';
+                        return;
+                    }
+
+                    window.location.reload();
                 },
                 async mintaSemuaSaran() {
                     if (this.saranMassal || this.saranTujuan.length === 0) return;
@@ -270,6 +356,18 @@
                         </select>
                         <p id="bantuan-mode-saran-ai" class="help mt-1">Ketat menilai hanya poin yang jelas memenuhi rubrik. Longgar lebih toleran pada detail kecil.</p>
                     </div>
+                    @if ($auditTujuan->isNotEmpty())
+                        <button
+                            type="button"
+                            class="btn btn-primary min-h-11 text-xs"
+                            @click="auditSemuaEssay"
+                            :disabled="saranMassal || kotor"
+                            :aria-busy="saranMassal"
+                        >
+                            <x-icon name="sparkles" :size="14" />
+                            Audit &amp; Saran Semua Essay
+                        </button>
+                    @endif
                     @if ($saranEssay['tanpa'] > 0)
                         <button
                             type="button"
@@ -534,10 +632,59 @@
                                         <p class="text-sm font-bold text-ink">Saran AI</p>
                                         <p class="text-xs text-ink-subtle">Bukan nilai final. Hanya terlihat oleh admin.</p>
                                     </div>
-                                    <button type="submit" form="essay-ai-{{ $aktifEssay['answer_id'] }}" class="btn btn-secondary min-h-11 text-xs">
-                                        {{ $aktifEssay['ai_reviewed_at'] ? 'Buat ulang saran' : 'Minta saran AI' }}
-                                    </button>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        @if ($aktifEssay['answer_id'])
+                                            <form method="POST" action="{{ route('admin.answers.audit-and-evaluate', $aktifEssay['answer_id']) }}">
+                                                @csrf
+                                                <button type="submit" class="btn btn-secondary text-xs !py-1 !px-2.5 min-h-8">
+                                                    <x-icon name="sparkles" :size="14" />
+                                                    {{ ! empty($aktifEssay['ai_suggestions_json']) ? 'Audit Ulang & Saran' : 'Audit & Buat Saran' }}
+                                                </button>
+                                            </form>
+                                        @endif
+                                        <button type="submit" form="essay-ai-{{ $aktifEssay['answer_id'] }}" class="btn btn-ghost min-h-8 text-xs !py-1 !px-2">
+                                            {{ $aktifEssay['ai_reviewed_at'] ? 'Buat ulang saran' : 'Minta saran AI' }}
+                                        </button>
+                                    </div>
                                 </div>
+                                @if (! empty($aktifEssay['ai_suggestions_json']))
+                                    @php $sug = $aktifEssay['ai_suggestions_json']; @endphp
+                                    <div class="mt-3 rounded-xl border border-brand/20 bg-brand-soft/20 p-3">
+                                        <p class="text-xs font-bold uppercase tracking-wider text-brand-deep">Pilihan Saran Rubrik (Klik untuk Terapkan):</p>
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            @if (isset($sug['ketat']))
+                                                <button
+                                                    type="button"
+                                                    class="pill border border-coral text-coral-deep hover:bg-coral-soft/50 font-bold text-xs transition cursor-pointer"
+                                                    @click="terapkanMode('ketat', {{ (int) $sug['ketat']['score'] }}, @js($sug['ketat']['feedback'] ?? ''))"
+                                                    title="{{ $sug['ketat']['feedback'] ?? '' }}"
+                                                >
+                                                    Ketat: {{ $sug['ketat']['score'] }}
+                                                </button>
+                                            @endif
+                                            @if (isset($sug['seimbang']))
+                                                <button
+                                                    type="button"
+                                                    class="pill border border-brand text-brand-deep hover:bg-brand-soft/50 font-bold text-xs transition cursor-pointer"
+                                                    @click="terapkanMode('seimbang', {{ (int) $sug['seimbang']['score'] }}, @js($sug['seimbang']['feedback'] ?? ''))"
+                                                    title="{{ $sug['seimbang']['feedback'] ?? '' }}"
+                                                >
+                                                    Seimbang: {{ $sug['seimbang']['score'] }}
+                                                </button>
+                                            @endif
+                                            @if (isset($sug['longgar']))
+                                                <button
+                                                    type="button"
+                                                    class="pill border border-leaf text-leaf-deep hover:bg-leaf-soft/50 font-bold text-xs transition cursor-pointer"
+                                                    @click="terapkanMode('longgar', {{ (int) $sug['longgar']['score'] }}, @js($sug['longgar']['feedback'] ?? ''))"
+                                                    title="{{ $sug['longgar']['feedback'] ?? '' }}"
+                                                >
+                                                    Longgar: {{ $sug['longgar']['score'] }}
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endif
                                 @if ($aktifEssay['ai_reviewed_at'])
                                     <p class="mt-2 text-sm text-ink">
                                         Saran nilai <strong>{{ $aktifEssay['ai_suggested_score'] }} / {{ $aktifEssay['bobot'] }}</strong>, keyakinan {{ $aktifEssay['ai_confidence'] }}%.
