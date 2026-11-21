@@ -15,8 +15,11 @@ Gunakan sebelum deploy pertama dan setiap perubahan besar.
 ## Database dan antrean
 
 - `php artisan migrate --force` dijalankan saat deploy
-- Queue worker berjalan dengan Supervisor/systemd dan di-restart setiap deploy
-- `DB_QUEUE_RETRY_AFTER` lebih besar dari timeout job terpanjang
+- Redis hanya mendengarkan localhost, memakai AOF, dan kebijakan `noeviction`
+- Session, cache, rate limit, dan queue memakai Redis dengan database terpisah
+- Worker `realtime` dan `default` berjalan terpisah lewat Supervisor/systemd
+- Reverb berjalan dengan autorestart dan diproxy melalui Nginx
+- `REDIS_QUEUE_RETRY_AFTER` lebih besar dari timeout job terpanjang
 - Scheduler berjalan untuk tugas terjadwal
 - Failed jobs dipantau dari **Master → Sistem**
 
@@ -35,6 +38,7 @@ Gunakan sebelum deploy pertama dan setiap perubahan besar.
 - Akses master dibatasi dan password kuat
 - Maintenance diaktifkan saat perubahan berisiko
 - Prosedur pemulihan: `docs/operations/recovery.md`
+- Runbook ujian aktif: `docs/operations/exam-reliability.md`
 
 ## Setelah deploy
 

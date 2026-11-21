@@ -114,19 +114,29 @@ DB_DATABASE=db_quiz
 DB_USERNAME=kuis
 DB_PASSWORD=password-database
 
-QUEUE_CONNECTION=database
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+SESSION_DRIVER=redis
+SESSION_CONNECTION=session
 BROADCAST_CONNECTION=reverb
+
+REDIS_HOST=127.0.0.1
+REDIS_DB=0
+REDIS_CACHE_DB=1
+REDIS_SESSION_DB=2
+REDIS_QUEUE_CONNECTION=default
+REDIS_QUEUE_RETRY_AFTER=240
 
 REVERB_APP_ID=isi-angka
 REVERB_APP_KEY=isi-kunci
 REVERB_APP_SECRET=isi-rahasia
-REVERB_HOST=192.168.1.10
-REVERB_SERVER_HOST=0.0.0.0
+REVERB_HOST=127.0.0.1
+REVERB_SERVER_HOST=127.0.0.1
 REVERB_PORT=8080
 REVERB_SCHEME=http
 VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
 VITE_REVERB_HOST=192.168.1.10
-VITE_REVERB_PORT="${REVERB_PORT}"
+VITE_REVERB_PORT=80
 VITE_REVERB_SCHEME="${REVERB_SCHEME}"
 ```
 
@@ -158,6 +168,15 @@ server {
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ ^/(app|apps) {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_read_timeout 60s;
+        proxy_pass http://127.0.0.1:8080;
     }
 
     location ~ \.php$ {
@@ -193,7 +212,7 @@ Supervisor, `/etc/supervisor/conf.d/skylearn-reverb.conf`:
 
 ```ini
 [program:skylearn-reverb]
-command=php /var/www/skylearn-kuis/artisan reverb:start --host=0.0.0.0 --port=8080
+command=php /var/www/skylearn-kuis/artisan reverb:start --host=127.0.0.1 --port=8080
 directory=/var/www/skylearn-kuis
 autostart=true
 autorestart=true
@@ -203,7 +222,7 @@ stdout_logfile=/var/log/skylearn-reverb.log
 stopwaitsecs=10
 ```
 
-Reverb hanya menangani WebSocket. Nginx tidak perlu menjadi reverse proxy untuk port 8080 bila browser terhubung langsung ke server. Bila sekolah memakai HTTPS atau satu port saja, tambahkan reverse proxy WebSocket ke `127.0.0.1:8080` dan ubah `REVERB_SCHEME=https`.
+Reverb hanya mendengarkan localhost. Browser mengakses WebSocket melalui Nginx pada port aplikasi yang sama.
 
 ### 4. Queue worker
 
@@ -212,16 +231,25 @@ Broadcast dan penutupan soal berjalan lewat queue. Tanpa worker, realtime tertun
 `/etc/supervisor/conf.d/skylearn-queue.conf`:
 
 ```ini
-[program:skylearn-queue]
-command=php /var/www/skylearn-kuis/artisan queue:work --tries=1 --timeout=90
+[program:skylearn-realtime]
+command=php /var/www/skylearn-kuis/artisan queue:work redis --queue=realtime --tries=1 --timeout=30 --max-time=3600
 directory=/var/www/skylearn-kuis
 autostart=true
 autorestart=true
 user=www-data
-numprocs=1
 redirect_stderr=true
-stdout_logfile=/var/log/skylearn-queue.log
-stopwaitsecs=60
+stdout_logfile=/var/log/skylearn-realtime.log
+stopwaitsecs=40
+
+[program:skylearn-default]
+command=php /var/www/skylearn-kuis/artisan queue:work redis --queue=default --tries=1 --timeout=180 --max-time=3600
+directory=/var/www/skylearn-kuis
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/skylearn-default.log
+stopwaitsecs=190
 ```
 
 Muat konfigurasi:
@@ -229,7 +257,7 @@ Muat konfigurasi:
 ```bash
 sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl start skylearn-reverb skylearn-queue
+sudo supervisorctl start skylearn-reverb skylearn-realtime skylearn-default
 ```
 
 ### 5. Penutup attempt kedaluwarsa
@@ -244,14 +272,13 @@ Perintah yang dijalankan: `kuis:tutup-attempt-kedaluwarsa`, setiap menit.
 
 ### 6. Firewall
 
-Buka port 80 untuk aplikasi dan port 8080 untuk Reverb:
+Buka hanya port aplikasi. Redis dan Reverb tetap di localhost:
 
 ```bash
 sudo ufw allow 80/tcp
-sudo ufw allow 8080/tcp
 ```
 
-Bila Reverb dimatikan dengan sengaja, set `BROADCAST_CONNECTION=log` di `.env`, lalu jalankan `php artisan config:cache`. Aplikasi tetap berjalan lewat polling setiap tiga detik. Jangan biarkan `BROADCAST_CONNECTION=reverb` saat Reverb tidak hidup: setiap broadcast menunggu koneksi gagal dan permainan terasa lambat.
+Jika Reverb berhenti, penyimpanan jawaban tetap selesai setelah commit database dan polling mengambil alih. Pulihkan Reverb lewat Supervisor tanpa me-restart MySQL.
 
 ## Alamat penting
 
@@ -284,13 +311,21 @@ Unduh contoh dari `/admin/participants/template`. Kolom yang dibaca: `nama` dan 
 
 ## Uji beban
 
-Skrip k6 ada di `tests/load/k6-peserta.js`. Skrip ini membuat 100 peserta virtual yang login, membuka dashboard, dan memuat state sesi. Jalankan setelah aplikasi dan database siap:
+Skrip k6 ada di `tests/load/k6-peserta.js`. Secara default skrip menjalankan 100 peserta selama 10 menit, polling status, dan menjawab soal PG yang sedang dibuka. Token display dan akun admin dapat ditambahkan agar kedua monitor ikut berjalan:
 
 ```bash
-k6 run -e BASE_URL=http://192.168.1.10 -e SESSION_ID=1 tests/load/k6-peserta.js
+k6 run \
+  -e BASE_URL=http://192.168.1.10 \
+  -e SESSION_ID=1 \
+  -e DISPLAY_TOKEN=token-display \
+  -e ADMIN_USERNAME=admin \
+  -e ADMIN_PASSWORD=password-admin \
+  tests/load/k6-peserta.js
 ```
 
-Buat sesi uji dan akun peserta terlebih dahulu. Skrip tidak membuat akun dan tidak mengirim jawaban, jadi aman dijalankan di sesi latihan.
+Buat sesi simulasi dan akun `peserta1` sampai `peserta100` terlebih dahulu. Untuk menguji autosave essay Mode Acak, siapkan attempt berurutan lalu tambahkan `ATTEMPT_ID_BASE` dan `ESSAY_QUESTION_ID`. Jalankan hanya pada sesi simulasi karena skrip benar-benar menyimpan jawaban. Target lulus: error di bawah 1%, p95 status di bawah 500 ms, dan p95 simpan jawaban di bawah 750 ms.
+
+Konfigurasi Redis, PHP-FPM, log waktu Nginx, runbook insiden, dan uji gangguan dijelaskan di `docs/operations/exam-reliability.md`.
 
 ## Perintah berguna
 

@@ -3,9 +3,11 @@ import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 import './tour';
 import { calculateExpression, calculateSubnet } from './exam-tools';
+import { createPollingLoop } from './polling';
 
 window.Pusher = Pusher;
 window.Alpine = Alpine;
+window.mulaiPolling = createPollingLoop;
 
 window.examToolsPanel = (tools = []) => ({
     tools,

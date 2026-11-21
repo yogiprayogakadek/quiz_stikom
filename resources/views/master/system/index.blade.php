@@ -13,6 +13,26 @@
         $lastBackupAt = $snapshot['last_backup'] !== null
             ? \Illuminate\Support\Carbon::createFromTimestamp($snapshot['last_backup']['diubah'])
             : null;
+        $realtimeTerlambat = $snapshot['queue_sizes']['realtime'] > 20
+            || ($snapshot['queue_oldest_age_seconds']['realtime'] ?? 0) > 10;
+        $redisBermasalah = $snapshot['redis']['configured']
+            && (! $snapshot['redis']['available'] || ($snapshot['redis']['latency_ms'] ?? 0) > 50);
+        $databaseLambat = $snapshot['database_latency_ms'] === null || $snapshot['database_latency_ms'] > 200;
+        $reverbBermasalah = config('broadcasting.default') === 'reverb' && ! $snapshot['reverb']['available'];
+        $diskMenipis = $snapshot['disk_free'] !== null && $snapshot['disk_total']
+            ? ($snapshot['disk_free'] / $snapshot['disk_total']) < 0.15
+            : false;
+        $operasionalSiap = ! $snapshot['debug']
+            && $snapshot['failed_jobs'] === 0
+            && $snapshot['mail_configured']
+            && $lastBackupAt !== null
+            && $lastBackupAt->gte(now()->subDays(7))
+            && ! $realtimeTerlambat
+            && $snapshot['redis']['configured']
+            && ! $redisBermasalah
+            && ! $databaseLambat
+            && ! $reverbBermasalah
+            && ! $diskMenipis;
     @endphp
 
     <div class="space-y-6">
@@ -26,6 +46,23 @@
                 @if ($snapshot['failed_jobs'] > 0)
                     <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">{{ number_format($snapshot['failed_jobs'], 0, ',', '.') }} job gagal.</span> Periksa pesan di bawah, lalu retry atau hapus.</span></li>
                 @endif
+                @if (! $snapshot['redis']['configured'])
+                    <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-sun-deep" /> <span><span class="font-bold text-ink">Redis belum digunakan.</span> Session, cache, dan antrean masih dapat membebani database utama saat ujian ramai.</span></li>
+                @elseif ($redisBermasalah)
+                    <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Redis tidak sehat.</span> {{ $snapshot['redis']['error'] ?: 'Latensi melebihi 50 ms.' }}</span></li>
+                @endif
+                @if ($realtimeTerlambat)
+                    <li class="flex gap-2"><x-icon name="clock" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Antrean realtime tertunda.</span> {{ number_format($snapshot['queue_sizes']['realtime'], 0, ',', '.') }} job menunggu; periksa worker realtime.</span></li>
+                @endif
+                @if ($reverbBermasalah)
+                    <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Reverb tidak terjangkau.</span> Polling tetap bekerja, tetapi pembaruan realtime tertunda.</span></li>
+                @endif
+                @if ($databaseLambat)
+                    <li class="flex gap-2"><x-icon name="clock" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Database lambat atau tidak terjangkau.</span> Latensi pemeriksaan melebihi 200 ms.</span></li>
+                @endif
+                @if ($diskMenipis)
+                    <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Ruang disk kurang dari 15%.</span> Kosongkan log atau backup lama sebelum ujian.</span></li>
+                @endif
                 @if (! $snapshot['mail_configured'])
                     <li class="flex gap-2"><x-icon name="mail" :size="18" class="mt-0.5 shrink-0 text-sun-deep" /> <span><span class="font-bold text-ink">SMTP platform belum diatur.</span> Email verifikasi dan reset password tidak akan terkirim. <a href="{{ route('master.mail.edit') }}" class="font-bold text-brand-deep underline-offset-2 hover:underline">Atur email</a>.</span></li>
                 @endif
@@ -34,7 +71,7 @@
                 @elseif ($lastBackupAt->lt(now()->subDays(7)))
                     <li class="flex gap-2"><x-icon name="clock" :size="18" class="mt-0.5 shrink-0 text-sun-deep" /> <span><span class="font-bold text-ink">Backup terakhir {{ $lastBackupAt->diffForHumans() }}.</span> Backup rutin disarankan minimal mingguan.</span></li>
                 @endif
-                @if (! $snapshot['debug'] && $snapshot['failed_jobs'] === 0 && $snapshot['mail_configured'] && $lastBackupAt !== null && $lastBackupAt->gte(now()->subDays(7)))
+                @if ($operasionalSiap)
                     <li class="flex gap-2"><x-icon name="check" :size="18" class="mt-0.5 shrink-0 text-leaf-deep" /> <span>Tidak ada peringatan operasional saat ini.</span></li>
                 @endif
             </ul>
@@ -44,7 +81,11 @@
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 id="job-gagal" class="text-xl">Job gagal</h2>
-                    <p class="mt-1 text-sm text-ink-muted">Antrean menunggu: {{ number_format($snapshot['pending_jobs'], 0, ',', '.') }} · Queue: <span class="font-mono">{{ $snapshot['queue'] }}</span></p>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        Realtime: {{ number_format($snapshot['queue_sizes']['realtime'], 0, ',', '.') }} ·
+                        Default: {{ number_format($snapshot['queue_sizes']['default'], 0, ',', '.') }} ·
+                        Driver: <span class="font-mono">{{ $snapshot['queue'] }}</span>
+                    </p>
                 </div>
             </div>
 
@@ -161,6 +202,30 @@
                             @if (! $snapshot['mail_configured'])
                                 · <a href="{{ route('master.mail.edit') }}" class="text-brand-deep underline-offset-2 hover:underline">Atur</a>
                             @endif
+                        </dd>
+                    </div>
+                    <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">
+                        <dt class="text-ink-muted">Redis</dt>
+                        <dd class="text-right font-bold {{ $snapshot['redis']['available'] ? 'text-leaf-deep' : 'text-coral-deep' }}">
+                            @if (! $snapshot['redis']['configured'])
+                                Belum digunakan
+                            @elseif ($snapshot['redis']['available'])
+                                Siap · {{ number_format($snapshot['redis']['latency_ms'], 2, ',', '.') }} ms
+                            @else
+                                Tidak terjangkau
+                            @endif
+                        </dd>
+                    </div>
+                    <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">
+                        <dt class="text-ink-muted">Database</dt>
+                        <dd class="text-right font-bold {{ $databaseLambat ? 'text-coral-deep' : 'text-leaf-deep' }}">
+                            {{ $snapshot['database_latency_ms'] === null ? 'Tidak terjangkau' : number_format($snapshot['database_latency_ms'], 2, ',', '.').' ms' }}
+                        </dd>
+                    </div>
+                    <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">
+                        <dt class="text-ink-muted">Reverb</dt>
+                        <dd class="text-right font-bold {{ $snapshot['reverb']['available'] ? 'text-leaf-deep' : 'text-coral-deep' }}">
+                            {{ $snapshot['reverb']['available'] ? 'Siap · '.number_format($snapshot['reverb']['latency_ms'], 2, ',', '.').' ms' : 'Tidak terjangkau' }}
                         </dd>
                     </div>
                     <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">

@@ -2,16 +2,18 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnRealtimeQueue;
 use App\Models\QuizSession;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
-class SesiStatusUpdated implements ShouldBroadcastNow
+class SesiStatusUpdated implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use BroadcastsOnRealtimeQueue, Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
         public QuizSession $session,
@@ -23,7 +25,7 @@ class SesiStatusUpdated implements ShouldBroadcastNow
         try {
             static::dispatch($session, $extra);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('SesiStatusUpdated broadcast error: ' . $e->getMessage());
+            Log::warning('SesiStatusUpdated broadcast error: '.$e->getMessage());
         }
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnRealtimeQueue;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -10,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SoalDibuka implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use BroadcastsOnRealtimeQueue, Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
         public int $sessionId,

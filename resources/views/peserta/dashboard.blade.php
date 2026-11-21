@@ -10,6 +10,8 @@
             rulesAction: '',
             rulesUrl: '',
             rulesAccepted: false,
+            polling: null,
+            eventSesiTertunda: null,
 
             get filteredSesiList() {
                 if (!this.cari.trim()) return this.sesiList;
@@ -23,8 +25,12 @@
 
             init() {
                 this.pasangEcho();
-                // Polling latar belakang berkala (setiap 3 detik) sebagai jaminan cadangan
-                setInterval(() => this.muat(), 3000);
+                this.polling = window.mulaiPolling(() => {
+                    const eventData = this.eventSesiTertunda;
+                    this.eventSesiTertunda = null;
+                    return this.muat(eventData);
+                }, { interval: 5000 });
+                this.polling.start();
 
                 const unlockAudio = () => {
                     this.initAudio();
@@ -133,7 +139,8 @@
 
                 echo.channel('quiz-sessions')
                     .listen('.SesiStatusUpdated', (data) => {
-                        this.muat(data);
+                        this.eventSesiTertunda = data;
+                        this.polling?.now();
                     });
             },
 
@@ -164,9 +171,12 @@
                         }
 
                         this.sesiList = listBaru;
+                        return true;
                     }
+                    return false;
                 } catch (e) {
                     console.warn('Gagal memuat status sesi:', e);
+                    return false;
                 }
             }
         });

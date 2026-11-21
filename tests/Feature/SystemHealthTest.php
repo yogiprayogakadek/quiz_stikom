@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\DatabaseBackupService;
+use App\Services\SystemHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -23,8 +24,43 @@ class SystemHealthTest extends TestCase
             ->get(route('master.system.index'))
             ->assertOk()
             ->assertSee('Perlu perhatian')
+            ->assertSee('Redis')
+            ->assertSee('Realtime')
+            ->assertSee('Database')
+            ->assertSee('Reverb')
             ->assertSee('Job gagal')
-            ->assertSee('Backup database');
+            ->assertSee('Backup database')
+            ->assertDontSee('Tidak ada peringatan operasional saat ini.');
+    }
+
+    public function test_kesehatan_memisahkan_kedalaman_queue_realtime_dan_default(): void
+    {
+        config(['queue.default' => 'database']);
+
+        DB::table('jobs')->insert([
+            [
+                'queue' => 'realtime',
+                'payload' => '{}',
+                'attempts' => 0,
+                'reserved_at' => null,
+                'available_at' => now()->timestamp,
+                'created_at' => now()->subSeconds(12)->timestamp,
+            ],
+            [
+                'queue' => 'default',
+                'payload' => '{}',
+                'attempts' => 0,
+                'reserved_at' => null,
+                'available_at' => now()->timestamp,
+                'created_at' => now()->timestamp,
+            ],
+        ]);
+
+        $snapshot = app(SystemHealth::class)->snapshot();
+
+        $this->assertSame(['realtime' => 1, 'default' => 1], $snapshot['queue_sizes']);
+        $this->assertGreaterThanOrEqual(12, $snapshot['queue_oldest_age_seconds']['realtime']);
+        $this->assertSame(2, $snapshot['pending_jobs']);
     }
 
     public function test_master_melihat_daftar_backup_sql_saja(): void

@@ -50,6 +50,7 @@
             audioCtx: null,
             notifWaktu300: false,
             notifWaktu60: false,
+            polling: null,
             get current() {
                 return this.questions[this.index] ?? null;
             },
@@ -287,7 +288,8 @@
                 this.pasangPengawas();
                 this.pasangDeteksiKoneksi();
                 this.pasangEcho();
-                setInterval(() => this.cekStatus(), 5000);
+                this.polling = window.mulaiPolling(() => this.cekStatus(), { interval: 10000 });
+                this.polling.start();
 
                 const bukaAudio = () => {
                     try {
@@ -406,7 +408,7 @@
                 }
 
                 if (navigator.onLine && this.antreanOffline.length > 0) {
-                    this.prosesAntrean();
+                    setTimeout(() => this.prosesAntrean(), Math.random() * 2000);
                 }
             },
             simpanAntreanKeStorage() {
@@ -432,7 +434,7 @@
                 window.addEventListener('online', () => {
                     this.isOnline = true;
                     this.peringatan = 'Koneksi internet terhubung kembali. Mengirim antrean jawaban ke server...';
-                    this.prosesAntrean();
+                    setTimeout(() => this.prosesAntrean(), Math.random() * 2000);
                 });
                 window.addEventListener('offline', () => {
                     this.isOnline = false;
@@ -523,8 +525,7 @@
                         break;
                     }
 
-                    // Jeda 750ms per request agar antrean database teratur dan di bawah batas throttle (90 req/menit)
-                    await new Promise((r) => setTimeout(r, 750));
+                    await new Promise((r) => setTimeout(r, 750 + Math.random() * 500));
                 }
 
                 this.sedangSinkron = false;
@@ -970,13 +971,13 @@
             },
             async cekStatus() {
                 if (this.berhenti) {
-                    return;
+                    return true;
                 }
                 let hasil;
                 try {
                     hasil = await window.kuisFetch(config.statusUrl);
                 } catch {
-                    return;
+                    return false;
                 }
                 if (!hasil.ok) {
                     if (hasil.status === 404 || hasil.status === 403) {
@@ -984,7 +985,7 @@
                         this.batalkanToleransi();
                         window.location.href = config.dashboardUrl + '?dikeluarkan=1';
                     }
-                    return;
+                    return false;
                 }
 
                 this.gabungPesan(hasil.data?.pesan ?? []);
@@ -1021,6 +1022,7 @@
                         ? 'Waktu ujian dikurangi karena pelanggaran. Timer sudah diperbarui.'
                         : 'Pelanggaran tercatat. Anda dapat melanjutkan ujian.';
                 }
+                return true;
             },
             async masukLayarPenuh() {
                 const el = document.documentElement;

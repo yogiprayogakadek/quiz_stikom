@@ -34,6 +34,7 @@
             storageKey: 'kuis_serempak_' + config.sessionId,
             antreanOffline: [],
             sedangSinkron: false,
+            polling: null,
             get isFullscreen() {
                 return Boolean(
                     document.fullscreenElement ||
@@ -43,10 +44,10 @@
                 );
             },
             init() {
-                this.muat();
+                this.polling = window.mulaiPolling(() => this.muat(), { interval: 5000 });
+                this.polling.start();
                 this.muatAntreanLokal();
                 this.pasangDeteksiKoneksi();
-                setInterval(() => this.muat(), 3000);
                 setInterval(() => this.hitung(), 250);
                 this.pasangEcho();
                 this.pasangPengawas();
@@ -94,7 +95,7 @@
                 } catch (e) {
                     this.memuat = false;
                     this.error = 'Koneksi terputus. Mencoba memuat status kembali...';
-                    return;
+                    return false;
                 }
                 this.memuat = false;
                 if (!hasil.ok || !hasil.data) {
@@ -105,7 +106,7 @@
                         return;
                     }
                     this.error = 'Gagal memuat status sesi. Mencoba lagi sebentar.';
-                    return;
+                    return false;
                 }
                 this.error = '';
                 this.state = hasil.data;
@@ -141,6 +142,7 @@
                 }
 
                 this.hitung();
+                return true;
             },
             hitung() {
                 if (!this.target) {
@@ -172,7 +174,7 @@
                     this.antreanOffline = [];
                 }
                 if (navigator.onLine && this.antreanOffline.length > 0) {
-                    this.prosesAntrean();
+                    setTimeout(() => this.prosesAntrean(), Math.random() * 2000);
                 }
             },
             simpanAntreanKeStorage() {
@@ -187,7 +189,7 @@
             pasangDeteksiKoneksi() {
                 window.addEventListener('online', () => {
                     this.isOnline = true;
-                    this.prosesAntrean();
+                    setTimeout(() => this.prosesAntrean(), Math.random() * 2000);
                 });
                 window.addEventListener('offline', () => {
                     this.isOnline = false;
@@ -212,6 +214,7 @@
                     } catch (err) {
                         sisa.push(item);
                     }
+                    await new Promise((resolve) => setTimeout(resolve, 750 + Math.random() * 500));
                 }
                 this.antreanOffline = sisa;
                 this.simpanAntreanKeStorage();
@@ -411,8 +414,8 @@
                     return;
                 }
                 echo.private(config.channel)
-                    .listen('.SoalDibuka', () => this.muat())
-                    .listen('.SoalDitutup', () => this.muat())
+                    .listen('.SoalDibuka', () => this.polling?.now())
+                    .listen('.SoalDitutup', () => this.polling?.now())
                     .listen('.SesiSelesai', () => {
                         this.berhenti = true;
                         this.batalkanToleransi();
@@ -422,7 +425,7 @@
                 echo.channel('quiz-sessions')
                     .listen('.SesiStatusUpdated', (data) => {
                         if (data.session_id === {{ $session->id }} && data.action === 'pembahasan_updated') {
-                            this.muat();
+                            this.polling?.now();
                         }
                     });
 

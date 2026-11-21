@@ -14,6 +14,7 @@
             tampilkanSkor: localStorage.getItem('display_tampilkan_skor') !== 'false',
             skorLimit: localStorage.getItem('display_skor_limit') || '5',
             halamanSkor: 1,
+            polling: null,
             toggleSkor() {
                 this.tampilkanSkor = !this.tampilkanSkor;
                 localStorage.setItem('display_tampilkan_skor', this.tampilkanSkor);
@@ -52,8 +53,8 @@
                 );
             },
             init() {
-                this.muat();
-                setInterval(() => this.muat(), 3000);
+                this.polling = window.mulaiPolling(() => this.muat(), { interval: 5000 });
+                this.polling.start();
                 setInterval(() => this.hitung(), 250);
                 this.pasangEcho();
 
@@ -173,8 +174,10 @@
                     }
                     this.terapkan(await response.json());
                     this.error = '';
+                    return true;
                 } catch {
                     this.error = 'Koneksi ke server terputus. Mencoba lagi...';
+                    return false;
                 } finally {
                     this.memuat = false;
                 }
@@ -189,8 +192,7 @@
                     : (data.ends_at ?? 0);
                 this.hitung();
 
-                // Sumber cadangan saat websocket terputus: peringatan terbaru
-                // ikut terbawa di polling 3 detik. Id mencegah duplikat.
+                // Polling membawa peringatan terbaru saat WebSocket terputus.
                 (data.peringatan ?? []).forEach((item) => this.tambahPeringatan(item, !pertamaKali));
             },
             hitung() {

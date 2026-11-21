@@ -468,17 +468,18 @@
                 const proctoringCount = document.getElementById('proctoring-count');
                 const onlineCount = document.getElementById('online-count');
                 let terakhir = null;
+                let polling = null;
 
                 const perbarui = async () => {
-                    if (document.hidden) return;
+                    if (document.hidden) return true;
 
                     try {
                         const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-                        if (!res.ok || res.redirected) return;
+                        if (!res.ok || res.redirected) return false;
 
                         const data = await res.json();
                         const kunci = data.status + data.pembahasan + data.peserta + data.proctoring;
-                        if (kunci === terakhir) return;
+                        if (kunci === terakhir) return true;
 
                         terakhir = kunci;
                         if (bagian.status) bagian.status.innerHTML = data.status;
@@ -504,8 +505,9 @@
                         if (bagian.proctoring) bagian.proctoring.innerHTML = data.proctoring;
                         if (proctoringCount) proctoringCount.textContent = data.proctoring_count;
                         if (onlineCount) onlineCount.textContent = data.online_count;
+                        return true;
                     } catch (e) {
-                        // Jaringan putus sesaat. Putaran berikutnya mencoba lagi.
+                        return false;
                     }
                 };
 
@@ -565,13 +567,13 @@
 
                     echo.channel('session-monitor.' + sessionId)
                         .listen('.SessionMonitorUpdated', () => {
-                            perbarui();
+                            polling?.now();
                         });
 
                     echo.channel('quiz-sessions')
                         .listen('.SesiStatusUpdated', (data) => {
                             if (data.session_id === sessionId) {
-                                perbarui();
+                                polling?.now();
                             }
                         });
 
@@ -579,20 +581,26 @@
                         echo.channel('display.' + @json($session->display_token))
                             .listen('.PesertaPeringatan', (data) => {
                                 tambahKejadian(data);
-                                perbarui();
+                                polling?.now();
                             });
                     @endif
+                };
+
+                const mulaiPolling = () => {
+                    if (typeof window.mulaiPolling !== 'function') return;
+                    polling = window.mulaiPolling(perbarui, { interval: 5000 });
+                    polling.start();
                 };
 
                 // buatEcho didefinisikan di app.js (module) yang dieksekusi setelah parsing,
                 // jadi pasang listener setelah DOM siap.
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', pasangEcho);
+                    document.addEventListener('DOMContentLoaded', mulaiPolling);
                 } else {
                     pasangEcho();
+                    mulaiPolling();
                 }
-                // Polling cadangan (fallback jika koneksi WebSocket terganggu)
-                setInterval(perbarui, 5000);
             })();
         </script>
     @endif

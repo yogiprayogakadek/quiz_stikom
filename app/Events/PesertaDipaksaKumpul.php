@@ -2,16 +2,17 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnRealtimeQueue;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class PesertaDipaksaKumpul implements ShouldBroadcastNow
+class PesertaDipaksaKumpul implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use BroadcastsOnRealtimeQueue, Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
         public int $sessionId,
@@ -25,13 +26,13 @@ class PesertaDipaksaKumpul implements ShouldBroadcastNow
         try {
             static::dispatch($sessionId, $userId, $attemptId, $pesan);
         } catch (\Throwable $e) {
-            Log::warning('PesertaDipaksaKumpul broadcast error: ' . $e->getMessage());
+            Log::warning('PesertaDipaksaKumpul broadcast error: '.$e->getMessage());
         }
     }
 
     public function broadcastOn(): array
     {
-        return [new Channel('session-user.' . $this->sessionId . '.' . $this->userId)];
+        return [new Channel('session-user.'.$this->sessionId.'.'.$this->userId)];
     }
 
     public function broadcastAs(): string

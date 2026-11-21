@@ -5,7 +5,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "test:exam-tools": "node --test tests/js/exam-tools.test.mjs"
+        "test:exam-tools": "node --test tests/js/exam-tools.test.mjs",
+        "test:polling": "node --test tests/js/polling.test.mjs"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
