@@ -36,8 +36,27 @@ class OpenCodeHealthCommand extends Command
             return self::FAILURE;
         }
 
+        $configured = trim((string) config('services.opencode.variant', ''));
+
         $this->info('OpenCode API is reachable.');
         $this->line('Free models: '.implode(', ', array_column($models, 'id')));
+
+        $rows = [];
+
+        foreach ($models as $model) {
+            $variants = [];
+
+            foreach ((array) ($model['variants'] ?? []) as $variant) {
+                if (is_array($variant) && isset($variant['id'])) {
+                    $variants[] = (string) $variant['id'];
+                }
+            }
+
+            $rows[] = [(string) ($model['id'] ?? ''), $variants === [] ? '-' : implode(', ', $variants)];
+        }
+
+        $this->table(['Model', 'Variants'], $rows);
+        $this->line('Configured variant: '.($configured === '' ? 'none' : $configured));
 
         return self::SUCCESS;
     }

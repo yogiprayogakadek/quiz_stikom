@@ -49,6 +49,7 @@ return [
         'password' => env('OPENCODE_PASSWORD'),
         'agent' => env('OPENCODE_AGENT', 'data-processor'),
         'model' => env('OPENCODE_MODEL', 'deepseek-v4.1-flash-free'),
+        'variant' => env('OPENCODE_MODEL_VARIANT'),
         'model_fallbacks' => array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env('OPENCODE_MODEL_FALLBACKS', 'big-pickle,iceman-free')),

@@ -28,7 +28,22 @@ class AiConfigTest extends TestCase
         $this->assertArrayHasKey('username', $config);
         $this->assertArrayHasKey('password', $config);
         $this->assertArrayHasKey('model', $config);
+        $this->assertArrayHasKey('variant', $config);
         $this->assertSame(120, $config['timeout']);
+    }
+
+    public function test_ai_config_memuat_opencode_variant_dari_settings_dan_override(): void
+    {
+        $settings = new AppSetting([
+            'ai_provider' => 'opencode',
+            'opencode_variant' => 'high',
+        ]);
+
+        $config = AiConfig::fromSettings($settings);
+        $this->assertSame('high', $config->opencode['variant']);
+
+        $configOverride = AiConfig::fromSettings($settings, ['opencode_variant' => 'max']);
+        $this->assertSame('max', $configOverride->opencode['variant']);
     }
 
     public function test_ai_config_menimpa_nilai_dari_settings_dan_memakai_default_provider_openai(): void

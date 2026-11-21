@@ -118,6 +118,7 @@ class SettingController extends Controller
                 'opencode_username' => ['nullable', 'string', 'max:100'],
                 'opencode_password' => ['nullable', 'string', 'max:500'],
                 'opencode_model' => ['nullable', 'string', 'max:150'],
+                'opencode_variant' => ['nullable', 'string', 'max:50'],
                 'opencode_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
             ];
         }
@@ -245,6 +246,7 @@ class SettingController extends Controller
             'opencode_username' => ['nullable', 'string', 'max:100'],
             'opencode_password' => ['nullable', 'string', 'max:500'],
             'opencode_model' => ['nullable', 'string', 'max:150'],
+            'opencode_variant' => ['nullable', 'string', 'max:50'],
             'opencode_timeout' => ['nullable', 'integer', 'min:10', 'max:300'],
         ]);
 
@@ -254,6 +256,7 @@ class SettingController extends Controller
             'opencode_username' => $data['opencode_username'] ?? null,
             'opencode_password' => $data['opencode_password'] ?? null,
             'opencode_model' => $data['opencode_model'] ?? null,
+            'opencode_variant' => $data['opencode_variant'] ?? null,
             'opencode_timeout' => $data['opencode_timeout'] ?? null,
         ]);
 

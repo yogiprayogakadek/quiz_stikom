@@ -104,6 +104,89 @@ class OpenCodeTextClientTest extends TestCase
         });
     }
 
+    public function test_chat_menyematkan_variant_jika_model_mendukung(): void
+    {
+        Http::fake([
+            'https://oc.example.test/api/model*' => Http::response(['data' => [
+                [
+                    'id' => 'pilihan-saya',
+                    'providerID' => 'opencode',
+                    'variants' => [
+                        ['id' => 'low'],
+                        ['id' => 'high'],
+                    ],
+                ],
+            ]]),
+            'https://oc.example.test/api/session/ses_var_123/prompt' => Http::response(['data' => ['id' => 'msg_1']]),
+            'https://oc.example.test/api/session/ses_var_123/message' => Http::response(['data' => [
+                [
+                    'type' => 'assistant',
+                    'time' => ['created' => 100],
+                    'content' => [['type' => 'text', 'text' => '{"ok":true}']],
+                ],
+            ]]),
+            'https://oc.example.test/api/session/ses_var_123' => function ($request) {
+                if ($request->method() === 'DELETE') {
+                    return Http::response([], 204);
+                }
+
+                return Http::response(['data' => ['outcome' => 'succeeded', 'time' => ['idle' => 1]]]);
+            },
+            'https://oc.example.test/api/session' => Http::response(['data' => ['id' => 'ses_var_123']], 201),
+        ]);
+
+        $client = $this->client(['variant' => 'high']);
+        $result = $client->chat([['role' => 'user', 'content' => 'tes']], null, 0.7);
+
+        $this->assertSame('{"ok":true}', $result);
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://oc.example.test/api/session'
+                && $request->method() === 'POST'
+                && ($request['model']['variant'] ?? null) === 'high';
+        });
+    }
+
+    public function test_chat_mengabaikan_variant_jika_model_tidak_mendukung(): void
+    {
+        Http::fake([
+            'https://oc.example.test/api/model*' => Http::response(['data' => [
+                [
+                    'id' => 'pilihan-saya',
+                    'providerID' => 'opencode',
+                    'variants' => [
+                        ['id' => 'low'],
+                    ],
+                ],
+            ]]),
+            'https://oc.example.test/api/session/ses_novar_123/prompt' => Http::response(['data' => ['id' => 'msg_1']]),
+            'https://oc.example.test/api/session/ses_novar_123/message' => Http::response(['data' => [
+                [
+                    'type' => 'assistant',
+                    'time' => ['created' => 100],
+                    'content' => [['type' => 'text', 'text' => '{"ok":true}']],
+                ],
+            ]]),
+            'https://oc.example.test/api/session/ses_novar_123' => function ($request) {
+                if ($request->method() === 'DELETE') {
+                    return Http::response([], 204);
+                }
+
+                return Http::response(['data' => ['outcome' => 'succeeded', 'time' => ['idle' => 1]]]);
+            },
+            'https://oc.example.test/api/session' => Http::response(['data' => ['id' => 'ses_novar_123']], 201),
+        ]);
+
+        $client = $this->client(['variant' => 'high']);
+        $result = $client->chat([['role' => 'user', 'content' => 'tes']], null, 0.7);
+
+        $this->assertSame('{"ok":true}', $result);
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://oc.example.test/api/session'
+                && $request->method() === 'POST'
+                && ! isset($request['model']['variant']);
+        });
+    }
+
     public function test_chat_tetap_menghapus_sesi_saat_terjadi_kesalahan(): void
     {
         $deleted = false;

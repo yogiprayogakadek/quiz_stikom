@@ -31,12 +31,13 @@ class ProcessWithOpenCode implements ShouldQueue
         public array $input,
         public ?string $model = null,
         public ?string $agent = null,
+        public ?string $variant = null,
     ) {
     }
 
     public function handle(OpenCodeClient $client): void
     {
-        $result = $client->process($this->prompt(), $this->model, $this->agent);
+        $result = $client->process($this->prompt(), $this->model, $this->agent, $this->variant);
 
         $payload = [
             'status' => 'completed',

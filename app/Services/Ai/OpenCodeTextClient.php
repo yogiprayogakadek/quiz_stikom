@@ -11,6 +11,9 @@ use Throwable;
 
 class OpenCodeTextClient implements TextClient
 {
+    /** @var array<int, array<string, mixed>>|null */
+    private ?array $cachedItems = null;
+
     public function __construct(private readonly AiConfig $config)
     {
     }
@@ -18,6 +21,41 @@ class OpenCodeTextClient implements TextClient
     public function models(int $timeout = 15): array
     {
         return ['OpenCode' => $this->modelsOfType('chat', $timeout)];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public function modelVariants(int $timeout = 15): array
+    {
+        $items = $this->modelItems([], $timeout);
+
+        if ($items === []) {
+            $items = $this->modelItems(['types' => 'chat'], $timeout);
+        }
+
+        $result = [];
+
+        foreach ($items as $item) {
+            if (! is_array($item) || ! isset($item['id'])) {
+                continue;
+            }
+
+            $id = (string) $item['id'];
+            $variants = [];
+
+            foreach ((array) ($item['variants'] ?? []) as $variant) {
+                if (is_array($variant) && isset($variant['id']) && is_string($variant['id'])) {
+                    $variants[] = $variant['id'];
+                }
+            }
+
+            if ($variants !== []) {
+                $result[$id] = $variants;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -56,13 +94,58 @@ class OpenCodeTextClient implements TextClient
      */
     private function modelItems(array $query, int $timeout): array
     {
+        if ($query === [] && $this->cachedItems !== null) {
+            return $this->cachedItems;
+        }
+
         $items = $this->send('get', '/api/model', $query, $timeout)->json('data');
 
         if (! is_array($items)) {
             return [];
         }
 
-        return array_values(array_filter($items, 'is_array'));
+        $result = array_values(array_filter($items, 'is_array'));
+
+        if ($query === []) {
+            $this->cachedItems = $result;
+        }
+
+        return $result;
+    }
+
+    private function resolveVariant(string $model, string $variant, int $timeout): ?string
+    {
+        try {
+            $items = $this->modelItems([], $timeout);
+
+            if ($items === []) {
+                $items = $this->modelItems(['types' => 'chat'], $timeout);
+            }
+        } catch (Throwable) {
+            return null;
+        }
+
+        foreach ($items as $item) {
+            if (! is_array($item) || ($item['id'] ?? null) !== $model) {
+                continue;
+            }
+
+            $variants = $item['variants'] ?? [];
+
+            if (! is_array($variants)) {
+                return null;
+            }
+
+            foreach ($variants as $v) {
+                if (is_array($v) && ($v['id'] ?? null) === $variant) {
+                    return $variant;
+                }
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     public function chat(array $messages, ?string $model, float $temperature): string
@@ -84,10 +167,20 @@ class OpenCodeTextClient implements TextClient
         $agent = (string) config('services.opencode.agent', 'data-processor');
 
         // ponytail: siklus hidup sesi langsung via HTTP tanpa wrapper terpisah
+        $modelPayload = ['id' => $model, 'providerID' => 'opencode'];
+        $variant = trim((string) ($this->config->opencode['variant'] ?? ''));
+
+        if ($variant !== '') {
+            $resolvedVariant = $this->resolveVariant($model, $variant, $timeout);
+            if ($resolvedVariant !== null) {
+                $modelPayload['variant'] = $resolvedVariant;
+            }
+        }
+
         $sessionResponse = $this->send('post', '/api/session', [
             'directory' => $directory,
             'agent' => $agent,
-            'model' => ['id' => $model, 'providerID' => 'opencode'],
+            'model' => $modelPayload,
         ], $timeout, $model);
 
         $sessionId = (string) ($sessionResponse->json('data.id') ?? '');
