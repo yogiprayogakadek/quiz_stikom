@@ -150,6 +150,9 @@
                 saranGagal: 0,
                 saranPesan: '',
                 modeSaran: 'seimbang',
+                saranJeda: false,
+                saranItemError: null,
+                saranResolusiPromise: null,
                 terminalLogs: [],
                 init() {
                     this.awal = this.kini = this.$refs.nilai?.value ?? '';
@@ -169,11 +172,38 @@
                         if (box) box.scrollTop = box.scrollHeight;
                     });
                 },
+                tungguTindakanError(item, pesan) {
+                    this.saranJeda = true;
+                    this.saranItemError = { item, pesan };
+                    this.tambahLog('warn', `[WARN] ${item.label} terkendala: ${pesan}. Proses dijeda.`);
+                    return new Promise((resolve) => {
+                        this.saranResolusiPromise = resolve;
+                    });
+                },
+                lanjutkanSaran(tindakan) {
+                    if (!this.saranResolusiPromise) return;
+                    const item = this.saranItemError?.item;
+                    const labelSoal = item?.label || 'Soal';
+                    const resolve = this.saranResolusiPromise;
+                    this.saranResolusiPromise = null;
+                    this.saranJeda = false;
+                    this.saranItemError = null;
+
+                    if (tindakan === 'retry') {
+                        this.tambahLog('req', `[RETRY] Mencoba ulang ${labelSoal}...`);
+                    } else if (tindakan === 'skip') {
+                        this.tambahLog('info', `[SKIP] ${labelSoal} dilewati. Melanjutkan antrean...`);
+                    } else if (tindakan === 'abort') {
+                        this.tambahLog('info', `[ABORT] Pengguna memilih menghentikan proses.`);
+                    }
+
+                    resolve(tindakan);
+                },
                 get kotor() {
                     return this.kini !== this.awal || this.catatanKini !== this.catatanAwal;
                 },
                 get saranPersen() {
-                    return this.saranTotal > 0 ? Math.round((this.saranSelesai / this.saranTotal) * 100) : 0;
+                    return this.saranTotal > 0 ? Math.round(((this.saranSelesai + this.saranGagal) / this.saranTotal) * 100) : 0;
                 },
                 terapkanMode(mode, score, feedback) {
                     this.kini = score;
@@ -194,6 +224,8 @@
 
                     this.saranMassal = true;
                     this.saranBerhenti = false;
+                    this.saranJeda = false;
+                    this.saranItemError = null;
                     this.saranSelesai = 0;
                     this.saranGagal = 0;
                     this.saranPesan = '';
@@ -203,11 +235,13 @@
                     dialog.showModal();
                     let pesanTerakhir = '';
 
-                    for (const tujuan of [...this.auditTujuan]) {
+                    while (this.auditTujuan.length > 0) {
                         if (this.saranBerhenti) break;
 
+                        const tujuan = this.auditTujuan[0];
                         const t0 = performance.now();
                         const labelSoal = tujuan.urutan ? `Soal #${tujuan.urutan}` : `Jawaban #${tujuan.id}`;
+                        tujuan.label = labelSoal;
                         this.tambahLog('req', `[POST] Memproses ${labelSoal} (ID: ${tujuan.id})...`);
 
                         let hasil;
@@ -219,27 +253,37 @@
                             });
                         } catch {
                             const durasi = ((performance.now() - t0) / 1000).toFixed(1);
-                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): Koneksi terputus.`);
-                            this.saranMassal = false;
-                            this.saranPesan = 'Koneksi terputus saat audit & saran. Data yang sudah diproses tetap tersimpan.';
-                            return;
+                            const pesan = 'Koneksi terputus saat menghubungi server.';
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
+                            const tindakan = await this.tungguTindakanError(tujuan, pesan);
+                            if (tindakan === 'retry') {
+                                continue;
+                            }
+                            if (tindakan === 'abort') {
+                                this.saranBerhenti = true;
+                                break;
+                            }
+                            this.saranGagal++;
+                            pesanTerakhir = pesan;
+                            this.auditTujuan.shift();
+                            continue;
                         }
 
                         if (!hasil.ok || !hasil.data?.ok) {
                             const durasi = ((performance.now() - t0) / 1000).toFixed(1);
                             const pesan = hasil.data?.pesan ?? 'Audit & saran gagal diproses.';
                             this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
-                            if (!hasil.ok || hasil.data?.transient) {
-                                this.saranMassal = false;
-                                this.saranPesan = pesan;
-                                return;
+                            const tindakan = await this.tungguTindakanError(tujuan, pesan);
+                            if (tindakan === 'retry') {
+                                continue;
                             }
-
+                            if (tindakan === 'abort') {
+                                this.saranBerhenti = true;
+                                break;
+                            }
                             this.saranGagal++;
                             pesanTerakhir = pesan;
-                            this.auditTujuan = this.auditTujuan.filter((item) => item.id !== tujuan.id);
-                            if (this.saranBerhenti) break;
-
+                            this.auditTujuan.shift();
                             continue;
                         }
 
@@ -252,11 +296,12 @@
                         this.tambahLog('ok', `[OK] ${labelSoal} selesai (${durasi}s) | Deteksi: ${det} | Skor: ${sug}${modelInfo}`);
 
                         this.saranSelesai++;
-                        this.auditTujuan = this.auditTujuan.filter((item) => item.id !== tujuan.id);
+                        this.auditTujuan.shift();
                         if (this.saranBerhenti) break;
                     }
 
                     this.saranMassal = false;
+                    this.saranJeda = false;
 
                     if (this.saranBerhenti) {
                         this.tambahLog('info', `Proses dihentikan pengguna. ${this.saranSelesai} selesai.`);
@@ -290,6 +335,8 @@
 
                     this.saranMassal = true;
                     this.saranBerhenti = false;
+                    this.saranJeda = false;
+                    this.saranItemError = null;
                     this.saranSelesai = 0;
                     this.saranGagal = 0;
                     this.saranPesan = '';
@@ -299,11 +346,13 @@
                     dialog.showModal();
                     let pesanTerakhir = '';
 
-                    for (const tujuan of [...this.saranTujuan]) {
+                    while (this.saranTujuan.length > 0) {
                         if (this.saranBerhenti) break;
 
+                        const tujuan = this.saranTujuan[0];
                         const t0 = performance.now();
                         const labelSoal = tujuan.urutan ? `Soal #${tujuan.urutan}` : `Jawaban #${tujuan.id}`;
+                        tujuan.label = labelSoal;
                         this.tambahLog('req', `[POST] Meminta saran ${labelSoal} (ID: ${tujuan.id})...`);
 
                         let hasil;
@@ -316,27 +365,37 @@
                             });
                         } catch {
                             const durasi = ((performance.now() - t0) / 1000).toFixed(1);
-                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): Koneksi terputus.`);
-                            this.saranMassal = false;
-                            this.saranPesan = 'Koneksi terputus saat meminta saran. Saran yang sudah jadi tetap tersimpan.';
-                            return;
+                            const pesan = 'Koneksi terputus saat menghubungi server.';
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
+                            const tindakan = await this.tungguTindakanError(tujuan, pesan);
+                            if (tindakan === 'retry') {
+                                continue;
+                            }
+                            if (tindakan === 'abort') {
+                                this.saranBerhenti = true;
+                                break;
+                            }
+                            this.saranGagal++;
+                            pesanTerakhir = pesan;
+                            this.saranTujuan.shift();
+                            continue;
                         }
 
                         if (!hasil.ok || !hasil.data?.ok) {
                             const durasi = ((performance.now() - t0) / 1000).toFixed(1);
                             const pesan = hasil.data?.pesan ?? 'Saran AI gagal dibuat.';
                             this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
-                            if (!hasil.ok || hasil.data?.transient) {
-                                this.saranMassal = false;
-                                this.saranPesan = pesan;
-                                return;
+                            const tindakan = await this.tungguTindakanError(tujuan, pesan);
+                            if (tindakan === 'retry') {
+                                continue;
                             }
-
+                            if (tindakan === 'abort') {
+                                this.saranBerhenti = true;
+                                break;
+                            }
                             this.saranGagal++;
                             pesanTerakhir = pesan;
-                            this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
-                            if (this.saranBerhenti) break;
-
+                            this.saranTujuan.shift();
                             continue;
                         }
 
@@ -346,11 +405,12 @@
                         this.tambahLog('ok', `[OK] ${labelSoal} selesai (${durasi}s)${skorInfo}${confInfo}`);
 
                         this.saranSelesai++;
-                        this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
+                        this.saranTujuan.shift();
                         if (this.saranBerhenti) break;
                     }
 
                     this.saranMassal = false;
+                    this.saranJeda = false;
 
                     if (this.saranBerhenti) {
                         this.tambahLog('info', `Proses dihentikan pengguna. ${this.saranSelesai} selesai.`);
@@ -377,11 +437,18 @@
                 cekTutupSaran(event) {
                     if (! this.saranMassal) return;
                     event.preventDefault();
-                    this.hentikanSaran();
+                    if (this.saranJeda) {
+                        this.lanjutkanSaran('abort');
+                    } else {
+                        this.hentikanSaran();
+                    }
                 },
                 hentikanSaran() {
                     if (! this.saranMassal) return;
                     this.saranBerhenti = true;
+                    if (this.saranJeda) {
+                        this.lanjutkanSaran('abort');
+                    }
                 },
                 cekKeluar(event) {
                     if (! this.kotor) return;
@@ -445,7 +512,7 @@
                 @cancel="cekTutupSaran($event)"
             >
                 <div class="p-5 sm:p-6">
-                    <h3 id="judul-dialog-saran" class="text-xl font-bold" x-text="saranMassal ? 'Membuat saran AI' : 'Saran AI'"></h3>
+                    <h3 id="judul-dialog-saran" class="text-xl font-bold" x-text="saranMassal ? (saranJeda ? 'Proses Dijeda (Kendala)' : 'Membuat saran AI') : 'Saran AI'"></h3>
 
                     <div x-show="saranMassal" class="mt-4">
                         <div class="flex items-end justify-between gap-3">
@@ -469,7 +536,7 @@
                                 </div>
                                 <span class="ml-1 font-semibold text-slate-300">Terminal Log</span>
                             </div>
-                            <span x-text="saranMassal ? 'Memproses...' : (saranBerhenti ? 'Dihentikan' : (saranSelesai > 0 ? 'Selesai' : 'Siap'))" class="text-[10px] uppercase tracking-wider font-semibold" :class="saranMassal ? 'text-sky-400' : 'text-slate-500'"></span>
+                            <span x-text="saranJeda ? 'Dijeda' : (saranMassal ? 'Memproses...' : (saranBerhenti ? 'Dihentikan' : (saranSelesai > 0 ? 'Selesai' : 'Siap')))" class="text-[10px] uppercase tracking-wider font-semibold" :class="saranJeda ? 'text-amber-400' : (saranMassal ? 'text-sky-400' : 'text-slate-500')"></span>
                         </div>
                         <div
                             x-ref="terminalBox"
@@ -484,15 +551,20 @@
                                             'text-emerald-400 font-medium': log.tipe === 'ok',
                                             'text-rose-400 font-medium': log.tipe === 'err',
                                             'text-sky-300': log.tipe === 'req',
-                                            'text-amber-300 font-medium': log.tipe === 'info'
+                                            'text-amber-300 font-medium': log.tipe === 'info',
+                                            'text-amber-400 font-semibold': log.tipe === 'warn'
                                         }"
                                         x-text="log.pesan"
                                     ></span>
                                 </div>
                             </template>
-                            <div x-show="saranMassal" class="flex items-center gap-2 text-slate-500 text-xs pt-1">
+                            <div x-show="saranMassal && !saranJeda" class="flex items-center gap-2 text-slate-500 text-xs pt-1">
                                 <span class="inline-block h-3 w-1.5 animate-pulse bg-emerald-400"></span>
                                 <span class="italic text-[11px] text-slate-400">Memproses antrean request...</span>
+                            </div>
+                            <div x-show="saranJeda" class="flex items-center gap-2 text-amber-400 text-xs pt-1 font-semibold">
+                                <span class="inline-block h-3 w-1.5 animate-pulse bg-amber-400"></span>
+                                <span class="italic text-[11px]">Proses dijeda. Menunggu tindakan...</span>
                             </div>
                             <div x-show="terminalLogs.length === 0" class="text-slate-600 italic text-[11px]">
                                 Menunggu request dimulai...
@@ -500,7 +572,48 @@
                         </div>
                     </div>
 
-                    <div x-show="saranMassal" class="mt-4">
+                    {{-- Kotak Peringatan & Aksi Saat Terjadi Kendala (Jeda) --}}
+                    <div x-show="saranJeda" x-cloak class="mt-4 rounded-xl border border-amber-300/40 bg-amber-500/10 p-4 text-ink">
+                        <div class="flex items-start gap-3">
+                            <div class="mt-0.5 rounded-full bg-amber-500/20 p-1.5 text-amber-600 dark:text-amber-400 shrink-0">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-bold text-amber-900 dark:text-amber-200" x-text="`Kendala pada ${saranItemError?.item?.label ?? 'Soal'}`"></p>
+                                <p class="mt-0.5 text-xs text-amber-800/90 dark:text-amber-300/90 leading-relaxed break-words" x-text="saranItemError?.pesan"></p>
+                            </div>
+                        </div>
+                        <div class="mt-3.5 flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="btn btn-primary min-h-10 text-xs font-semibold"
+                                @click="lanjutkanSaran('retry')"
+                            >
+                                <svg class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Coba lagi soal ini
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary min-h-10 text-xs"
+                                @click="lanjutkanSaran('skip')"
+                            >
+                                Lewati &amp; lanjutkan
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-ghost min-h-10 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                @click="lanjutkanSaran('abort')"
+                            >
+                                Hentikan
+                            </button>
+                        </div>
+                    </div>
+
+                    <div x-show="saranMassal && !saranJeda" class="mt-4">
                         <button type="button" class="btn btn-secondary min-h-11 w-full" @click="hentikanSaran" :disabled="saranBerhenti">
                             <span x-text="saranBerhenti ? 'Menghentikan...' : 'Hentikan'"></span>
                         </button>
