@@ -150,12 +150,24 @@
                 saranGagal: 0,
                 saranPesan: '',
                 modeSaran: 'seimbang',
+                terminalLogs: [],
                 init() {
                     this.awal = this.kini = this.$refs.nilai?.value ?? '';
                     this.catatanAwal = this.catatanKini = this.$refs.catatan?.value ?? '';
                     this.saranTujuan = JSON.parse(this.$el.dataset.saranTujuan || '[]');
                     this.auditTujuan = JSON.parse(this.$el.dataset.auditTujuan || '[]');
                     this.saranTotal = this.saranTujuan.length;
+                },
+                tambahLog(tipe, pesan) {
+                    const d = new Date();
+                    const waktu = [d.getHours(), d.getMinutes(), d.getSeconds()]
+                        .map((n) => String(n).padStart(2, '0'))
+                        .join(':');
+                    this.terminalLogs.push({ waktu, tipe, pesan });
+                    this.$nextTick(() => {
+                        const box = this.$refs.terminalBox;
+                        if (box) box.scrollTop = box.scrollHeight;
+                    });
                 },
                 get kotor() {
                     return this.kini !== this.awal || this.catatanKini !== this.catatanAwal;
@@ -186,11 +198,17 @@
                     this.saranGagal = 0;
                     this.saranPesan = '';
                     this.saranTotal = this.auditTujuan.length;
+                    this.terminalLogs = [];
+                    this.tambahLog('info', `Memulai audit & evaluasi untuk ${this.saranTotal} butir soal essay...`);
                     dialog.showModal();
                     let pesanTerakhir = '';
 
                     for (const tujuan of [...this.auditTujuan]) {
                         if (this.saranBerhenti) break;
+
+                        const t0 = performance.now();
+                        const labelSoal = tujuan.urutan ? `Soal #${tujuan.urutan}` : `Jawaban #${tujuan.id}`;
+                        this.tambahLog('req', `[POST] Memproses ${labelSoal} (ID: ${tujuan.id})...`);
 
                         let hasil;
                         try {
@@ -200,13 +218,17 @@
                                 headers: { Accept: 'application/json' },
                             });
                         } catch {
+                            const durasi = ((performance.now() - t0) / 1000).toFixed(1);
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): Koneksi terputus.`);
                             this.saranMassal = false;
                             this.saranPesan = 'Koneksi terputus saat audit & saran. Data yang sudah diproses tetap tersimpan.';
                             return;
                         }
 
                         if (!hasil.ok || !hasil.data?.ok) {
+                            const durasi = ((performance.now() - t0) / 1000).toFixed(1);
                             const pesan = hasil.data?.pesan ?? 'Audit & saran gagal diproses.';
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
                             if (!hasil.ok || hasil.data?.transient) {
                                 this.saranMassal = false;
                                 this.saranPesan = pesan;
@@ -221,6 +243,14 @@
                             continue;
                         }
 
+                        const durasi = ((performance.now() - t0) / 1000).toFixed(1);
+                        const det = hasil.data?.ai_detection?.score !== undefined ? `${hasil.data.ai_detection.score}% AI` : '-';
+                        const sug = hasil.data?.suggestions
+                            ? `[K:${hasil.data.suggestions.ketat?.score}, S:${hasil.data.suggestions.seimbang?.score}, L:${hasil.data.suggestions.longgar?.score}]`
+                            : '';
+                        const modelInfo = hasil.data?.model ? ` | ${hasil.data.model}` : '';
+                        this.tambahLog('ok', `[OK] ${labelSoal} selesai (${durasi}s) | Deteksi: ${det} | Skor: ${sug}${modelInfo}`);
+
                         this.saranSelesai++;
                         this.auditTujuan = this.auditTujuan.filter((item) => item.id !== tujuan.id);
                         if (this.saranBerhenti) break;
@@ -229,15 +259,19 @@
                     this.saranMassal = false;
 
                     if (this.saranBerhenti) {
+                        this.tambahLog('info', `Proses dihentikan pengguna. ${this.saranSelesai} selesai.`);
                         const lewat = this.saranGagal > 0 ? ` ${this.saranGagal} essay dilewati.` : '';
                         this.saranPesan = `${this.saranSelesai} selesai.${lewat} Proses dihentikan. Data yang sudah diproses tetap tersimpan.`;
                         return;
                     }
 
                     if (this.saranGagal > 0) {
+                        this.tambahLog('info', `Proses selesai dengan catatan: ${this.saranSelesai} selesai, ${this.saranGagal} dilewati.`);
                         this.saranPesan = `${this.saranSelesai} selesai, ${this.saranGagal} essay dilewati. ${pesanTerakhir}`;
                         return;
                     }
+
+                    this.tambahLog('info', `Semua ${this.saranSelesai} soal berhasil diaudit & dievaluasi.`);
 
                     if (this.kotor) {
                         this.saranPesan = 'Audit & saran selesai. Simpan penilaian manual dulu, lalu muat ulang halaman.';
@@ -260,11 +294,17 @@
                     this.saranGagal = 0;
                     this.saranPesan = '';
                     this.saranTotal = this.saranTujuan.length;
+                    this.terminalLogs = [];
+                    this.tambahLog('info', `Memulai pembuatan saran mode ${mode} untuk ${this.saranTotal} butir soal...`);
                     dialog.showModal();
                     let pesanTerakhir = '';
 
                     for (const tujuan of [...this.saranTujuan]) {
                         if (this.saranBerhenti) break;
+
+                        const t0 = performance.now();
+                        const labelSoal = tujuan.urutan ? `Soal #${tujuan.urutan}` : `Jawaban #${tujuan.id}`;
+                        this.tambahLog('req', `[POST] Meminta saran ${labelSoal} (ID: ${tujuan.id})...`);
 
                         let hasil;
                         try {
@@ -275,13 +315,17 @@
                                 body: { mode },
                             });
                         } catch {
+                            const durasi = ((performance.now() - t0) / 1000).toFixed(1);
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): Koneksi terputus.`);
                             this.saranMassal = false;
                             this.saranPesan = 'Koneksi terputus saat meminta saran. Saran yang sudah jadi tetap tersimpan.';
                             return;
                         }
 
                         if (!hasil.ok || !hasil.data?.ok) {
+                            const durasi = ((performance.now() - t0) / 1000).toFixed(1);
                             const pesan = hasil.data?.pesan ?? 'Saran AI gagal dibuat.';
+                            this.tambahLog('err', `[ERR] ${labelSoal} gagal (${durasi}s): ${pesan}`);
                             if (!hasil.ok || hasil.data?.transient) {
                                 this.saranMassal = false;
                                 this.saranPesan = pesan;
@@ -296,6 +340,11 @@
                             continue;
                         }
 
+                        const durasi = ((performance.now() - t0) / 1000).toFixed(1);
+                        const skorInfo = hasil.data?.score !== undefined ? ` | Skor: ${hasil.data.score}` : '';
+                        const confInfo = hasil.data?.confidence !== undefined ? ` (${hasil.data.confidence}% yakin)` : '';
+                        this.tambahLog('ok', `[OK] ${labelSoal} selesai (${durasi}s)${skorInfo}${confInfo}`);
+
                         this.saranSelesai++;
                         this.saranTujuan = this.saranTujuan.filter((item) => item.id !== tujuan.id);
                         if (this.saranBerhenti) break;
@@ -304,15 +353,19 @@
                     this.saranMassal = false;
 
                     if (this.saranBerhenti) {
+                        this.tambahLog('info', `Proses dihentikan pengguna. ${this.saranSelesai} selesai.`);
                         const lewat = this.saranGagal > 0 ? ` ${this.saranGagal} essay dilewati.` : '';
                         this.saranPesan = `${this.saranSelesai} saran dibuat.${lewat} Proses dihentikan. Saran yang sudah jadi tetap tersimpan.`;
                         return;
                     }
 
                     if (this.saranGagal > 0) {
+                        this.tambahLog('info', `Proses selesai: ${this.saranSelesai} dibuat, ${this.saranGagal} dilewati.`);
                         this.saranPesan = `${this.saranSelesai} saran dibuat, ${this.saranGagal} essay dilewati. ${pesanTerakhir}`;
                         return;
                     }
+
+                    this.tambahLog('info', `Semua ${this.saranSelesai} saran berhasil dibuat.`);
 
                     if (this.kotor) {
                         this.saranPesan = 'Saran sudah dibuat. Simpan penilaian manual dulu, lalu muat ulang halaman.';
@@ -387,7 +440,7 @@
 
             <dialog
                 x-ref="dialogSaran"
-                class="m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,34rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40"
+                class="m-auto max-h-[calc(100dvh-2rem)] w-[min(94vw,38rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40"
                 aria-labelledby="judul-dialog-saran"
                 @cancel="cekTutupSaran($event)"
             >
@@ -403,7 +456,52 @@
                             <div class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" :style="`width: ${saranPersen}%`"></div>
                         </div>
                         <p class="mt-3 text-sm text-ink-muted">Saran yang sudah jadi tetap tersimpan. Hentikan baru berlaku setelah saran yang sedang diproses selesai.</p>
-                        <button type="button" class="btn btn-secondary mt-5 min-h-11 w-full" @click="hentikanSaran" :disabled="saranBerhenti">
+                    </div>
+
+                    {{-- Konsol Terminal Log --}}
+                    <div class="mt-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-100 shadow-inner">
+                        <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3.5 py-2 text-[11px] font-mono text-slate-400">
+                            <div class="flex items-center gap-2">
+                                <div class="flex gap-1.5" aria-hidden="true">
+                                    <span class="h-2.5 w-2.5 rounded-full bg-rose-500/80"></span>
+                                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500/80"></span>
+                                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500/80"></span>
+                                </div>
+                                <span class="ml-1 font-semibold text-slate-300">Terminal Log</span>
+                            </div>
+                            <span x-text="saranMassal ? 'Memproses...' : (saranBerhenti ? 'Dihentikan' : (saranSelesai > 0 ? 'Selesai' : 'Siap'))" class="text-[10px] uppercase tracking-wider font-semibold" :class="saranMassal ? 'text-sky-400' : 'text-slate-500'"></span>
+                        </div>
+                        <div
+                            x-ref="terminalBox"
+                            class="max-h-52 overflow-y-auto p-3 font-mono text-xs leading-relaxed space-y-1.5 select-text bg-slate-950"
+                        >
+                            <template x-for="(log, idx) in terminalLogs" :key="idx">
+                                <div class="flex items-start gap-2">
+                                    <span class="text-slate-500 select-none text-[11px] font-mono shrink-0" x-text="log.waktu"></span>
+                                    <span
+                                        class="font-mono break-all"
+                                        :class="{
+                                            'text-emerald-400 font-medium': log.tipe === 'ok',
+                                            'text-rose-400 font-medium': log.tipe === 'err',
+                                            'text-sky-300': log.tipe === 'req',
+                                            'text-amber-300 font-medium': log.tipe === 'info'
+                                        }"
+                                        x-text="log.pesan"
+                                    ></span>
+                                </div>
+                            </template>
+                            <div x-show="saranMassal" class="flex items-center gap-2 text-slate-500 text-xs pt-1">
+                                <span class="inline-block h-3 w-1.5 animate-pulse bg-emerald-400"></span>
+                                <span class="italic text-[11px] text-slate-400">Memproses antrean request...</span>
+                            </div>
+                            <div x-show="terminalLogs.length === 0" class="text-slate-600 italic text-[11px]">
+                                Menunggu request dimulai...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-show="saranMassal" class="mt-4">
+                        <button type="button" class="btn btn-secondary min-h-11 w-full" @click="hentikanSaran" :disabled="saranBerhenti">
                             <span x-text="saranBerhenti ? 'Menghentikan...' : 'Hentikan'"></span>
                         </button>
                     </div>

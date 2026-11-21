@@ -192,6 +192,8 @@ class ReportController extends Controller
             ->filter(fn (array $baris) => $baris['dijawab'] && $baris['ai_reviewed_at'] === null)
             ->map(fn (array $baris) => [
                 'id' => $baris['answer_id'],
+                'urutan' => $baris['urutan'],
+                'bobot' => $baris['bobot'],
                 'url' => route('admin.answers.ai-suggestion', $baris['answer_id']),
             ])
             ->values();
@@ -200,6 +202,8 @@ class ReportController extends Controller
             ->filter(fn (array $baris) => $baris['dijawab'])
             ->map(fn (array $baris) => [
                 'id' => $baris['answer_id'],
+                'urutan' => $baris['urutan'],
+                'bobot' => $baris['bobot'],
                 'url' => route('admin.answers.audit-and-evaluate', $baris['answer_id']),
             ])
             ->values();

@@ -52,6 +52,8 @@ class CombinedAuditUiTest extends TestCase
             ->assertSee('Audit &amp; Saran Semua Essay', false)
             ->assertSee('Ketat: 12')
             ->assertSee('Seimbang: 16')
-            ->assertSee('Longgar: 20');
+            ->assertSee('Longgar: 20')
+            ->assertSee('Terminal Log')
+            ->assertSee('x-ref="terminalBox"', false);
     }
 }
