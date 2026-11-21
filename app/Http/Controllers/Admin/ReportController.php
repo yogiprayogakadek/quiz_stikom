@@ -51,6 +51,12 @@ class ReportController extends Controller
             ->count();
 
         $statistikSoal = $this->statistikSoal($session);
+        $hasEssay = Question::where('quiz_id', $session->quiz_id)->where('tipe', 'essay')->exists();
+        $indikasiPlagiat = Answer::query()
+            ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
+            ->whereHas('question', fn ($q) => $q->where('tipe', 'essay'))
+            ->where('similarity_score', '>=', 50)
+            ->count();
 
         return view('admin.reports.session', compact(
             'session',
@@ -59,6 +65,8 @@ class ReportController extends Controller
             'selesai',
             'perluTinjau',
             'essayBelumDinilai',
+            'indikasiPlagiat',
+            'hasEssay',
             'statistikSoal',
             'tinjau',
         ));
@@ -153,6 +161,12 @@ class ReportController extends Controller
                 'ai_feedback' => $answer?->ai_feedback,
                 'ai_reviewed_at' => $answer?->ai_reviewed_at,
                 'ai_mode' => $saranTerakhir?->metadata['mode'] ?? null,
+                'similarity_score' => $answer?->similarity_score,
+                'similarity_data' => $answer?->similarity_data ?? [],
+                'similarity_checked_at' => $answer?->similarity_checked_at,
+                'ai_generated_score' => $answer?->ai_generated_score,
+                'ai_generated_reason' => $answer?->ai_generated_reason,
+                'ai_generated_at' => $answer?->ai_generated_at,
                 'history' => $riwayat,
             ];
         });

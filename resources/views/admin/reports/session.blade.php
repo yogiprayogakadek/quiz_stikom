@@ -12,6 +12,15 @@
             <x-icon name="download" :size="20" />
             Ekspor CSV
         </a>
+        @if ($hasEssay)
+            <form method="POST" action="{{ route('admin.reports.session.scan-plagiarism', $session) }}" class="inline">
+                @csrf
+                <button type="submit" class="btn btn-secondary">
+                    <x-icon name="shield-check" :size="20" />
+                    Pindai Ulang Plagiarisme
+                </button>
+            </form>
+        @endif
         @if ($session->quiz->sourceQuiz)
             <a href="{{ route('admin.quizzes.edit', $session->quiz->sourceQuiz) }}" class="btn btn-secondary">Buka ujian asli</a>
         @endif
@@ -35,7 +44,7 @@
         </div>
     @endif
 
-    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 {{ $hasEssay ? 'xl:grid-cols-5' : '' }}">
         <div class="card">
             <p class="text-base font-bold text-ink-muted">Peserta</p>
             <p class="display-number mt-2 text-5xl">{{ $totalAttempt }}</p>
@@ -54,6 +63,13 @@
             <p class="display-number mt-2 text-5xl">{{ $essayBelumDinilai }}</p>
             <p class="mt-2 text-sm text-ink-muted">Jawaban essay yang menunggu penilaian manual admin.</p>
         </div>
+        @if ($hasEssay)
+            <div class="card {{ $indikasiPlagiat > 0 ? 'border-coral bg-coral-soft' : '' }}">
+                <p class="text-base font-bold text-ink-muted">Indikasi kemiripan</p>
+                <p class="display-number mt-2 text-5xl">{{ $indikasiPlagiat }}</p>
+                <p class="mt-2 text-sm text-ink-muted">Jawaban essay dengan kemiripan &ge; 50% antar-peserta.</p>
+            </div>
+        @endif
     </div>
 
     <section class="mt-8 card shadow-xs border border-slate-200/90 bg-white" aria-labelledby="tabel-nilai">

@@ -452,6 +452,80 @@
                         @endif
 
                         @if (filled($aktifEssay['jawaban_saya']))
+                            @php
+                                $simScore = $aktifEssay['similarity_score'];
+                                $simData = $aktifEssay['similarity_data'];
+                                $topMatch = $simData[0] ?? null;
+                            @endphp
+                            <div class="mt-3 rounded-xl border border-outline bg-surface p-3 space-y-3">
+                                <div>
+                                    <p class="text-sm font-bold text-ink">Integritas Akademik & Plagiarisme</p>
+                                    <p class="text-xs text-ink-subtle">Pemeriksaan kemiripan antar-peserta lokal dan audit teks kecerdasan buatan (AI).</p>
+                                </div>
+
+                                {{-- Kemiripan Antar Peserta --}}
+                                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-outline/60">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="text-xs font-semibold text-ink-muted">Kemiripan jawaban:</span>
+                                        @if ($simScore !== null)
+                                            @if ($simScore >= 80)
+                                                <span class="pill pill-coral font-bold text-xs">⚠️ {{ $simScore }}% mirip {{ $topMatch['student_name'] ?? 'peserta lain' }}</span>
+                                            @elseif ($simScore >= 50)
+                                                <span class="pill pill-sun font-bold text-xs">⚠️ {{ $simScore }}% mirip {{ $topMatch['student_name'] ?? 'peserta lain' }}</span>
+                                            @else
+                                                <span class="pill pill-leaf text-xs">{{ $simScore }}% mirip (aman)</span>
+                                            @endif
+                                        @else
+                                            <span class="pill pill-neutral text-xs">Belum dipindai</span>
+                                        @endif
+                                    </div>
+                                    @if ($topMatch)
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary text-xs !py-1 !px-2.5 min-h-8"
+                                            @click="$refs.dialogBandingkan.showModal()"
+                                        >
+                                            Bandingkan
+                                        </button>
+                                    @endif
+                                </div>
+
+                                {{-- Deteksi Teks Buatan AI --}}
+                                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-outline/60">
+                                    <div class="space-y-1">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-xs font-semibold text-ink-muted">Probabilitas teks AI:</span>
+                                            @if ($aktifEssay['ai_generated_at'])
+                                                @php $aiScore = $aktifEssay['ai_generated_score']; @endphp
+                                                @if ($aiScore >= 80)
+                                                    <span class="pill pill-coral font-bold text-xs">🤖 {{ $aiScore }}% AI</span>
+                                                @elseif ($aiScore >= 50)
+                                                    <span class="pill pill-sun font-bold text-xs">🤖 {{ $aiScore }}% AI</span>
+                                                @else
+                                                    <span class="pill pill-leaf text-xs">🤖 {{ $aiScore }}% AI (kemungkinan manusia)</span>
+                                                @endif
+                                            @else
+                                                <span class="pill pill-neutral text-xs">Belum diaudit</span>
+                                            @endif
+                                        </div>
+                                        @if ($aktifEssay['ai_generated_at'] && filled($aktifEssay['ai_generated_reason']))
+                                            <p class="text-xs text-ink-muted italic">{{ $aktifEssay['ai_generated_reason'] }}</p>
+                                        @endif
+                                    </div>
+                                    @if ($aktifEssay['answer_id'])
+                                        <form method="POST" action="{{ route('admin.answers.detect-ai', $aktifEssay['answer_id']) }}">
+                                            @csrf
+                                            <button type="submit" class="btn btn-secondary text-xs !py-1 !px-2.5 min-h-8">
+                                                <x-icon name="sparkles" :size="14" />
+                                                {{ $aktifEssay['ai_generated_at'] ? 'Audit Ulang AI' : 'Audit AI' }}
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
+                        @if (filled($aktifEssay['jawaban_saya']))
                             <div class="mt-3 rounded-xl border border-outline bg-surface p-3">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -621,6 +695,66 @@
                     @endif
                 </div>
             </div>
+
+            @if (filled($aktifEssay['jawaban_saya']) && ! empty($aktifEssay['similarity_data']))
+                <dialog
+                    x-ref="dialogBandingkan"
+                    class="m-auto max-h-[calc(100dvh-2rem)] w-[min(94vw,56rem)] overflow-y-auto rounded-2xl border border-outline bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40"
+                    aria-labelledby="judul-dialog-bandingkan"
+                >
+                    <div class="p-5 sm:p-6" x-data="{ matchIdx: 0, matches: {{ json_encode($aktifEssay['similarity_data']) }} }">
+                        <div class="flex items-start justify-between gap-4 pb-4 border-b border-outline">
+                            <div>
+                                <h3 id="judul-dialog-bandingkan" class="text-xl font-bold">Perbandingan Jawaban Essay</h3>
+                                <p class="text-sm text-ink-muted mt-0.5">
+                                    Soal {{ $aktifEssay['urutan'] }}: {{ \Illuminate\Support\Str::limit($aktifEssay['teks'], 80) }}
+                                </p>
+                            </div>
+                            <button type="button" class="btn btn-ghost !p-2" @click="$refs.dialogBandingkan.close()">✕</button>
+                        </div>
+
+                        <template x-if="matches.length > 1">
+                            <div class="mt-4 flex flex-wrap items-center gap-2">
+                                <span class="text-xs font-semibold text-ink-muted">Bandingkan dengan:</span>
+                                <template x-for="(m, idx) in matches" :key="idx">
+                                    <button
+                                        type="button"
+                                        class="btn text-xs !py-1 !px-2.5 min-h-7"
+                                        :class="matchIdx === idx ? 'btn-primary' : 'btn-secondary'"
+                                        @click="matchIdx = idx"
+                                        x-text="`${m.student_name} (${m.score}%)`"
+                                    ></button>
+                                </template>
+                            </div>
+                        </template>
+
+                        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="rounded-xl border border-outline bg-surface-sunken p-4">
+                                <div class="flex items-center justify-between pb-2 mb-2 border-b border-outline/70">
+                                    <span class="font-bold text-sm text-ink">{{ $attempt->user->nama ?? $attempt->user->name ?? 'Peserta Saat Ini' }}</span>
+                                    <span class="pill pill-neutral text-xs">Jawaban ini</span>
+                                </div>
+                                <div class="text-sm text-ink whitespace-pre-wrap max-h-96 overflow-y-auto">{{ $aktifEssay['jawaban_saya'] }}</div>
+                            </div>
+                            <div class="rounded-xl border border-outline bg-surface-sunken p-4">
+                                <div class="flex items-center justify-between pb-2 mb-2 border-b border-outline/70">
+                                    <span class="font-bold text-sm text-ink" x-text="matches[matchIdx]?.student_name"></span>
+                                    <span
+                                        class="pill text-xs font-bold"
+                                        :class="(matches[matchIdx]?.score ?? 0) >= 80 ? 'pill-coral' : ((matches[matchIdx]?.score ?? 0) >= 50 ? 'pill-sun' : 'pill-leaf')"
+                                        x-text="`${matches[matchIdx]?.score ?? 0}% mirip`"
+                                    ></span>
+                                </div>
+                                <div class="text-sm text-ink whitespace-pre-wrap max-h-96 overflow-y-auto" x-text="matches[matchIdx]?.text || 'Teks jawaban pembanding'"></div>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 flex justify-end">
+                            <button type="button" class="btn btn-secondary min-h-11" @click="$refs.dialogBandingkan.close()">Tutup</button>
+                        </div>
+                    </div>
+                </dialog>
+            @endif
         </section>
     @endif
 
@@ -695,6 +829,17 @@
                                             <span class="pill pill-leaf">Dinilai</span>
                                         @else
                                             <span class="pill pill-sun">Belum dinilai</span>
+                                        @endif
+                                        @if (($baris['similarity_score'] ?? null) !== null && $baris['similarity_score'] >= 50)
+                                            @php $bm = $baris['similarity_data'][0] ?? null; @endphp
+                                            <span class="pill {{ $baris['similarity_score'] >= 80 ? 'pill-coral' : 'pill-sun' }} text-xs mt-1 block w-fit font-bold">
+                                                ⚠️ {{ $baris['similarity_score'] }}% mirip {{ $bm['student_name'] ?? '' }}
+                                            </span>
+                                        @endif
+                                        @if ($baris['ai_generated_at'] ?? false)
+                                            <span class="pill {{ $baris['ai_generated_score'] >= 80 ? 'pill-coral' : ($baris['ai_generated_score'] >= 50 ? 'pill-sun' : 'pill-leaf') }} text-xs mt-1 block w-fit">
+                                                🤖 {{ $baris['ai_generated_score'] }}% AI
+                                            </span>
                                         @endif
                                     @elseif ($baris['benar'])
                                         <span class="pill pill-leaf">Benar</span>
