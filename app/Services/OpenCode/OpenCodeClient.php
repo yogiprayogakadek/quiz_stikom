@@ -19,6 +19,8 @@ class OpenCodeClient
 
     private string $model;
 
+    private string $variant;
+
     /** @var array<int, string> */
     private array $fallbackModels;
 
@@ -41,6 +43,7 @@ class OpenCodeClient
         $this->password = (string) ($config['password'] ?? '');
         $this->agent = (string) ($config['agent'] ?? 'data-processor');
         $this->model = (string) ($config['model'] ?? 'deepseek-v4.1-flash-free');
+        $this->variant = trim((string) ($config['variant'] ?? ''));
         $this->fallbackModels = array_values(array_filter((array) ($config['model_fallbacks'] ?? [])));
         $this->directory = (string) ($config['directory'] ?? '/srv/opencode-web');
         $this->timeout = max(5, (int) ($config['timeout'] ?? 30));
@@ -67,52 +70,69 @@ class OpenCodeClient
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function freeModels(): array
+    public function models(bool $fresh = false): array
     {
-        return Cache::remember('opencode:free-models', now()->addMinutes(10), function (): array {
-            $payload = $this->request('get', '/api/model');
-            $models = $payload['data'] ?? [];
+        if ($fresh) {
+            $models = $this->fetchModels();
+            Cache::put('opencode:models', $models, now()->addMinutes(10));
 
-            if (! is_array($models)) {
-                return [];
+            return $models;
+        }
+
+        return Cache::remember('opencode:models', now()->addMinutes(10), fn (): array => $this->fetchModels());
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function freeModels(bool $fresh = false): array
+    {
+        return array_values(array_filter($this->models($fresh), function ($model): bool {
+            if (($model['providerID'] ?? null) !== 'opencode') {
+                return false;
             }
 
-            return array_values(array_filter($models, function ($model): bool {
-                if (! is_array($model)) {
+            if (($model['status'] ?? 'active') !== 'active') {
+                return false;
+            }
+
+            $costs = $model['cost'] ?? [];
+
+            if (! is_array($costs) || $costs === []) {
+                return false;
+            }
+
+            foreach ($costs as $cost) {
+                if ((float) ($cost['input'] ?? 0) > 0 || (float) ($cost['output'] ?? 0) > 0) {
                     return false;
                 }
+            }
 
-                if (($model['providerID'] ?? null) !== 'opencode') {
-                    return false;
-                }
+            return true;
+        }));
+    }
 
-                if (($model['status'] ?? 'active') !== 'active') {
-                    return false;
-                }
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchModels(): array
+    {
+        $payload = $this->request('get', '/api/model');
+        $models = $payload['data'] ?? [];
 
-                $costs = $model['cost'] ?? [];
+        if (! is_array($models)) {
+            return [];
+        }
 
-                if (! is_array($costs) || $costs === []) {
-                    return false;
-                }
-
-                foreach ($costs as $cost) {
-                    if ((float) ($cost['input'] ?? 0) > 0 || (float) ($cost['output'] ?? 0) > 0) {
-                        return false;
-                    }
-                }
-
-                return true;
-            }));
-        });
+        return array_values(array_filter($models, 'is_array'));
     }
 
     /**
      * Process one payload through a fresh session, retrying with fallback models.
      *
-     * @return array{session_id: string, model: string, text: string, data: array<string, mixed>|null, json_valid: bool}
+     * @return array{session_id: string, model: string, variant: string|null, text: string, data: array<string, mixed>|null, json_valid: bool}
      */
-    public function process(string $text, ?string $model = null, ?string $agent = null): array
+    public function process(string $text, ?string $model = null, ?string $agent = null, ?string $variant = null): array
     {
         $models = array_values(array_unique(array_filter(array_merge(
             [$model ?: $this->model],
@@ -129,7 +149,7 @@ class OpenCodeClient
             $currentModel = $models[$attempt % count($models)];
 
             try {
-                return $this->runSession($text, $currentModel, $agent ?: $this->agent);
+                return $this->runSession($text, $currentModel, $agent ?: $this->agent, $variant);
             } catch (OpenCodeException $exception) {
                 $last = $exception;
 
@@ -146,17 +166,25 @@ class OpenCodeClient
     }
 
     /**
-     * @return array{session_id: string, model: string, text: string, data: array<string, mixed>|null, json_valid: bool}
+     * @return array{session_id: string, model: string, variant: string|null, text: string, data: array<string, mixed>|null, json_valid: bool}
      */
-    private function runSession(string $text, string $model, string $agent): array
+    private function runSession(string $text, string $model, string $agent, ?string $requestedVariant = null): array
     {
+        $variant = $this->resolveVariant($model, $requestedVariant);
+
+        $modelRef = [
+            'providerID' => 'opencode',
+            'id' => $model,
+        ];
+
+        if ($variant !== null) {
+            $modelRef['variant'] = $variant;
+        }
+
         $created = $this->request('post', '/api/session', [
             'directory' => $this->directory,
             'agent' => $agent,
-            'model' => [
-                'providerID' => 'opencode',
-                'id' => $model,
-            ],
+            'model' => $modelRef,
         ]);
 
         $sessionId = (string) ($created['data']['id'] ?? '');
@@ -187,6 +215,7 @@ class OpenCodeClient
             return [
                 'session_id' => $sessionId,
                 'model' => $model,
+                'variant' => $variant,
                 'text' => $result['text'],
                 'data' => $data,
                 'json_valid' => $data !== null,
@@ -198,6 +227,43 @@ class OpenCodeClient
                 // The result is already captured. A failed cleanup must not hide it.
             }
         }
+    }
+
+    private function resolveVariant(string $model, ?string $requestedVariant = null): ?string
+    {
+        $requested = trim($requestedVariant ?? $this->variant);
+
+        if ($requested === '') {
+            return null;
+        }
+
+        try {
+            $models = $this->models();
+        } catch (OpenCodeException) {
+            return null;
+        }
+
+        foreach ($models as $info) {
+            if (($info['id'] ?? null) !== $model) {
+                continue;
+            }
+
+            $variants = $info['variants'] ?? [];
+
+            if (! is_array($variants)) {
+                return null;
+            }
+
+            foreach ($variants as $variant) {
+                if (is_array($variant) && ($variant['id'] ?? null) === $requested) {
+                    return $requested;
+                }
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     private function waitFor(string $sessionId): void
@@ -313,7 +379,7 @@ class OpenCodeClient
     }
 
     /**
-     * @param  array<string, mixed>|null  $body
+     * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      */
     private function request(string $method, string $path, ?array $body = null): array

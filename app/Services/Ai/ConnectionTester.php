@@ -35,7 +35,9 @@ class ConnectionTester
         $modelTimeout = min($timeout, 10);
 
         try {
-            $models = (new AiManager($config->withTimeout($modelTimeout)))->text()->models($modelTimeout);
+            $textClient = (new AiManager($config->withTimeout($modelTimeout)))->text();
+            $models = $textClient->models($modelTimeout);
+            $variants = ($textClient instanceof OpenCodeTextClient) ? $textClient->modelVariants($modelTimeout) : [];
         } catch (AiRequestException $e) {
             Log::warning('Tes koneksi AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl]);
 
@@ -48,6 +50,7 @@ class ConnectionTester
                 ],
                 'probe' => null,
                 'model' => [],
+                'variants' => [],
             ];
         } catch (Throwable $e) {
             Log::warning('Tes koneksi AI gagal: '.$e->getMessage(), ['base_url' => $baseUrl]);
@@ -61,6 +64,7 @@ class ConnectionTester
                 ],
                 'probe' => null,
                 'model' => [],
+                'variants' => [],
             ];
         }
 
@@ -78,6 +82,7 @@ class ConnectionTester
             ],
             'probe' => $probe,
             'model' => $models,
+            'variants' => $variants,
         ];
     }
 

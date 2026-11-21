@@ -384,6 +384,12 @@
                             @error('opencode_model') <p class="field-error">{{ $message }}</p> @enderror
                         </div>
                         <div>
+                            <label for="opencode_variant" class="label">Varian model (opsional)</label>
+                            <input id="opencode_variant" name="opencode_variant" class="input" placeholder="Misal: low, high, max" value="{{ old('opencode_variant', $settings->opencode_variant) }}">
+                            <p class="help">Tingkat penalaran model (reasoning effort). Kosongkan jika model tidak mendukung varian.</p>
+                            @error('opencode_variant') <p class="field-error">{{ $message }}</p> @enderror
+                        </div>
+                        <div class="sm:col-span-2">
                             <label for="opencode_timeout" class="label">Batas waktu request</label>
                             <div class="relative">
                                 <input id="opencode_timeout" name="opencode_timeout" type="number" class="input pr-16" min="10" max="300" value="{{ old('opencode_timeout', $settings->opencode_timeout ?: 120) }}">
@@ -395,8 +401,9 @@
 
                     <x-ai-test-panel
                         :url="route('admin.settings.opencode.test')"
-                        :inputs="['opencode_base_url', 'opencode_username', 'opencode_password', 'opencode_model', 'opencode_timeout']"
+                        :inputs="['opencode_base_url', 'opencode_username', 'opencode_password', 'opencode_model', 'opencode_variant', 'opencode_timeout']"
                         model-input="opencode_model"
+                        variant-input="opencode_variant"
                         title="Tes koneksi OpenCode"
                         button="Tes & muat model"
                     />

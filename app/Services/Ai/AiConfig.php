@@ -46,6 +46,7 @@ final class AiConfig
             'username' => (string) $value('opencode_username', config('services.opencode.username', 'opencode')),
             'password' => $value('opencode_password', config('services.opencode.password')),
             'model' => (string) $value('opencode_model', config('services.opencode.model')),
+            'variant' => (string) $value('opencode_variant', config('services.opencode.variant', '')),
             'timeout' => (int) $value('opencode_timeout', config('services.opencode.timeout', 120)),
         ];
 

@@ -26,6 +26,7 @@ class OpenCodeSettingsTest extends TestCase
         $this->assertSame('opencode', $settings->opencode_username);
         $this->assertSame(120, $settings->opencode_timeout);
         $this->assertContains('opencode_password', AppSetting::fields());
+        $this->assertContains('opencode_variant', AppSetting::fields());
     }
 
     public function test_workspace_mewarisi_provider_dan_field_opencode_dari_platform(): void
@@ -70,6 +71,7 @@ class OpenCodeSettingsTest extends TestCase
                 'opencode_username' => 'opencode',
                 'opencode_password' => '',
                 'opencode_model' => 'dipilih-dari-daftar',
+                'opencode_variant' => 'high',
                 'opencode_timeout' => 150,
             ])
             ->assertRedirect(route('admin.settings.edit'))
@@ -80,6 +82,7 @@ class OpenCodeSettingsTest extends TestCase
         $this->assertSame('opencode', $settings->ai_provider);
         $this->assertSame('https://oc.example.test', $settings->opencode_base_url);
         $this->assertSame('dipilih-dari-daftar', $settings->opencode_model);
+        $this->assertSame('high', $settings->opencode_variant);
         $this->assertSame(150, $settings->opencode_timeout);
         $this->assertSame('password-lama', $settings->opencode_password);
     }
@@ -106,7 +109,15 @@ class OpenCodeSettingsTest extends TestCase
 
         Http::fake(array_merge([
             'https://oc.example.test/api/model*' => Http::response(['data' => [
-                ['id' => 'nemotron-3.5-super-vl-free', 'providerID' => 'opencode', 'type' => 'chat'],
+                [
+                    'id' => 'nemotron-3.5-super-vl-free',
+                    'providerID' => 'opencode',
+                    'type' => 'chat',
+                    'variants' => [
+                        ['id' => 'low'],
+                        ['id' => 'high'],
+                    ],
+                ],
             ]]),
         ], $this->fakeSessionResponses('https://oc.example.test')));
 
@@ -117,6 +128,7 @@ class OpenCodeSettingsTest extends TestCase
                 'opencode_username' => 'opencode',
                 'opencode_password' => 'rahasia',
                 'opencode_model' => 'nemotron-3.5-super-vl-free',
+                'opencode_variant' => 'high',
                 'opencode_timeout' => 20,
             ]);
 
@@ -126,9 +138,13 @@ class OpenCodeSettingsTest extends TestCase
             ->assertJsonPath('probe.ok', true)
             ->assertJsonPath('model.OpenCode.0', 'nemotron-3.5-super-vl-free');
 
+        $this->assertSame(['low', 'high'], $response->json('variants')['nemotron-3.5-super-vl-free'] ?? []);
         $this->assertStringNotContainsString('rahasia', $response->getContent());
         Http::assertSent(fn ($request) => str_contains($request->url(), '/api/model')
             && $request->header('Authorization')[0] === 'Basic '.base64_encode('opencode:rahasia'));
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/api/session')
+            && $request->method() === 'POST'
+            && ($request['model']['variant'] ?? null) === 'high');
     }
 
     public function test_tes_koneksi_opencode_memakai_pengaturan_tersimpan_saat_isian_kosong(): void
@@ -207,6 +223,8 @@ class OpenCodeSettingsTest extends TestCase
             ->assertSee('name="opencode_username"', false)
             ->assertSee('name="opencode_password"', false)
             ->assertSee('name="opencode_model"', false)
+            ->assertSee('name="opencode_variant"', false)
+            ->assertSee("variantInput: 'opencode_variant'", false)
             ->assertSee('name="opencode_timeout"', false)
             ->assertDontSee('rahasia-lama');
     }

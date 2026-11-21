@@ -30,6 +30,7 @@ class OrganizationSetting extends Model
         'opencode_username',
         'opencode_password',
         'opencode_model',
+        'opencode_variant',
         'opencode_timeout',
         'class_cover_mode',
         'image_base_url',
