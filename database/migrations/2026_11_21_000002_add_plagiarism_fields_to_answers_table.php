@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('answers', function (Blueprint $table) {
-            $table->unsignedTinyInteger('similarity_score')->nullable()->after('ragu_ragu');
+            $table->unsignedTinyInteger('similarity_score')->nullable()->after('catatan_pengajar');
             $table->json('similarity_data')->nullable()->after('similarity_score');
             $table->timestamp('similarity_checked_at')->nullable()->after('similarity_data');
             $table->unsignedTinyInteger('ai_generated_score')->nullable()->after('similarity_checked_at');
