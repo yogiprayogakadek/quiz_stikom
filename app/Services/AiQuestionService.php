@@ -260,6 +260,120 @@ PROMPT;
     }
 
     /**
+     * Audit integritas (probabilitas teks AI) sekaligus saran nilai 3 mode (ketat, seimbang, longgar) dalam satu request.
+     *
+     * @param  array<int, array{label: string, points: int}>  $criteria
+     * @return array{
+     *     ai_detection: array{score: int, reason: string},
+     *     suggestions: array{
+     *         ketat: array{score: int, feedback: string},
+     *         seimbang: array{score: int, confidence: int, feedback: string},
+     *         longgar: array{score: int, feedback: string}
+     *     },
+     *     model: string,
+     *     provider: string
+     * }
+     */
+    public function auditAndEvaluateEssay(
+        string $question,
+        ?string $referenceAnswer,
+        array $criteria,
+        string $answer,
+        int $maxScore
+    ): array {
+        $systemPrompt = <<<PROMPT
+Anda adalah sistem audit integritas akademik dan penilai jawaban essay.
+Lakukan DUA evaluasi secara bersamaan:
+1. Audit Integritas AI: Analisis apakah teks jawaban peserta ditulis oleh manusia atau dihasilkan oleh model AI/LLM. Berikan skor (0-100, 0=murni manusia, 100=murni AI) dan alasan 1-2 kalimat.
+2. Evaluasi Rubrik 3 Mode:
+   - Ketat: Beri poin hanya untuk bagian yang secara eksplisit memenuhi kriteria rubrik.
+   - Seimbang: Beri poin proporsional untuk ide yang benar dengan toleransi perbedaan redaksi. Cantumkan juga confidence (0-100).
+   - Longgar: Hargai ide inti yang relevan meskipun jawaban singkat atau kurang rapi.
+
+Kembalikan HANYA satu objek JSON valid dengan struktur:
+{
+  "ai_detection": {
+    "score": 0,
+    "reason": "Alasan ringkas 1-2 kalimat dalam bahasa Indonesia."
+  },
+  "suggestions": {
+    "ketat": { "score": 0, "feedback": "Alasan singkat mode ketat." },
+    "seimbang": { "score": 0, "confidence": 0, "feedback": "Alasan singkat mode seimbang." },
+    "longgar": { "score": 0, "feedback": "Alasan singkat mode longgar." }
+  }
+}
+score pada suggestions adalah integer dari 0 sampai {$maxScore}.
+PROMPT;
+
+        $criteriaText = $criteria === []
+            ? 'Tidak ada kriteria terstruktur.'
+            : implode("\n", array_map(
+                fn (array $criterion) => '- '.$criterion['label'].' (maksimal '.$criterion['points'].' poin)',
+                $criteria,
+            ));
+
+        $userPrompt = "Pertanyaan:\n{$question}\n\nJawaban acuan:\n".($referenceAnswer ?: 'Tidak ada jawaban acuan.')."\n\nKriteria:\n{$criteriaText}\n\nJawaban peserta:\n{$answer}\n\nNilai maksimum: {$maxScore}";
+
+        $data = null;
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $prompt = $attempt === 1
+                ? $userPrompt
+                : $userPrompt."\n\nPENTING: Kembalikan HANYA format JSON valid tanpa markdown dan teks lain. Wajib memuat objek ai_detection dan suggestions (ketat, seimbang, longgar).";
+
+            $rawContent = $this->ai()->text()->chat([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $prompt],
+            ], null, 0.1);
+
+            $data = json_decode($this->extractJson($rawContent), true);
+
+            if (is_array($data) && isset($data['ai_detection'], $data['suggestions'])) {
+                break;
+            }
+
+            $data = null;
+        }
+
+        if (! is_array($data) || ! isset($data['ai_detection'], $data['suggestions'])) {
+            throw new RuntimeException('Layanan AI tidak mengembalikan format evaluasi terpadu yang valid.');
+        }
+
+        $aiDet = $data['ai_detection'];
+        $sug = $data['suggestions'];
+
+        $ketatScore = isset($sug['ketat']['score']) ? max(0, min($maxScore, (int) $sug['ketat']['score'])) : 0;
+        $seimbangScore = isset($sug['seimbang']['score']) ? max(0, min($maxScore, (int) $sug['seimbang']['score'])) : 0;
+        $longgarScore = isset($sug['longgar']['score']) ? max(0, min($maxScore, (int) $sug['longgar']['score'])) : 0;
+
+        $confidence = isset($sug['seimbang']['confidence']) ? max(0, min(100, (int) $sug['seimbang']['confidence'])) : 80;
+
+        return [
+            'ai_detection' => [
+                'score' => max(0, min(100, (int) ($aiDet['score'] ?? 0))),
+                'reason' => Str::limit(trim((string) ($aiDet['reason'] ?? '')), 1500, '') ?: 'AI tidak memberikan alasan deteksi.',
+            ],
+            'suggestions' => [
+                'ketat' => [
+                    'score' => $ketatScore,
+                    'feedback' => Str::limit(trim((string) ($sug['ketat']['feedback'] ?? '')), 1500, '') ?: 'Saran mode ketat.',
+                ],
+                'seimbang' => [
+                    'score' => $seimbangScore,
+                    'confidence' => $confidence,
+                    'feedback' => Str::limit(trim((string) ($sug['seimbang']['feedback'] ?? '')), 1500, '') ?: 'Saran mode seimbang.',
+                ],
+                'longgar' => [
+                    'score' => $longgarScore,
+                    'feedback' => Str::limit(trim((string) ($sug['longgar']['feedback'] ?? '')), 1500, '') ?: 'Saran mode longgar.',
+                ],
+            ],
+            'model' => $this->ai()->config()->defaultModel(),
+            'provider' => parse_url($this->ai()->config()->textBaseUrl(), PHP_URL_HOST) ?: $this->ai()->config()->textBaseUrl(),
+        ];
+    }
+
+    /**
      * Membagi total nilai maksimal kuis ke tiap butir soal PG dan Essay.
      *
      * @return array{pg: array<int>, essay: array<int>, total: int}
