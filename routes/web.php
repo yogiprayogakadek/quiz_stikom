@@ -199,6 +199,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('answers/{answer}/saran-ai', [ReportController::class, 'saranNilaiEssay'])->name('answers.ai-suggestion');
     Route::post('answers/{answer}/detect-ai', [ReportController::class, 'detectAi'])->name('answers.detect-ai');
+    Route::post('answers/{answer}/audit-and-evaluate', [ReportController::class, 'auditAndEvaluateEssay'])->name('answers.audit-and-evaluate');
     Route::post('attempts/{attempt}/reset', [ReportController::class, 'resetAttempt'])->name('attempts.reset');
 
     Route::get('sessions/{session}/remidi', [RemedialController::class, 'create'])->name('sessions.remidi.create');

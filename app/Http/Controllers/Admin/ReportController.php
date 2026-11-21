@@ -476,6 +476,43 @@ class ReportController extends Controller
         return back()->with('sukses', 'Audit AI selesai.');
     }
 
+    public function auditAndEvaluateEssay(Request $request, Answer $answer, EssayGrader $grader): RedirectResponse|JsonResponse
+    {
+        $answer->loadMissing(['question', 'attempt.quizSession']);
+        abort_unless($answer->attempt?->quizSession && $answer->question?->isEssay(), 404);
+        abort_unless(filled($answer->jawaban_teks), 422);
+
+        try {
+            $result = $grader->auditAndEvaluate($answer);
+        } catch (\Throwable $e) {
+            Log::warning('Audit & evaluasi essay gagal: '.$e->getMessage(), [
+                'answer_id' => $answer->id,
+                'attempt_id' => $answer->attempt_id,
+                'question_id' => $answer->question_id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'ok' => false,
+                    'pesan' => $e->getMessage(),
+                ], 422);
+            }
+
+            return back()->withErrors(['ai_audit_evaluate' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'ai_detection' => $result['ai_detection'],
+                'suggestions' => $result['suggestions'],
+                'model' => $result['model'],
+            ]);
+        }
+
+        return back()->with('sukses', 'Audit integritas & saran 3 mode selesai dibuat.');
+    }
+
     public function scanPlagiarism(Request $request, QuizSession $session, TextSimilarityService $service): RedirectResponse|JsonResponse
     {
         (new ScanSessionPlagiarismJob($session->id))->handle($service);
