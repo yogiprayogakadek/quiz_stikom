@@ -26,6 +26,7 @@ class QuizSession extends Model
         'acak_opsi',
         'tampilkan_pembahasan',
         'pembahasan_mode',
+        'nilai_ditampilkan',
         'leaderboard_live',
         'max_peserta',
         'max_pelanggaran',
@@ -55,6 +56,7 @@ class QuizSession extends Model
         return [
             'acak_opsi' => 'boolean',
             'tampilkan_pembahasan' => 'boolean',
+            'nilai_ditampilkan' => 'boolean',
             'leaderboard_live' => 'boolean',
             'max_peserta' => 'integer',
             'max_pelanggaran' => 'integer',
@@ -202,6 +204,33 @@ class QuizSession extends Model
             'otomatis' => $this->semuaPesertaSelesai(),
             default => false,
         };
+    }
+
+    public function nilaiTampil(): bool
+    {
+        return (bool) $this->nilai_ditampilkan;
+    }
+
+    public function nilaiSiapDipublikasikan(): bool
+    {
+        if ($this->status !== 'selesai' || $this->attempts()->mengikuti()->where('status', '!=', 'selesai')->exists()) {
+            return false;
+        }
+
+        return $this->essayMenungguPenilaian() === 0;
+    }
+
+    public function essayMenungguPenilaian(): int
+    {
+        return Answer::query()
+            ->whereHas('attempt', fn (Builder $query) => $query
+                ->mengikuti()
+                ->where('quiz_session_id', $this->id))
+            ->whereHas('question', fn (Builder $query) => $query->where('tipe', 'essay'))
+            ->whereNotNull('jawaban_teks')
+            ->where('jawaban_teks', '!=', '')
+            ->whereNull('dinilai_at')
+            ->count();
     }
 
     public function isModeTerkunci(): bool

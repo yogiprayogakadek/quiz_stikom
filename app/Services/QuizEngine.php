@@ -914,6 +914,7 @@ class QuizEngine
             'mode' => $session->mode,
             'status' => $session->status,
             'percobaan' => (bool) $session->quiz->is_percobaan,
+            'nilai_ditampilkan' => $session->nilaiTampil(),
             'server_now' => now()->getTimestampMs(),
             'total_peserta' => $session->attempts()->mengikuti()->count(),
             'peringatan' => $this->peringatanTerbaru($session),
@@ -1033,6 +1034,14 @@ class QuizEngine
 
     private function hasilAkhir(QuizSession $session): array
     {
+        if (! $session->nilaiTampil()) {
+            return [
+                'leaderboard' => [],
+                'histogram' => [],
+                'soal_terendah' => [],
+            ];
+        }
+
         $attempts = $session->attempts()->mengikuti()->with('user')->get();
         $totalSoal = $session->mode === 'serempak'
             ? max(1, $session->sessionQuestions()->count())

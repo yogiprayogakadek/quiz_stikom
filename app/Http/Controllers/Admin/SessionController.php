@@ -13,6 +13,7 @@ use App\Http\Requests\UpdateSessionRequest;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptEvent;
+use App\Models\AuditLog;
 use App\Models\Kelas;
 use App\Models\Quiz;
 use App\Models\QuizSession;
@@ -451,6 +452,56 @@ class SessionController extends Controller
         return back()->with('sukses', $label);
     }
 
+    public function nilai(Request $request, QuizSession $session, QuizEngine $engine): RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', 'in:ditampilkan,disembunyikan'],
+        ]);
+
+        $ditampilkan = $data['status'] === 'ditampilkan';
+        $berubah = false;
+        $fresh = DB::transaction(function () use ($session, $ditampilkan, &$berubah) {
+            $locked = QuizSession::query()->lockForUpdate()->findOrFail($session->id);
+
+            if ($locked->status !== 'selesai') {
+                throw ValidationException::withMessages([
+                    'nilai' => 'Nilai hanya dapat diatur setelah sesi selesai.',
+                ]);
+            }
+
+            if ($ditampilkan && ! $locked->nilaiSiapDipublikasikan()) {
+                throw ValidationException::withMessages([
+                    'nilai' => 'Selesaikan seluruh attempt dan penilaian essay sebelum menampilkan nilai.',
+                ]);
+            }
+
+            if ($locked->nilaiTampil() === $ditampilkan) {
+                return $locked;
+            }
+
+            $sebelumnya = $locked->nilaiTampil();
+            $locked->update(['nilai_ditampilkan' => $ditampilkan]);
+            $berubah = true;
+
+            AuditLog::record('session_score_visibility_changed', 'quiz_session', $locked->id, [
+                'from' => $sebelumnya,
+                'to' => $ditampilkan,
+                'session_name' => $locked->nama,
+            ]);
+
+            return $locked->fresh();
+        });
+
+        if ($berubah) {
+            $engine->siarkanDisplay($fresh);
+            SesiStatusUpdated::safeDispatch($fresh, ['action' => 'nilai_visibility_updated']);
+        }
+
+        return back()->with('sukses', $ditampilkan
+            ? 'Nilai telah ditampilkan kepada peserta.'
+            : 'Nilai telah disembunyikan dari peserta.');
+    }
+
     public function destroy(QuizSession $session): RedirectResponse
     {
         if (! $session->quiz->is_percobaan) {
@@ -831,6 +882,7 @@ class SessionController extends Controller
             'action' => 'reset_attempt',
             'user_id' => $userId,
         ]);
+        SesiStatusUpdated::safeDispatch($session->fresh(), ['action' => 'nilai_visibility_updated']);
         PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
         $message = $data['reset_mode'] === 'resume'

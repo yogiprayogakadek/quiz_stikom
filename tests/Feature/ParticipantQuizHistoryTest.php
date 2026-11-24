@@ -410,6 +410,7 @@ class ParticipantQuizHistoryTest extends TestCase
             'mode' => $opsi['mode'] ?? 'acak',
             'jenis' => $opsi['jenis'] ?? 'utama',
             'status' => 'selesai',
+            'nilai_ditampilkan' => $opsi['nilai_ditampilkan'] ?? true,
             'display_token' => Str::random(40),
             'created_by' => $admin->id,
         ]);

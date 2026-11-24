@@ -69,4 +69,19 @@ class QuizGrade extends Model
                 ?? static::query()->where('sesi_remidi_id', $attempt->quiz_session_id)->first())
             : static::query()->where('sesi_awal_id', $attempt->quiz_session_id)->first();
     }
+
+    public static function dipublikasikanUntukAttempt(Attempt $attempt): ?self
+    {
+        $grade = static::untukAttempt($attempt);
+
+        if ($grade === null || ! $attempt->quizSession?->nilaiTampil()) {
+            return null;
+        }
+
+        if ($grade->sesi_remidi_id !== null && ! $grade->sesiRemidi()->value('nilai_ditampilkan')) {
+            return null;
+        }
+
+        return $grade;
+    }
 }

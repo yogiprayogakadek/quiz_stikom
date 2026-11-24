@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Attempt;
+use App\Models\AuditLog;
+use App\Models\QuizSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -11,7 +13,11 @@ class AttemptResetService
     public function reset(Attempt $attempt, string $mode, ?int $durationMinutes = null): void
     {
         if ($mode === 'fresh') {
-            DB::transaction(fn () => $attempt->delete());
+            DB::transaction(function () use ($attempt) {
+                $session = $attempt->quizSession;
+                $this->sembunyikanNilai($session, $attempt->id);
+                $attempt->delete();
+            });
 
             return;
         }
@@ -23,6 +29,7 @@ class AttemptResetService
         DB::transaction(function () use ($attempt, $durationMinutes) {
             $locked = Attempt::query()->with('quizSession')->lockForUpdate()->findOrFail($attempt->id);
             $session = $locked->quizSession;
+            $this->sembunyikanNilai($session, $locked->id);
 
             if ($session?->mode !== 'acak') {
                 throw ValidationException::withMessages(['reset_mode' => 'Lanjut dari jawaban terakhir hanya tersedia untuk Mode Acak.']);
@@ -69,5 +76,20 @@ class AttemptResetService
                 'last_seen_at' => null,
             ])->save();
         });
+    }
+
+    private function sembunyikanNilai(?QuizSession $session, int $attemptId): void
+    {
+        if ($session === null || ! $session->nilaiTampil()) {
+            return;
+        }
+
+        $session->update(['nilai_ditampilkan' => false]);
+        AuditLog::record('session_score_visibility_changed', 'quiz_session', $session->id, [
+            'from' => true,
+            'to' => false,
+            'reason' => 'attempt_reset',
+            'attempt_id' => $attemptId,
+        ]);
     }
 }

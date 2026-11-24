@@ -430,7 +430,7 @@ class ExamControlTest extends TestCase
     {
         [$organization, , $participant, $session, $attempt] = $this->dasar('final_lama');
 
-        $session->update(['status' => 'selesai']);
+        $session->update(['status' => 'selesai', 'nilai_ditampilkan' => true]);
 
         $attempt->update([
             'status' => 'selesai',
@@ -466,7 +466,7 @@ class ExamControlTest extends TestCase
         [, , , $session, $attempt] = $this->dasar('final_percobaan');
 
         $session->quiz->update(['is_percobaan' => true]);
-        $session->update(['status' => 'selesai']);
+        $session->update(['status' => 'selesai', 'nilai_ditampilkan' => true]);
         $attempt->update([
             'status' => 'selesai',
             'selesai_at' => now()->getTimestampMs(),
@@ -497,6 +497,7 @@ class ExamControlTest extends TestCase
         $this->assertSame('selesai', $attempt->fresh()->status);
         $this->assertSame('selesai', $session->fresh()->status);
 
+        $session->update(['nilai_ditampilkan' => true]);
         $state = app(QuizEngine::class)->displayState($session->fresh());
 
         $this->assertCount(1, $state['leaderboard']);

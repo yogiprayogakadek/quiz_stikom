@@ -575,7 +575,15 @@
                 </section>
             </template>
 
-            <template x-if="state && state.status === 'selesai'">
+            <template x-if="state && state.status === 'selesai' && !state.nilai_ditampilkan">
+                <section class="mx-auto max-w-3xl rounded-panel border border-outline bg-surface p-8 text-center lg:p-12">
+                    <span class="pill pill-sun text-base">Sesi selesai</span>
+                    <h1 class="mt-4 text-5xl text-ink">Nilai belum dipublikasikan</h1>
+                    <p class="mt-4 text-2xl text-ink-muted">Pekerjaan peserta sudah tersimpan. Hasil akhir akan tampil setelah admin menyelesaikan pemeriksaan.</p>
+                </section>
+            </template>
+
+            <template x-if="state && state.status === 'selesai' && state.nilai_ditampilkan">
                 <section class="space-y-8">
                     <div class="text-center">
                         <span class="pill pill-sun text-base">Sesi selesai</span>

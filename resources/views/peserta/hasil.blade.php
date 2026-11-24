@@ -7,7 +7,7 @@
     $essayBelum = $rincian->filter(fn ($baris) => $baris['tipe'] === 'essay'
         && filled($baris['jawaban_saya'])
         && $baris['dinilai_at'] === null)->count();
-    $nilaiTertunda = $essayBelum > 0;
+    $nilaiTertunda = $nilaiDitampilkan && $essayBelum > 0;
     $adaEssay = $rincian->contains(fn ($baris) => $baris['tipe'] === 'essay');
 @endphp
 
@@ -24,7 +24,13 @@
             <p class="pill pill-brand mx-auto">{{ $mode === 'serempak' ? 'Mode Serempak' : 'Mode Acak' }}</p>
             <h2 id="skor-akhir" class="sr-only">Status nilai</h2>
 
-            @if ($nilaiTertunda)
+            @if (! $nilaiDitampilkan)
+                <div class="mx-auto mt-6 max-w-md rounded-2xl border border-outline bg-surface px-5 py-6" data-score-hidden>
+                    <x-icon name="eye-off" :size="32" class="mx-auto text-ink-muted" />
+                    <p class="mt-3 text-xl font-bold text-ink">Nilai belum dipublikasikan</p>
+                    <p class="mt-1 text-base text-ink-muted">Pekerjaanmu sudah tersimpan. Admin akan menampilkan nilai setelah seluruh pemeriksaan selesai.</p>
+                </div>
+            @elseif ($nilaiTertunda)
                 <div class="mx-auto mt-6 max-w-md rounded-2xl bg-sun-soft px-5 py-6" data-score-pending>
                     <x-icon name="clock" :size="32" class="mx-auto text-sun-deep" />
                     <p class="mt-3 text-xl font-bold text-ink">Menunggu penilaian essay</p>
@@ -53,11 +59,13 @@
                 </div>
             @endif
 
-            <div class="mt-5 grid grid-cols-2 gap-3">
-                <div class="rounded-2xl bg-leaf-soft p-4">
-                    <p class="text-sm font-bold text-leaf-deep">{{ $adaEssay ? 'Pilihan ganda benar' : 'Jawaban benar' }}</p>
-                    <p class="font-mono text-3xl font-bold text-ink">{{ $attempt->jumlah_benar }}</p>
-                </div>
+            <div class="mt-5 grid {{ $nilaiDitampilkan ? 'grid-cols-2' : 'grid-cols-1' }} gap-3">
+                @if ($nilaiDitampilkan)
+                    <div class="rounded-2xl bg-leaf-soft p-4">
+                        <p class="text-sm font-bold text-leaf-deep">{{ $adaEssay ? 'Pilihan ganda benar' : 'Jawaban benar' }}</p>
+                        <p class="font-mono text-3xl font-bold text-ink">{{ $attempt->jumlah_benar }}</p>
+                    </div>
+                @endif
                 <div class="rounded-2xl bg-surface p-4">
                     <p class="text-sm font-bold text-ink-muted">Total soal</p>
                     <p class="font-mono text-3xl font-bold text-ink">{{ $total_soal }}</p>
@@ -70,7 +78,11 @@
         <section class="card" aria-labelledby="catatan-hasil">
             <h2 id="catatan-hasil" class="text-2xl">Yang perlu diketahui</h2>
 
-            @if (! $tampilkan)
+            @if (! $nilaiDitampilkan)
+                <p class="mt-3 text-base text-ink-muted">
+                    Nilai masih disembunyikan oleh admin. Status publikasi akan diperbarui otomatis selama halaman ini terbuka.
+                </p>
+            @elseif (! $tampilkan)
                 <p class="mt-3 text-base text-ink-muted">
                     Admin tidak mengaktifkan pembahasan untuk sesi ini. Nilai tetap tersimpan dan bisa dilihat di dashboard.
                 </p>
@@ -108,7 +120,7 @@
         @include('peserta._feedback', ['attempt' => $attempt, 'inline' => true])
     @endif
 
-    @if ($nilaiAkhir && ! $nilaiTertunda)
+    @if ($nilaiDitampilkan && $nilaiAkhir && ! $nilaiTertunda)
         <section class="mt-6 card border-leaf" aria-labelledby="nilai-akhir-heading">
             <p class="pill pill-leaf">Nilai akhir</p>
             <h2 id="nilai-akhir-heading" class="mt-3 text-2xl">Nilai akhir setelah remidi</h2>
@@ -118,7 +130,7 @@
                 Nilai awal {{ $nilaiAkhir->nilai_awal }}@if ($nilaiAkhir->nilai_remidi !== null), nilai remidi {{ $nilaiAkhir->nilai_remidi }}@endif.
             </p>
         </section>
-    @elseif (! $nilaiTertunda && $session->isRemidi() && $attempt->status === 'selesai')
+    @elseif ($nilaiDitampilkan && ! $nilaiTertunda && $session->isRemidi() && $attempt->status === 'selesai')
         <section class="mt-6 card" aria-labelledby="nilai-akhir-heading">
             <h2 id="nilai-akhir-heading" class="text-2xl">Nilai remidi tersimpan</h2>
             <p class="mt-2 text-base text-ink-muted">Nilai akhir menunggu admin memilih nilai terbaik antara nilai awal dan nilai remidi.</p>
@@ -154,8 +166,10 @@
                             <th scope="col">Soal</th>
                             <th scope="col">Jawaban Anda</th>
                             <th scope="col">Kunci / jawaban benar</th>
-                            <th scope="col">Hasil</th>
-                            <th scope="col">Poin</th>
+                            @if ($nilaiDitampilkan)
+                                <th scope="col">Hasil</th>
+                                <th scope="col">Poin</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -205,6 +219,7 @@
                                         {{ $baris['jawaban_benar'] ?? '-' }}
                                     @endif
                                 </td>
+                                @if ($nilaiDitampilkan)
                                 <td>
                                     @if ($baris['tipe'] === 'essay')
                                         @if ($baris['dinilai_at'])
@@ -237,6 +252,7 @@
                                         {{ $baris['skor'] }}
                                     @endif
                                 </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>
@@ -252,7 +268,7 @@
 
             echo.channel('quiz-sessions')
                 .listen('.SesiStatusUpdated', (data) => {
-                    if (data.session_id === {{ $session->id }} && data.action === 'pembahasan_updated') {
+                    if (data.session_id === {{ $session->id }} && ['pembahasan_updated', 'nilai_visibility_updated'].includes(data.action)) {
                         window.location.reload();
                     }
                 });

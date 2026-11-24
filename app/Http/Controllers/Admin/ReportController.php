@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\EssayDinilai;
+use App\Events\SesiStatusUpdated;
 use App\Events\SessionMonitorUpdated;
 use App\Exceptions\AiRequestException;
 use App\Http\Controllers\Controller;
@@ -49,6 +50,8 @@ class ReportController extends Controller
             ->whereHas('question', fn ($q) => $q->where('tipe', 'essay'))
             ->whereNull('dinilai_at')
             ->count();
+        $essayMenungguPublikasi = $session->essayMenungguPenilaian();
+        $nilaiSiapDipublikasikan = $session->nilaiSiapDipublikasikan();
 
         $statistikSoal = $this->statistikSoal($session);
         $hasEssay = Question::where('quiz_id', $session->quiz_id)->where('tipe', 'essay')->exists();
@@ -65,6 +68,8 @@ class ReportController extends Controller
             'selesai',
             'perluTinjau',
             'essayBelumDinilai',
+            'essayMenungguPublikasi',
+            'nilaiSiapDipublikasikan',
             'indikasiPlagiat',
             'hasEssay',
             'statistikSoal',
@@ -638,6 +643,10 @@ class ReportController extends Controller
         ]);
 
         $resetter->reset($attempt, $mode, $duration);
+        SesiStatusUpdated::safeDispatch(
+            QuizSession::findOrFail($sessionId),
+            ['action' => 'nilai_visibility_updated'],
+        );
 
         return redirect()
             ->route('admin.reports.session', $sessionId)

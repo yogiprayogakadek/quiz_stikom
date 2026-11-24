@@ -473,6 +473,7 @@ class AttemptController extends Controller
         }
 
         $session = $attempt->quizSession;
+        $nilaiDitampilkan = $session->nilaiTampil();
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
         $tampilkan = $session->pembahasanTampil();
@@ -529,9 +530,10 @@ class AttemptController extends Controller
             'rincian' => $rincian,
             'tampilkan' => $tampilkan,
             'catatanPengajar' => $catatanPengajar,
-            'catatanTampil' => $catatanPengajar->isNotEmpty() && $essayBelumDinilai === 0,
+            'catatanTampil' => $nilaiDitampilkan && $catatanPengajar->isNotEmpty() && $essayBelumDinilai === 0,
             'total_soal' => $attemptQuestions->count(),
-            'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
+            'nilaiAkhir' => QuizGrade::dipublikasikanUntukAttempt($attempt),
+            'nilaiDitampilkan' => $nilaiDitampilkan,
             'tampilkanFeedback' => $attempt->needsFeedbackPrompt() && ! session('feedback_ditunda'),
         ]);
     }

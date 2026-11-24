@@ -366,6 +366,7 @@ class RemedialTest extends TestCase
             'remidi_dari_session_id' => $awal->id,
             'remidi_soal' => 'baru',
             'status' => 'selesai',
+            'nilai_ditampilkan' => true,
             'display_token' => 'token-remidi-dashboard',
             'created_by' => $admin->id,
         ]);
@@ -513,6 +514,7 @@ class RemedialTest extends TestCase
             'nama' => 'Sesi '.$quiz->judul,
             'mode' => $mode,
             'status' => $status,
+            'nilai_ditampilkan' => true,
             'display_token' => 'token-'.uniqid(),
             'created_by' => $admin->id,
         ]);

@@ -218,6 +218,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::get('sessions/{session}/monitor', [AdminSessionController::class, 'monitor'])->name('sessions.monitor');
     Route::post('sessions/{session}/tutup', [AdminSessionController::class, 'close'])->name('sessions.close');
     Route::post('sessions/{session}/pembahasan', [AdminSessionController::class, 'pembahasan'])->name('sessions.pembahasan');
+    Route::post('sessions/{session}/nilai', [AdminSessionController::class, 'nilai'])->name('sessions.nilai');
     Route::post('sessions/{session}/lewati-soal', [AdminSessionController::class, 'skip'])->name('sessions.skip');
     Route::post('sessions/{session}/peserta/{attempt}/kumpulkan', [AdminSessionController::class, 'forceFinish'])
         ->name('sessions.attempts.finish');

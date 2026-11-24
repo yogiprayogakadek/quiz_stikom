@@ -234,6 +234,7 @@ class CatatanPengajarTest extends TestCase
             'nama' => 'Sesi Catatan',
             'mode' => 'acak',
             'status' => 'selesai',
+            'nilai_ditampilkan' => true,
             'display_token' => 'token-catatan',
             'created_by' => $admin->id,
         ], $sessionOverrides));

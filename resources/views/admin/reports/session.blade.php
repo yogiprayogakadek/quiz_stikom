@@ -44,6 +44,50 @@
         </div>
     @endif
 
+    @if ($session->status === 'selesai')
+        <section class="mb-5 card" aria-labelledby="publikasi-nilai">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 id="publikasi-nilai" class="text-2xl">Publikasi nilai peserta</h2>
+                        <span class="pill {{ $session->nilaiTampil() ? 'pill-leaf' : 'pill-neutral' }}">
+                            {{ $session->nilaiTampil() ? 'Ditampilkan' : 'Disembunyikan' }}
+                        </span>
+                    </div>
+                    <p class="mt-2 max-w-2xl text-base text-ink-muted">
+                        @if ($session->nilaiTampil())
+                            Peserta dapat melihat nilai, rincian skor, dan peringkat sesi ini.
+                        @elseif ($nilaiSiapDipublikasikan)
+                            Seluruh pekerjaan sudah final. Nilai siap ditampilkan kepada peserta.
+                        @elseif ($essayMenungguPublikasi > 0)
+                            Nilai belum dapat ditampilkan karena {{ $essayMenungguPublikasi }} jawaban essay masih menunggu penilaian.
+                        @else
+                            Nilai belum dapat ditampilkan karena masih ada peserta yang belum menyelesaikan attempt.
+                        @endif
+                    </p>
+                </div>
+
+                <form
+                    method="POST"
+                    action="{{ route('admin.sessions.nilai', $session) }}"
+                    data-progress-message="Memperbarui publikasi nilai..."
+                    @if ($session->nilaiTampil()) onsubmit="return confirm('Sembunyikan nilai sesi ini? Angka nilai dan peringkat akan langsung hilang dari tampilan peserta.')" @endif
+                >
+                    @csrf
+                    <input type="hidden" name="status" value="{{ $session->nilaiTampil() ? 'disembunyikan' : 'ditampilkan' }}">
+                    <button
+                        type="submit"
+                        class="btn {{ $session->nilaiTampil() ? 'btn-secondary' : 'btn-primary' }} w-full sm:w-auto"
+                        @disabled(! $session->nilaiTampil() && ! $nilaiSiapDipublikasikan)
+                    >
+                        <x-icon name="{{ $session->nilaiTampil() ? 'eye-off' : 'eye' }}" :size="20" />
+                        {{ $session->nilaiTampil() ? 'Sembunyikan nilai' : 'Tampilkan nilai' }}
+                    </button>
+                </form>
+            </div>
+        </section>
+    @endif
+
     <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 {{ $hasEssay ? 'xl:grid-cols-5' : '' }}">
         <div class="card">
             <p class="text-base font-bold text-ink-muted">Peserta</p>

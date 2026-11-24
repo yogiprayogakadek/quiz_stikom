@@ -109,14 +109,17 @@ class SessionController extends Controller
             'fase' => $session->fase,
             'server_now' => now()->getTimestampMs(),
             'attempt_status' => $attempt->status,
-            'skor_total' => $attempt->skor_total,
-            'jumlah_benar' => $attempt->jumlah_benar,
             'total_peserta' => $session->attempts()->mengikuti()->count(),
             'result_url' => route('peserta.session.result', $session),
             'proctoring_action' => $outcome['action'] ?? 'none',
             'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
             'pesan_pengajar' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ];
+
+        if ($session->nilaiTampil()) {
+            $base['skor_total'] = $attempt->skor_total;
+            $base['jumlah_benar'] = $attempt->jumlah_benar;
+        }
 
         if ($session->status === 'lobby') {
             return response()->json($base + [
@@ -277,6 +280,7 @@ class SessionController extends Controller
 
         $attempt->loadMissing('quizSession.quiz');
         $session->loadMissing('quiz');
+        $nilaiDitampilkan = $session->nilaiTampil();
 
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
@@ -310,7 +314,8 @@ class SessionController extends Controller
             'catatanPengajar' => collect(),
             'catatanTampil' => false,
             'total_soal' => $attemptQuestions->count(),
-            'nilaiAkhir' => QuizGrade::untukAttempt($attempt),
+            'nilaiAkhir' => QuizGrade::dipublikasikanUntukAttempt($attempt),
+            'nilaiDitampilkan' => $nilaiDitampilkan,
         ]);
     }
 

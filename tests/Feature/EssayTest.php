@@ -80,9 +80,8 @@ class EssayTest extends TestCase
             ->withSession(['auth_token' => 'token-peserta'])
             ->get(route('peserta.attempt.result', $attempt))
             ->assertOk()
-            ->assertSee('data-score-pending', false)
-            ->assertSee('data-essay-score-pending', false)
-            ->assertSee('Menunggu penilaian essay')
+            ->assertSee('data-score-hidden', false)
+            ->assertSee('Nilai belum dipublikasikan')
             ->assertDontSee('data-final-score', false);
 
         $this->actingAs($admin)
@@ -90,6 +89,12 @@ class EssayTest extends TestCase
             ->post(route('admin.attempts.nilai', $attempt), [
                 'nilai' => [$essay->id => 8],
             ])
+            ->assertRedirect();
+
+        $session->update(['status' => 'selesai']);
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin'])
+            ->post(route('admin.sessions.nilai', $session), ['status' => 'ditampilkan'])
             ->assertRedirect();
 
         $this->actingAs($peserta)
@@ -131,6 +136,7 @@ class EssayTest extends TestCase
         [, $peserta, $session, $attempt] = $this->buatAcakBerjalan(false);
         $session->update(['pembahasan_mode' => 'terbuka']);
         app(QuizEngine::class)->selesaikanAcak($attempt);
+        $session->update(['status' => 'selesai', 'nilai_ditampilkan' => true]);
 
         $this->actingAs($peserta)
             ->withSession(['auth_token' => 'token-peserta'])

@@ -277,7 +277,7 @@ class DashboardController extends Controller
         $organizationId = app(OrganizationContext::class)->id();
         $kelasIds = $kelasSaya->pluck('id')->all();
 
-        $nilaiTerbaik = $this->batasiKelas($this->bestScoresQuery($organizationId), $kelasIds)->get();
+        $nilaiTerbaik = $this->batasiKelas($this->bestScoresQuery($organizationId, true), $kelasIds)->get();
 
         $filterKelasId = (int) $request->query('kelas', 0);
         $kelasFilter = $filterKelasId > 0 ? $kelasSaya->firstWhere('id', $filterKelasId) : null;
@@ -356,7 +356,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function bestScoresQuery(?int $organizationId)
+    private function bestScoresQuery(?int $organizationId, bool $hanyaDipublikasikan = false)
     {
         return DB::table('attempts')
             ->join('users', 'users.id', '=', 'attempts.user_id')
@@ -370,6 +370,7 @@ class DashboardController extends Controller
             ->where('attempts.status', 'selesai')
             ->whereNotNull('attempts.bergabung_at')
             ->whereNotNull('attempts.nilai')
+            ->when($hanyaDipublikasikan, fn ($query) => $query->where('quiz_sessions.nilai_ditampilkan', true))
             ->whereRaw('COALESCE(kuis_awal.is_percobaan, quizzes.is_percobaan) = ?', [false])
             ->when($organizationId !== null, fn ($query) => $query->where('attempts.organization_id', $organizationId))
             ->groupBy(

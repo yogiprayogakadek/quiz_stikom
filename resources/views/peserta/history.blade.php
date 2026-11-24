@@ -162,7 +162,11 @@
                     </dl>
 
                     <div class="rounded-2xl border border-outline bg-[#f8fafc] p-4">
-                        @if ($pending > 0)
+                        @if (! $session->nilaiTampil())
+                            <p class="text-xs font-bold uppercase tracking-wider text-ink-faint">Nilai akhir</p>
+                            <p class="mt-1 font-display text-lg font-extrabold text-ink">Belum dipublikasikan</p>
+                            <p class="text-sm font-semibold text-ink-muted">Pekerjaan sudah tersimpan dan menunggu publikasi admin.</p>
+                        @elseif ($pending > 0)
                             <p class="text-xs font-bold uppercase tracking-wider text-ink-faint">Nilai akhir</p>
                             <p class="mt-1 font-display text-lg font-extrabold text-ink">Menunggu penilaian essay</p>
                             <p class="text-sm font-semibold text-ink-muted">{{ $pending }} jawaban menunggu dinilai.</p>
