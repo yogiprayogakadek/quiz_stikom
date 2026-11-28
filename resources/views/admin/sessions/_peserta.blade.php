@@ -89,6 +89,11 @@
                                     <span class="pill {{ $online ? 'pill-leaf' : 'pill-neutral' }}">{{ $online ? 'Online' : 'Offline' }}</span>
                                 </div>
                             @endif
+                                @if ($attempt->ip_change_count > 0)
+                                    <div class="mt-1">
+                                        <span class="pill pill-sun text-xs">IP berubah {{ $attempt->ip_change_count }}x</span>
+                                    </div>
+                                @endif
                         </td>
                         <td class="font-mono">{{ $attempt->jumlah_benar }}</td>
                         <td class="font-mono">
@@ -118,13 +123,22 @@
                                 <a href="{{ route('admin.reports.attempt', $attempt) }}" class="btn btn-ghost px-3">Detail</a>
 
                                 @if ($session->status === 'berjalan' && $attempt->status === 'berjalan')
+                                    @if ($session->pakaiScreenProctoring() || $session->webcam_proctoring)
+                                        <form method="POST" action="{{ route('admin.sessions.attempts.peek-screen', [$session, $attempt]) }}">
+                                            @csrf
+                                            <button type="submit" class="btn btn-secondary min-h-11 px-3 whitespace-nowrap" title="Minta tangkapan layar berkala selama 60 detik khusus peserta ini">
+                                                <x-icon name="eye" :size="16" />
+                                                <span>Intip layar (60d)</span>
+                                            </button>
+                                        </form>
+                                    @endif
                                     <form
                                         method="POST"
                                         action="{{ route('admin.sessions.attempts.finish', [$session, $attempt]) }}"
                                         onsubmit="return confirm('Kumpulkan pekerjaan peserta ini sekarang? Nilai dihitung dari jawaban yang sudah tersimpan.')"
                                     >
                                         @csrf
-                                        <button type="submit" class="btn btn-secondary px-3 whitespace-nowrap">Kumpulkan</button>
+                                        <button type="submit" class="btn btn-secondary min-h-11 px-3 whitespace-nowrap">Kumpulkan</button>
                                     </form>
                                 @endif
 

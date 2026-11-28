@@ -72,6 +72,7 @@ class ProctoringService
                     'level' => $label['level'],
                     'waktu' => now()->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                     'jumlah_pelanggaran' => $jumlah,
+                    'bukti_layar_aktif' => $session->pakaiScreenProctoring(),
                 ]);
             }
         }

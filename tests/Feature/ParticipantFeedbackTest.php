@@ -162,7 +162,7 @@ class ParticipantFeedbackTest extends TestCase
             ->assertDontSee('Bagaimana pengalaman ujianmu?');
     }
 
-    public function test_master_melihat_masukan_anonim_dari_semua_workspace(): void
+    public function test_master_melihat_masukan_beridentitas_dari_semua_workspace(): void
     {
         [$organization, $admin, $participant, $session] = $this->dasar('peserta_rahasia');
         $attempt = $this->attempt($participant, $session);
@@ -190,11 +190,11 @@ class ParticipantFeedbackTest extends TestCase
             ->withSession(['auth_token' => $master->current_session_token])
             ->get(route('master.feedback.index'))
             ->assertOk()
-            ->assertSee('Kotak masuk anonim')
+            ->assertSee('Kotak masuk lintas workspace')
             ->assertSee($organization->name)
             ->assertSee('Tampilan ujian nyaman dipakai.')
-            ->assertSee('Anonim')
-            ->assertDontSee('Peserta peserta_rahasia');
+            ->assertSee('Peserta peserta_rahasia')
+            ->assertSee('Kelas Masukan');
     }
 
     private function dasar(string $username): array

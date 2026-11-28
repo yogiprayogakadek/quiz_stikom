@@ -11,12 +11,21 @@ class StoreAnswerRequest extends FormRequest
         return [
             'question_id' => ['required', 'integer', 'exists:questions,id'],
             'option_id' => ['nullable', 'integer', 'exists:options,id'],
+            'option_ids' => ['nullable', 'array', 'max:10'],
+            'option_ids.*' => ['integer', 'exists:options,id'],
             'jawaban_teks' => ['nullable', 'string', 'max:20000'],
             'jawaban_table' => ['nullable', 'array'],
             'jawaban_table.cells' => ['nullable', 'array', 'max:20'],
             'jawaban_table.cells.*' => ['array', 'max:10'],
             'jawaban_table.cells.*.*' => ['nullable', 'string', 'max:1000'],
             'part_key' => ['nullable', 'string', 'max:64'],
+            'typing_metrics' => ['nullable', 'array'],
+            'typing_metrics.first_input_delay_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
+            'typing_metrics.typing_duration_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
+            'typing_metrics.total_keys' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'typing_metrics.backspace_keys' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'typing_metrics.paste_events' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'typing_metrics.idle_gaps' => ['nullable', 'integer', 'min:0', 'max:100000'],
         ];
     }
 

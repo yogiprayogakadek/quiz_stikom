@@ -11,8 +11,10 @@ use App\Models\Question;
 use App\Models\Quiz;
 use App\Services\AiQuestionService;
 use App\Services\OrganizationUsage;
+use App\Services\QuestionCloneService;
 use App\Services\QuestionMediaService;
 use App\Support\QuestionContent;
+use App\Support\QuickQuestionParser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,21 +53,20 @@ class QuestionController extends Controller
         $question = null;
 
         try {
-            DB::transaction(function () use ($data, $quiz, $mediaService, &$storedPaths, &$question) {
+            DB::transaction(function () use ($data, $request, $quiz, $mediaService, &$storedPaths, &$question) {
                 $question = Question::create([
                     'quiz_id' => $quiz?->id,
                     'teks' => $data['teks'],
                     'tipe' => $data['tipe'],
                     'bobot' => $data['bobot'],
+                    'urutan_tetap' => $data['urutan_tetap'] ?? null,
                     'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
                     'pembahasan' => $data['pembahasan'] ?? null,
                     'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
                     'rubrik_essay' => $data['tipe'] === 'essay' ? ($data['rubrik_essay'] ?? null) : null,
                     'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
                     'answer_format' => $data['tipe'] === 'essay' ? ($data['answer_format'] ?? 'rich_text') : 'rich_text',
-                    'answer_config_json' => $data['tipe'] === 'essay'
-                        ? QuestionContent::normalizeAnswerConfig($data['answer_format'] ?? 'rich_text', $data['answer_config'] ?? [])
-                        : null,
+                    'answer_config_json' => $this->susunKonfigurasiJawaban($data, $request),
                 ]);
 
                 $question->update([
@@ -75,9 +76,7 @@ class QuestionController extends Controller
                         : null,
                 ]);
 
-                if ($data['tipe'] === 'pilihan_ganda') {
-                    $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
-                }
+                $this->simpanOpsiSesuaiTipe($question, $data);
             });
         } catch (\Throwable $exception) {
             $mediaService->cleanupPaths($storedPaths);
@@ -85,6 +84,12 @@ class QuestionController extends Controller
         }
 
         $mediaService->pruneUnused($question);
+
+        if ($quiz && $request->input('after_save') === 'create_another') {
+            return redirect()
+                ->route('admin.quizzes.questions.create', ['quiz' => $quiz, 'tipe' => $question->tipe])
+                ->with('sukses', 'Soal disimpan. Silakan tulis soal berikutnya.');
+        }
 
         if ($quiz) {
             return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', 'Soal kuis ditambahkan.');
@@ -137,11 +142,12 @@ class QuestionController extends Controller
         $storedPaths = [];
 
         try {
-            DB::transaction(function () use ($question, $data, $mediaService, &$storedPaths) {
+            DB::transaction(function () use ($question, $data, $request, $mediaService, &$storedPaths) {
                 $question->update([
                     'teks' => $data['teks'],
                     'tipe' => $data['tipe'],
                     'bobot' => $data['bobot'],
+                    'urutan_tetap' => $data['urutan_tetap'] ?? null,
                     'durasi_detik' => $data['tipe'] === 'essay' ? 120 : $data['durasi_detik'],
                     'pembahasan' => $data['pembahasan'] ?? null,
                     'kunci_essay' => $data['tipe'] === 'essay' ? ($data['kunci_essay'] ?? null) : null,
@@ -149,9 +155,7 @@ class QuestionController extends Controller
                     'petunjuk_json' => $data['tipe'] === 'essay' ? $this->normalisasiPetunjuk($data['petunjuk'] ?? null) : null,
                     'content_blocks_json' => $mediaService->persistBlocks($question, $data['content_blocks'] ?? [], $storedPaths),
                     'answer_format' => $data['tipe'] === 'essay' ? ($data['answer_format'] ?? 'rich_text') : 'rich_text',
-                    'answer_config_json' => $data['tipe'] === 'essay'
-                        ? QuestionContent::normalizeAnswerConfig($data['answer_format'] ?? 'rich_text', $data['answer_config'] ?? [])
-                        : null,
+                    'answer_config_json' => $this->susunKonfigurasiJawaban($data, $request),
                     'sub_soal_json' => $data['tipe'] === 'essay'
                         ? $this->normalisasiSubSoal($data['sub_soal'] ?? [], $question, $mediaService, $storedPaths)
                         : null,
@@ -159,9 +163,7 @@ class QuestionController extends Controller
 
                 $question->options()->delete();
 
-                if ($data['tipe'] === 'pilihan_ganda') {
-                    $this->simpanOpsi($question, $data['opsi'], (int) $data['correct']);
-                }
+                $this->simpanOpsiSesuaiTipe($question, $data);
             });
         } catch (\Throwable $exception) {
             $mediaService->cleanupPaths($storedPaths);
@@ -233,6 +235,56 @@ class QuestionController extends Controller
         }
 
         return redirect()->route('admin.quizzes.questions.index', $quiz)->with('sukses', $pesan);
+    }
+
+    private function susunKonfigurasiJawaban(array $data, Request $request): ?array
+    {
+        return match ($data['tipe']) {
+            'essay' => QuestionContent::normalizeAnswerConfig($data['answer_format'] ?? 'rich_text', $data['answer_config'] ?? []),
+            'pilihan_majemuk' => [
+                'scoring_mode' => ($data['scoring_mode'] ?? 'all_or_nothing') === 'partial' ? 'partial' : 'all_or_nothing',
+            ],
+            'isian_singkat' => [
+                'case_sensitive' => $request->boolean('case_sensitive'),
+            ],
+            default => null,
+        };
+    }
+
+    private function simpanOpsiSesuaiTipe(Question $question, array $data): void
+    {
+        if ($data['tipe'] === 'pilihan_ganda') {
+            $this->simpanOpsi($question, $data['opsi'] ?? [], (int) ($data['correct'] ?? 0));
+
+            return;
+        }
+
+        if ($data['tipe'] === 'pilihan_majemuk') {
+            $indices = array_values(array_unique(array_map('intval', (array) ($data['correct_indices'] ?? []))));
+            foreach (($data['opsi'] ?? []) as $index => $item) {
+                $question->options()->create([
+                    'teks' => $item['teks'],
+                    'is_correct' => in_array((int) $index, $indices, true),
+                ]);
+            }
+
+            return;
+        }
+
+        if ($data['tipe'] === 'isian_singkat') {
+            $diterima = collect(preg_split('/\r\n|\r|\n|\|/', (string) ($data['accepted_answers'] ?? '')) ?: [])
+                ->map(fn ($baris) => trim((string) $baris))
+                ->filter()
+                ->unique()
+                ->values();
+
+            foreach ($diterima as $teksKunci) {
+                $question->options()->create([
+                    'teks' => Str::limit($teksKunci, 500, ''),
+                    'is_correct' => true,
+                ]);
+            }
+        }
     }
 
     private function simpanOpsi(Question $question, array $opsi, int $correct): void
@@ -322,7 +374,9 @@ class QuestionController extends Controller
             throw ValidationException::withMessages(['file' => 'File tidak bisa dibaca.']);
         }
 
-        $header = fgetcsv($handle);
+        $delimiter = $this->deteksiPemisahCsv($handle);
+
+        $header = fgetcsv($handle, 0, $delimiter);
         if ($header === false) {
             fclose($handle);
             throw ValidationException::withMessages(['file' => 'File CSV kosong.']);
@@ -366,7 +420,7 @@ class QuestionController extends Controller
         $hasil = [];
         $baris = 1;
 
-        while (($row = fgetcsv($handle)) !== false) {
+        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
             $baris++;
 
             if (count(array_filter($row, fn ($v) => trim((string) $v) !== '')) === 0) {
@@ -554,7 +608,17 @@ class QuestionController extends Controller
                 $opsiE = $opsi->get(4)?->teks ?? '';
 
                 $jawabanBenar = '';
-                if ($q->tipe !== 'essay') {
+                if ($q->tipe === 'pilihan_majemuk') {
+                    $hurufBenar = [];
+                    foreach ($opsi as $idx => $opt) {
+                        if ($opt->is_correct && isset($labelHuruf[$idx])) {
+                            $hurufBenar[] = $labelHuruf[$idx];
+                        }
+                    }
+                    $jawabanBenar = implode('|', $hurufBenar);
+                } elseif ($q->tipe === 'isian_singkat') {
+                    $jawabanBenar = $opsi->where('is_correct', true)->pluck('teks')->implode('|');
+                } elseif ($q->tipe !== 'essay') {
                     $correctIndex = $opsi->search(fn ($o) => (bool) $o->is_correct);
                     if ($correctIndex !== false && isset($labelHuruf[$correctIndex])) {
                         $jawabanBenar = $labelHuruf[$correctIndex];
@@ -770,5 +834,185 @@ class QuestionController extends Controller
 
         return redirect()->route('admin.quizzes.questions.index', $quiz)
             ->with('sukses', "{$savedCount} soal berhasil digenerate dan ditambahkan ke kuis.");
+    }
+
+    public function quickPastePreview(Request $request, Quiz $quiz): JsonResponse
+    {
+        if ($quiz->isLocked()) {
+            return response()->json([
+                'message' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'raw_text' => ['required', 'string', 'max:100000'],
+        ], [
+            'raw_text.required' => 'Tempel naskah soal terlebih dahulu.',
+        ]);
+
+        return response()->json(QuickQuestionParser::parse($validated['raw_text']));
+    }
+
+    public function quickPasteStore(Request $request, Quiz $quiz): RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $validated = $request->validate([
+            'raw_text' => ['required', 'string', 'max:100000'],
+            'abaikan_gagal' => ['nullable', 'boolean'],
+        ], [
+            'raw_text.required' => 'Tempel naskah soal terlebih dahulu.',
+        ]);
+
+        $parsed = QuickQuestionParser::parse($validated['raw_text']);
+
+        if ($parsed['errors'] !== [] && ! $request->boolean('abaikan_gagal')) {
+            $firstError = $parsed['errors'][0];
+
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'raw_text' => "Soal #{$firstError['nomor']}: {$firstError['alasan']}",
+                ]);
+        }
+
+        if ($parsed['valid'] === []) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'raw_text' => 'Tidak ada soal valid yang dapat disimpan. Periksa format penulisan.',
+                ]);
+        }
+
+        DB::transaction(function () use ($parsed, $quiz) {
+            foreach ($parsed['valid'] as $item) {
+                $question = Question::create([
+                    'quiz_id' => $quiz->id,
+                    'teks' => $item['teks'],
+                    'tipe' => $item['tipe'],
+                    'bobot' => $item['bobot'],
+                    'durasi_detik' => $item['durasi_detik'],
+                    'pembahasan' => $item['pembahasan'],
+                    'kunci_essay' => $item['kunci_essay'],
+                    'answer_config_json' => $item['answer_config'],
+                ]);
+
+                foreach ($item['opsi'] as $opsi) {
+                    $question->options()->create([
+                        'teks' => $opsi['teks'],
+                        'is_correct' => (bool) $opsi['is_correct'],
+                    ]);
+                }
+            }
+        });
+
+        $jumlah = count($parsed['valid']);
+
+        return redirect()
+            ->route('admin.quizzes.questions.index', $quiz)
+            ->with('sukses', "{$jumlah} soal berhasil ditambahkan lewat Tempel Cepat.");
+    }
+
+    public function bank(Request $request, Quiz $quiz): View|RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $sumberQuizId = $request->integer('sumber_kuis') ?: null;
+        $tipe = trim((string) $request->query('tipe', ''));
+        $cari = trim((string) $request->query('q', ''));
+
+        $otherQuizzes = Quiz::query()
+            ->where('id', '!=', $quiz->id)
+            ->withCount('questions')
+            ->orderBy('judul')
+            ->get();
+
+        $questions = Question::query()
+            ->whereHas('quiz', fn ($q) => $q->where('id', '!=', $quiz->id))
+            ->with(['quiz:id,judul', 'options'])
+            ->withCount(['options', 'media'])
+            ->when($sumberQuizId !== null, fn ($q) => $q->where('quiz_id', $sumberQuizId))
+            ->when($tipe !== '', fn ($q) => $q->where('tipe', $tipe))
+            ->when($cari !== '', fn ($q) => $q->where('teks', 'like', "%{$cari}%"))
+            ->latest('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('admin.questions.bank', compact(
+            'quiz',
+            'otherQuizzes',
+            'questions',
+            'sumberQuizId',
+            'tipe',
+            'cari'
+        ));
+    }
+
+    public function copyFromBank(Request $request, Quiz $quiz, QuestionCloneService $cloneService): RedirectResponse
+    {
+        if ($quiz->isLocked()) {
+            return redirect()->route('admin.quizzes.questions.index', $quiz)
+                ->withErrors(['soal' => 'Kuis ini dipakai sesi yang sudah dibuka, jadi tidak bisa ditambah soal.']);
+        }
+
+        $validated = $request->validate([
+            'question_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'question_ids.*' => ['integer'],
+        ], [
+            'question_ids.required' => 'Pilih minimal satu soal untuk disalin.',
+            'question_ids.min' => 'Pilih minimal satu soal untuk disalin.',
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $validated['question_ids'])));
+
+        $sourceQuestions = Question::query()
+            ->whereHas('quiz', fn ($q) => $q->where('id', '!=', $quiz->id))
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get();
+
+        if ($sourceQuestions->isEmpty()) {
+            return back()->withErrors([
+                'questions' => 'Tidak ada soal dari kuis lain pada workspace ini yang dapat disalin.',
+            ]);
+        }
+
+        $copied = $cloneService->copyToQuiz($sourceQuestions, $quiz, 'questions', true);
+
+        return redirect()
+            ->route('admin.quizzes.questions.index', $quiz)
+            ->with('sukses', "{$copied->count()} soal berhasil disalin ke kuis {$quiz->judul}.");
+    }
+
+    /**
+     * @param  resource  $handle
+     */
+    private function deteksiPemisahCsv($handle): string
+    {
+        $posisiAwal = ftell($handle);
+        $barisPertama = '';
+
+        while (($baris = fgets($handle)) !== false) {
+            if (trim($baris) !== '') {
+                $barisPertama = $baris;
+                break;
+            }
+        }
+
+        fseek($handle, $posisiAwal !== false ? $posisiAwal : 0);
+
+        if ($barisPertama === '') {
+            return ',';
+        }
+
+        $tanpaKutipan = preg_replace('/"[^"]*"/', '', $barisPertama) ?? $barisPertama;
+
+        return substr_count($tanpaKutipan, ';') > substr_count($tanpaKutipan, ',') ? ';' : ',';
     }
 }

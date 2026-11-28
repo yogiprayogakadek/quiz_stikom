@@ -101,7 +101,7 @@ class QuestionPdfController extends Controller
             'quiz' => $quiz,
             'questions' => $preparedQuestions,
             'rawQuestionCount' => $questions->count(),
-            'pgCount' => $questions->where('tipe', 'pilihan_ganda')->count(),
+            'pgCount' => $questions->where('tipe', '!=', 'essay')->count(),
             'essayCount' => $questions->where('tipe', 'essay')->count(),
             'totalBobot' => (int) $questions->sum('bobot'),
             'meta' => $meta,

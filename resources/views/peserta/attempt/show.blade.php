@@ -1,9 +1,38 @@
 <x-layouts.peserta :judul="$session->nama" :keterangan="'Mode Acak · '.$session->quiz->judul" :fokus="true">
+    <style>
+        @media print {
+            body {
+                display: none !important;
+            }
+        }
+    </style>
     <script>
         window.kuisAcak = (config) => ({
             questions: config.questions,
+            totalSoal: config.totalSoal ?? config.questions.length,
+            isolasiSoal: Boolean(config.isolasiSoal),
+            timerPerSoal: Boolean(config.timerPerSoal),
+            pisahKonteksSoal: Boolean(config.pisahKonteksSoal),
+            watermarkLayar: Boolean(config.watermarkLayar),
+            screenProctoring: config.screenProctoring || 'off',
+            webcamProctoring: Boolean(config.webcamProctoring),
+            tabKonteks: 'stimulus',
+            sisaSoal: 0,
+            memuatSoalBerikutnya: false,
+            konfirmasiLanjutKosong: false,
+            typingStats: {},
+            screenStream: null,
+            webcamStream: null,
+            screenSiap: (config.screenProctoring || 'off') === 'off',
+            webcamSiap: !config.webcamProctoring,
+            exitCaptureTimers: [],
+            peekTimer: null,
+            peekUntil: 0,
+            webcamInterval: null,
+            lastAutoSnapshotAt: 0,
             index: config.mulaiIndex ?? 0,
             jawaban: config.jawaban,
+            jawabanMulti: config.jawabanMulti ?? {},
             jawabanTeks: config.jawabanTeks,
             jawabanParts: config.jawabanParts ?? {},
             jawabanData: config.jawabanData ?? {},
@@ -61,7 +90,7 @@
                 return this.questions.length - this.terjawab;
             },
             get statusTeksAktif() {
-                if (this.current?.tipe !== 'essay') {
+                if (this.current?.tipe !== 'essay' && this.current?.tipe !== 'isian_singkat') {
                     return '';
                 }
 
@@ -121,6 +150,14 @@
                     }
 
                     return (this.jawabanTeks[soal.id] ?? '').trim() !== '';
+                }
+
+                if (soal.tipe === 'isian_singkat') {
+                    return (this.jawabanTeks[soal.id] ?? '').trim() !== '';
+                }
+
+                if (soal.tipe === 'pilihan_majemuk') {
+                    return Array.isArray(this.jawabanMulti[soal.id]) && this.jawabanMulti[soal.id].length > 0;
                 }
 
                 return this.jawaban[soal.id] !== null && this.jawaban[soal.id] !== undefined;
@@ -227,8 +264,276 @@
                 this.$nextTick(() => document.getElementById('bagian-' + soal.id + '-' + index)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             },
             pindah(nomor) {
+                if (this.isolasiSoal) return;
                 this.index = Math.max(0, Math.min(this.questions.length - 1, nomor));
+                this.tabKonteks = this.questions[this.index]?.has_context_blocks ? 'stimulus' : 'jawab';
                 this.$nextTick(() => this.$refs.kartuSoal?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            },
+            catatKetikan(soalId, event) {
+                if (!soalId) return;
+                const now = Date.now();
+                if (!this.typingStats[soalId]) {
+                    this.typingStats[soalId] = {
+                        opened_at: now,
+                        first_key_at: null,
+                        last_key_at: null,
+                        total_keys: 0,
+                        backspace_keys: 0,
+                        paste_events: 0,
+                        idle_gaps: 0
+                    };
+                }
+                const stat = this.typingStats[soalId];
+                if (stat.first_key_at === null) {
+                    stat.first_key_at = now;
+                } else if (stat.last_key_at && (now - stat.last_key_at) > 8000) {
+                    stat.idle_gaps++;
+                }
+                stat.last_key_at = now;
+                stat.total_keys++;
+                if (event?.key === 'Backspace' || event?.key === 'Delete') {
+                    stat.backspace_keys++;
+                }
+            },
+            catatPaste(soalId) {
+                if (!soalId) return;
+                const now = Date.now();
+                this.typingStats[soalId] ??= {
+                    opened_at: now,
+                    first_key_at: now,
+                    last_key_at: now,
+                    total_keys: 0,
+                    backspace_keys: 0,
+                    paste_events: 0,
+                    idle_gaps: 0
+                };
+                this.typingStats[soalId].paste_events++;
+            },
+            ringkasTypingMetrics(soalId) {
+                const stat = this.typingStats[soalId];
+                if (!stat) return undefined;
+                const openedAt = stat.opened_at || Date.now();
+                const firstKey = stat.first_key_at || openedAt;
+                const lastKey = stat.last_key_at || firstKey;
+                return {
+                    first_input_delay_ms: Math.max(0, firstKey - openedAt),
+                    typing_duration_ms: Math.max(0, lastKey - firstKey),
+                    total_keys: stat.total_keys,
+                    backspace_keys: stat.backspace_keys,
+                    paste_events: stat.paste_events,
+                    idle_gaps: stat.idle_gaps
+                };
+            },
+            async mintaLanjutSoal(lewatiKonfirmasi = false) {
+                if (this.memuatSoalBerikutnya || this.berhenti || !this.current) return;
+                if (!lewatiKonfirmasi && !this.sudahDijawab(this.current)) {
+                    this.konfirmasiLanjutKosong = true;
+                    return;
+                }
+                this.konfirmasiLanjutKosong = false;
+                this.memuatSoalBerikutnya = true;
+                try {
+                    if (this.current.tipe === 'essay' || this.current.tipe === 'isian_singkat') {
+                        await this.simpanSemuaTeks();
+                    }
+                    const res = await window.kuisFetch(config.nextQuestionUrl, {
+                        method: 'POST',
+                        body: {},
+                        progress: false
+                    });
+                    if (!res.ok) {
+                        if (res.data?.redirect_url) window.location.href = res.data.redirect_url;
+                        return;
+                    }
+                    if (res.data?.selesai && res.data?.redirect_url) {
+                        this.berhenti = true;
+                        this.hentikanStreamMedia();
+                        window.location.href = res.data.redirect_url;
+                        return;
+                    }
+                    if (res.data?.question) {
+                        const q = res.data.question;
+                        this.questions = [q];
+                        this.index = 0;
+                        this.offset = Date.now() - Number(res.data.server_now || Date.now());
+                        this.tabKonteks = (this.pisahKonteksSoal && q.has_context_blocks) ? 'stimulus' : 'jawab';
+                        this.typingStats[q.id] = {
+                            opened_at: Date.now(),
+                            first_key_at: null,
+                            last_key_at: null,
+                            total_keys: 0,
+                            backspace_keys: 0,
+                            paste_events: 0,
+                            idle_gaps: 0
+                        };
+                    }
+                } finally {
+                    this.memuatSoalBerikutnya = false;
+                }
+            },
+            async siapkanMediaPengawas() {
+                const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+                if (this.screenProctoring !== 'off') {
+                    if (isMobile && this.screenProctoring === 'optional_mobile') {
+                        this.screenSiap = true;
+                    } else if (!navigator.mediaDevices?.getDisplayMedia) {
+                        if (this.screenProctoring === 'desktop_only') {
+                            this.pesan = 'Sesi ini mewajibkan browser laptop/PC yang mendukung berbagi seluruh layar.';
+                            return false;
+                        }
+                        this.screenSiap = true;
+                    } else if (!this.screenStream) {
+                        try {
+                            const stream = await navigator.mediaDevices.getDisplayMedia({
+                                video: { frameRate: { ideal: 2, max: 5 } },
+                                audio: false
+                            });
+                            const track = stream.getVideoTracks()[0];
+                            const surface = track?.getSettings?.()?.displaySurface;
+                            if (this.screenProctoring === 'desktop_only' && surface && surface !== 'monitor') {
+                                stream.getTracks().forEach((t) => t.stop());
+                                this.pesan = 'Pilih opsi Seluruh Layar (Entire Screen), bukan satu jendela atau satu tab.';
+                                return false;
+                            }
+                            track?.addEventListener('ended', () => {
+                                this.screenStream = null;
+                                this.screenSiap = false;
+                                if (!this.berhenti) {
+                                    this.kirimKejadian('blur_window');
+                                    this.mulaiToleransi();
+                                }
+                            });
+                            this.screenStream = stream;
+                            this.screenSiap = true;
+                        } catch (e) {
+                            this.pesan = 'Izin berbagi layar diperlukan sebelum memulai sesi ini.';
+                            return false;
+                        }
+                    }
+                }
+                if (this.webcamProctoring && !this.webcamStream) {
+                    if (navigator.mediaDevices?.getUserMedia) {
+                        try {
+                            this.webcamStream = await navigator.mediaDevices.getUserMedia({
+                                video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: 'user' },
+                                audio: false
+                            });
+                            this.webcamSiap = true;
+                            this.mulaiJadwalWebcam();
+                        } catch (e) {
+                            this.pesan = 'Izin kamera diperlukan untuk sesi ujian ini.';
+                            return false;
+                        }
+                    } else {
+                        this.webcamSiap = true;
+                    }
+                }
+                return true;
+            },
+            hentikanStreamMedia() {
+                this.bersihkanJadwalSnapshotKeluar();
+                if (this.peekTimer) clearInterval(this.peekTimer);
+                if (this.webcamInterval) clearInterval(this.webcamInterval);
+                this.screenStream?.getTracks().forEach((t) => t.stop());
+                this.webcamStream?.getTracks().forEach((t) => t.stop());
+            },
+            async kirimSnapshotStream(stream, source, trigger, paksa = false) {
+                if (!stream || this.berhenti || !config.snapshotUrl) return;
+                const now = Date.now();
+                if (!paksa && (now - this.lastAutoSnapshotAt) < 7500) return;
+                const track = stream.getVideoTracks()[0];
+                if (!track || track.readyState !== 'live') return;
+                this.lastAutoSnapshotAt = now;
+
+                try {
+                    const video = document.createElement('video');
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.srcObject = stream;
+                    await video.play();
+
+                    const targetW = source === 'screen' ? 960 : 320;
+                    const ratio = (video.videoHeight && video.videoWidth) ? (video.videoHeight / video.videoWidth) : 0.5625;
+                    const targetH = Math.max(120, Math.round(targetW * ratio));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, targetW, targetH);
+                    video.pause();
+                    video.srcObject = null;
+
+                    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.52));
+                    if (!blob) return;
+
+                    const formData = new FormData();
+                    formData.append('image', blob, source + '.webp');
+                    formData.append('capture_source', source);
+                    formData.append('trigger_type', trigger);
+                    if (this.current?.urutan) {
+                        formData.append('question_urutan', String(this.current.urutan));
+                    }
+
+                    await fetch(config.snapshotUrl, {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || ''
+                        },
+                        body: formData
+                    });
+                } catch (e) {}
+            },
+            jadwalkanSnapshotKeluar(trigger) {
+                this.bersihkanJadwalSnapshotKeluar();
+                if (this.screenStream) {
+                    [1500, 11500, 21500, 31500].forEach((delayMs) => {
+                        this.exitCaptureTimers.push(setTimeout(() => {
+                            if (this.peringatanKeluar || document.hidden) {
+                                this.kirimSnapshotStream(this.screenStream, 'screen', trigger, true);
+                            }
+                        }, delayMs));
+                    });
+                }
+                if (this.webcamStream) {
+                    this.exitCaptureTimers.push(setTimeout(() => {
+                        this.kirimSnapshotStream(this.webcamStream, 'webcam', trigger, false);
+                    }, 2000));
+                }
+            },
+            bersihkanJadwalSnapshotKeluar() {
+                this.exitCaptureTimers.forEach((id) => clearTimeout(id));
+                this.exitCaptureTimers = [];
+            },
+            aktifkanPeekLayar(untilMs, serverNowMs) {
+                const sisaMs = Number(untilMs) - Number(serverNowMs || Date.now());
+                if (sisaMs <= 0) return;
+                this.peekUntil = Date.now() + Math.min(65000, sisaMs);
+                if (this.peekTimer) clearInterval(this.peekTimer);
+                if (this.screenStream) {
+                    this.kirimSnapshotStream(this.screenStream, 'screen', 'admin_peek', true);
+                }
+                this.peekTimer = setInterval(() => {
+                    if (Date.now() > this.peekUntil || this.berhenti) {
+                        clearInterval(this.peekTimer);
+                        this.peekTimer = null;
+                        return;
+                    }
+                    if (this.screenStream) {
+                        this.kirimSnapshotStream(this.screenStream, 'screen', 'admin_peek', true);
+                    } else if (this.webcamStream) {
+                        this.kirimSnapshotStream(this.webcamStream, 'webcam', 'admin_peek', true);
+                    }
+                }, 4000);
+            },
+            mulaiJadwalWebcam() {
+                if (this.webcamInterval || !this.webcamStream) return;
+                setTimeout(() => this.kirimSnapshotStream(this.webcamStream, 'webcam', 'initial', true), 4000);
+                this.webcamInterval = setInterval(() => {
+                    if (!this.berhenti && this.webcamStream) {
+                        this.kirimSnapshotStream(this.webcamStream, 'webcam', 'periodic', false);
+                    }
+                }, 90000);
             },
             async tandai(soal, perubahan) {
                 if (!soal || this.berhenti) {
@@ -358,6 +663,9 @@
                     .listen('.PesanPengajar', (data) => {
                         this.gabungPesan([data]);
                         this.bunyikanAlert(640, 0.15);
+                    })
+                    .listen('.PesertaDimintaLayar', (data) => {
+                        this.aktifkanPeekLayar(data.screen_peek_until, data.server_now);
                     });
             },
             gabungPesan(daftar) {
@@ -398,6 +706,11 @@
                                     this.jawabanTeks[item.question_id] = item.jawaban_teks;
                                 }
                                 this.statusTeks[item.question_id] = 'offline';
+                            } else if (item.tipe === 'isian_singkat') {
+                                this.jawabanTeks[item.question_id] = item.jawaban_teks;
+                                this.statusTeks[item.question_id] = 'offline';
+                            } else if (item.tipe === 'pilihan_majemuk' && Array.isArray(item.option_ids)) {
+                                this.jawabanMulti[item.question_id] = item.option_ids;
                             } else if (item.option_id) {
                                 this.jawaban[item.question_id] = item.option_id;
                             }
@@ -458,12 +771,14 @@
 
                     const item = this.antreanOffline[queueIndex];
                     const body = { question_id: item.question_id };
-                    if (item.tipe === 'essay') {
+                    if (item.tipe === 'essay' || item.tipe === 'isian_singkat') {
                         if (item.jawaban_table) body.jawaban_table = item.jawaban_table;
                         else body.jawaban_teks = item.jawaban_teks;
                         if (item.part_key) {
                             body.part_key = item.part_key;
                         }
+                    } else if (item.tipe === 'pilihan_majemuk') {
+                        body.option_ids = item.option_ids ?? [];
                     } else {
                         body.option_id = item.option_id;
                     }
@@ -487,7 +802,7 @@
                                 if (res.data?.jawaban_teks !== undefined) {
                                     this.jawabanTeks[item.question_id] = res.data.jawaban_teks;
                                 }
-                            } else if (item.tipe === 'essay') {
+                            } else if (item.tipe === 'essay' || item.tipe === 'isian_singkat') {
                                 this.teksTersimpan[item.question_id] = res.data?.jawaban_teks ?? item.jawaban_teks ?? '';
                                 this.jawabanData[item.question_id] = res.data?.jawaban_data ?? this.jawabanData[item.question_id] ?? {};
                                 this.dataTersimpan[item.question_id] = JSON.parse(JSON.stringify(this.jawabanData[item.question_id] ?? {}));
@@ -539,8 +854,28 @@
                 return menit + ':' + String(detik).padStart(2, '0');
             },
             mulaiTimer() {
+                if (this.current) {
+                    this.tabKonteks = (this.pisahKonteksSoal && this.current.has_context_blocks) ? 'stimulus' : 'jawab';
+                    this.typingStats[this.current.id] ??= {
+                        opened_at: Date.now(),
+                        first_key_at: null,
+                        last_key_at: null,
+                        total_keys: 0,
+                        backspace_keys: 0,
+                        paste_events: 0,
+                        idle_gaps: 0
+                    };
+                }
                 const hitung = () => {
-                    this.sisa = Math.max(0, Math.round((this.batasAkhir - (Date.now() - this.offset)) / 1000));
+                    const nowServer = Date.now() - this.offset;
+                    this.sisa = Math.max(0, Math.round((this.batasAkhir - nowServer) / 1000));
+
+                    if (this.timerPerSoal && this.current?.berakhir_at) {
+                        this.sisaSoal = Math.max(0, Math.round((Number(this.current.berakhir_at) - nowServer) / 1000));
+                        if (this.sisaSoal <= 0 && !this.memuatSoalBerikutnya && !this.berhenti) {
+                            this.mintaLanjutSoal(true);
+                        }
+                    }
 
                     // Alert audio & visual saat waktu kritis mendekati batas
                     if (this.sisa > 0) {
@@ -568,6 +903,120 @@
                 const sebelumnya = this.jawaban[soal.id] ?? null;
                 this.jawaban[soal.id] = opsi.id;
                 this.simpan(soal, opsi, sebelumnya);
+            },
+            opsiMultiDipilih(soal, opsiId) {
+                return (this.jawabanMulti[soal.id] ?? []).includes(opsiId);
+            },
+            toggleMulti(soal, opsi) {
+                if (this.berhenti || this.menyimpan) {
+                    return;
+                }
+                const saatIni = new Set(this.jawabanMulti[soal.id] ?? []);
+                if (saatIni.has(opsi.id)) {
+                    saatIni.delete(opsi.id);
+                } else {
+                    saatIni.add(opsi.id);
+                }
+                const daftarBaru = Array.from(saatIni);
+                this.jawabanMulti[soal.id] = daftarBaru;
+                this.simpanMulti(soal, daftarBaru);
+            },
+            async simpanMulti(soal, optionIds) {
+                this.menyimpan = true;
+                this.pesan = '';
+
+                if (!navigator.onLine) {
+                    this.menyimpan = false;
+                    this.tambahAntrean({
+                        question_id: soal.id,
+                        option_ids: optionIds,
+                        tipe: 'pilihan_majemuk',
+                        waktu: Date.now()
+                    });
+                    return;
+                }
+
+                try {
+                    const hasil = await window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: soal.id, option_ids: optionIds },
+                        progress: false
+                    });
+                    this.menyimpan = false;
+                    if (hasil.ok) return;
+                    if (hasil.status === 403) {
+                        this.pesan = hasil.data?.message ?? 'Jawaban tidak diterima.';
+                        if (hasil.data?.selesai) {
+                            this.berhenti = true;
+                            window.location.href = config.resultUrl;
+                        }
+                        return;
+                    }
+                } catch (e) {
+                    this.menyimpan = false;
+                }
+
+                this.tambahAntrean({
+                    question_id: soal.id,
+                    option_ids: optionIds,
+                    tipe: 'pilihan_majemuk',
+                    waktu: Date.now()
+                });
+            },
+            tanganiPintasan(event) {
+                if (this.berhenti || this.peringatanKeluar || this.konfirmasiSelesai || this.konfirmasiLanjutKosong) return;
+                if (event.ctrlKey || event.metaKey || event.altKey) return;
+                const target = event.target instanceof Element ? event.target : null;
+                if (target?.closest('input, textarea, select, [contenteditable="true"], dialog[open]')) return;
+
+                if (event.key === '?') {
+                    event.preventDefault();
+                    this.$refs.dialogPintasan?.showModal();
+                    return;
+                }
+
+                if (event.key === 'ArrowLeft' && !this.isolasiSoal && this.index > 0) {
+                    event.preventDefault();
+                    this.pindah(this.index - 1);
+                    return;
+                }
+
+                if (event.key === 'ArrowRight' && !this.isolasiSoal && this.index < this.questions.length - 1) {
+                    event.preventDefault();
+                    this.pindah(this.index + 1);
+                    return;
+                }
+
+                if ((event.key === 'r' || event.key === 'R') && this.current) {
+                    event.preventDefault();
+                    this.toggleRagu(this.current);
+                    return;
+                }
+
+                if ((event.key === 'v' || event.key === 'V') && this.pisahKonteksSoal && this.current?.has_context_blocks) {
+                    event.preventDefault();
+                    this.tabKonteks = this.tabKonteks === 'stimulus' ? 'jawab' : 'stimulus';
+                    return;
+                }
+
+                if (this.current && (this.current.tipe === 'pilihan_ganda' || this.current.tipe === 'pilihan_majemuk')) {
+                    const lower = event.key.toLowerCase();
+                    let optIdx = -1;
+                    if (lower >= '1' && lower <= '6') {
+                        optIdx = Number(lower) - 1;
+                    } else if (lower >= 'a' && lower <= 'f') {
+                        optIdx = lower.charCodeAt(0) - 97;
+                    }
+                    const opsi = optIdx >= 0 ? this.current.opsi?.[optIdx] : null;
+                    if (opsi) {
+                        event.preventDefault();
+                        if (this.current.tipe === 'pilihan_majemuk') {
+                            this.toggleMulti(this.current, opsi);
+                        } else {
+                            this.pilih(this.current, opsi);
+                        }
+                    }
+                }
             },
             async simpan(soal, opsi, sebelumnya) {
                 this.menyimpan = true;
@@ -633,9 +1082,10 @@
                 this.timerTeks[soal.id] = setTimeout(() => this.simpanTeks(soal), 800);
             },
             async simpanTeks(soal, denganProgress = false) {
-                if (!soal || soal.tipe !== 'essay' || this.berhenti || soal.sub_soal?.length) {
+                if (!soal || (soal.tipe !== 'essay' && soal.tipe !== 'isian_singkat') || this.berhenti || soal.sub_soal?.length) {
                     return true;
                 }
+                const tipeTeks = soal.tipe;
 
                 const isTable = soal.answer_format === 'table';
                 if (this.janjiTeks[soal.id]) {
@@ -661,7 +1111,7 @@
                     this.tambahAntrean({
                         question_id: soal.id,
                         ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
-                        tipe: 'essay',
+                        tipe: tipeTeks,
                         waktu: Date.now()
                     });
                     return true;
@@ -673,7 +1123,11 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }) },
+                        body: {
+                            question_id: soal.id,
+                            ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
+                            ...(this.ringkasTypingMetrics(soal.id) ? { typing_metrics: this.ringkasTypingMetrics(soal.id) } : {})
+                        },
                         progress: denganProgress,
                         progressMessage: 'Menyimpan jawaban...'
                     });
@@ -685,7 +1139,7 @@
                     this.tambahAntrean({
                         question_id: soal.id,
                         ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
-                        tipe: 'essay',
+                        tipe: tipeTeks,
                         waktu: Date.now()
                     });
                     return true;
@@ -715,7 +1169,7 @@
 
                 if (hasil.status === 422) {
                     this.statusTeks[soal.id] = 'gagal';
-                    this.tambahAntrean({ question_id: soal.id, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }), tipe: 'essay', waktu: Date.now() });
+                    this.tambahAntrean({ question_id: soal.id, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }), tipe: tipeTeks, waktu: Date.now() });
                     this.pesan = hasil.data?.message ?? 'Jawaban belum dapat diterima server. Isi jawaban tetap tersimpan di perangkat.';
                     return false;
                 }
@@ -725,7 +1179,7 @@
                 this.tambahAntrean({
                     question_id: soal.id,
                     ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal) } } : { jawaban_teks: nilai }),
-                    tipe: 'essay',
+                    tipe: tipeTeks,
                     waktu: Date.now()
                 });
 
@@ -790,7 +1244,12 @@
                 try {
                     const janji = window.kuisFetch(config.answerUrl, {
                         method: 'POST',
-                        body: { question_id: soal.id, part_key: bagian.key, ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }) },
+                        body: {
+                            question_id: soal.id,
+                            part_key: bagian.key,
+                            ...(isTable ? { jawaban_table: { cells: this.tabelCells(soal, bagian) } } : { jawaban_teks: nilai }),
+                            ...(this.ringkasTypingMetrics(soal.id) ? { typing_metrics: this.ringkasTypingMetrics(soal.id) } : {})
+                        },
                         progress: denganProgress,
                         progressMessage: 'Menyimpan jawaban...'
                     });
@@ -853,7 +1312,7 @@
                 return true;
             },
             async simpanSemuaTeks() {
-                for (const soal of this.questions.filter((item) => item.tipe === 'essay')) {
+                for (const soal of this.questions.filter((item) => item.tipe === 'essay' || item.tipe === 'isian_singkat')) {
                     if (soal.sub_soal?.length) {
                         for (const bagian of this.bagianJawaban(soal)) {
                             clearTimeout(this.timerParts[this.kunciBagian(soal, bagian)]);
@@ -989,6 +1448,9 @@
                 }
 
                 this.gabungPesan(hasil.data?.pesan ?? []);
+                if (hasil.data?.screen_peek_active && hasil.data?.screen_peek_until) {
+                    this.aktifkanPeekLayar(hasil.data.screen_peek_until, hasil.data.server_now);
+                }
 
                 const batas = Number(hasil.data?.batas_akhir_at ?? 0);
                 const serverNow = Number(hasil.data?.server_now ?? 0);
@@ -1025,6 +1487,8 @@
                 return true;
             },
             async masukLayarPenuh() {
+                const mediaOk = await this.siapkanMediaPengawas();
+                if (!mediaOk) return;
                 const el = document.documentElement;
                 try {
                     if (el.requestFullscreen) {
@@ -1075,6 +1539,7 @@
                 }, 1000);
             },
             batalkanToleransi() {
+                this.bersihkanJadwalSnapshotKeluar();
                 if (this.keluarSejak) {
                     const detik = Math.round((Date.now() - this.keluarSejak) / 1000);
                     this.keluarSejak = 0;
@@ -1198,6 +1663,7 @@
                     this.kirimKejadian('blur_window');
                     if (this.sudahMulai && !this.berhenti && !this.memprosesPelanggaran) {
                         this.mulaiToleransi();
+                        this.jadwalkanSnapshotKeluar('blur_window');
                     }
                 });
 
@@ -1206,7 +1672,10 @@
                         this.kirimKejadian('tab_hidden');
                         if (this.sudahMulai && !this.berhenti && !this.memprosesPelanggaran) {
                             this.mulaiToleransi();
+                            this.jadwalkanSnapshotKeluar('tab_hidden');
                         }
+                    } else {
+                        this.bersihkanJadwalSnapshotKeluar();
                     }
                 });
 
@@ -1246,6 +1715,10 @@
                     const target = event.target instanceof Element ? event.target : null;
                     if (!target?.closest('[data-answer-input]')) return;
 
+                    if (this.current?.id) {
+                        this.catatPaste(this.current.id);
+                    }
+
                     if (config.clipboardPolicy === 'allow') {
                         this.tampilkanClipboardToast('Teks ditempelkan. Sesi ini mengizinkan paste.');
                         return;
@@ -1275,7 +1748,15 @@
         id="area-kuis"
         x-data="kuisAcak({
             questions: {{ Illuminate\Support\Js::from($questions) }},
+            totalSoal: {{ (int) ($total_soal ?? count($questions)) }},
+            isolasiSoal: @js((bool) ($isolasi_soal ?? false)),
+            timerPerSoal: @js((bool) $session->timer_per_soal),
+            pisahKonteksSoal: @js((bool) $session->pisah_konteks_soal),
+            watermarkLayar: @js((bool) $session->watermark_layar),
+            screenProctoring: @js($session->screen_proctoring ?? 'off'),
+            webcamProctoring: @js((bool) $session->webcam_proctoring),
             jawaban: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_option_id']])->filter()->all()) }},
+            jawabanMulti: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_option_ids'] ?? []])->all()) }},
             jawabanTeks: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_teks'] ?? ''])->all()) }},
             jawabanParts: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_parts'] ?? []])->all()) }},
             jawabanData: {{ Illuminate\Support\Js::from(collect($questions)->mapWithKeys(fn ($q) => [$q['id'] => $q['jawaban_data'] ?? []])->all()) }},
@@ -1288,6 +1769,8 @@
             durasiPeringatan: {{ $session->durasiPeringatan() }},
             clipboardPolicy: @js($session->clipboard_policy ?? 'monitor'),
             answerUrl: '{{ route('peserta.attempt.answer', $attempt) }}',
+            nextQuestionUrl: '{{ route('peserta.attempt.next-question', $attempt) }}',
+            snapshotUrl: '{{ route('peserta.attempt.snapshot', $attempt) }}',
             eventUrl: '{{ route('peserta.attempt.events', $attempt) }}',
             markUrl: '{{ route('peserta.attempt.tandai', $attempt) }}',
             pelanggaranUrl: '{{ route('peserta.attempt.pelanggaran', $attempt) }}',
@@ -1297,6 +1780,7 @@
             resultUrl: '{{ route('peserta.attempt.result', $attempt) }}'
         })"
         class="space-y-5"
+        x-on:keydown.window="tanganiPintasan($event)"
         x-bind:data-clipboard-policy="clipboardPolicy"
         x-on:kuis-code-copy-attempt.window="
             const blocked = $event.detail.policy === 'block';
@@ -1311,8 +1795,13 @@
                     <div class="flex items-baseline gap-2">
                         <p class="text-sm font-bold text-ink-muted">Soal</p>
                         <p class="font-display text-2xl font-bold text-ink">
-                            <span x-text="index + 1">1</span><span class="text-ink-muted"> / </span><span x-text="questions.length"></span>
+                            <span x-text="isolasiSoal ? (current?.urutan ?? 1) : (index + 1)">1</span><span class="text-ink-muted"> / </span><span x-text="totalSoal"></span>
                         </p>
+                        <template x-if="timerPerSoal && current?.berakhir_at">
+                            <span class="ml-2 rounded-xl border border-sun-deep/40 bg-sun-soft px-2.5 py-1 font-mono text-xs font-bold text-sun-deep">
+                                Soal ini: <span x-text="format(sisaSoal)">0:00</span>
+                            </span>
+                        </template>
                     </div>
 
                     <div class="flex items-center gap-2">
@@ -1393,13 +1882,27 @@
         </div>
 
         <template x-if="current">
-            <section x-ref="kartuSoal" class="card scroll-mt-32" aria-labelledby="teks-soal" data-protected-question>
+            <section x-ref="kartuSoal" class="card relative overflow-hidden scroll-mt-32" aria-labelledby="teks-soal" data-protected-question>
+                @if ($session->watermark_layar)
+                    <div aria-hidden="true" class="pointer-events-none select-none absolute inset-0 flex flex-wrap items-center justify-around gap-8 overflow-hidden p-6 opacity-[0.055]">
+                        @for ($wm = 0; $wm < 6; $wm++)
+                            <span class="-rotate-12 font-mono text-sm font-extrabold uppercase tracking-widest text-ink">
+                                {{ auth()->user()->nama }} · {{ auth()->user()->username }}
+                            </span>
+                        @endfor
+                    </div>
+                @endif
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <span class="pill pill-brand" x-text="current.tipe === 'essay' ? 'Essay · maks ' + current.bobot : 'Pilihan ganda'"></span>
-                    <button type="button" class="btn btn-ghost px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen">
-                        <x-icon name="eye" :size="20" />
-                        <span class="hidden sm:inline">Layar penuh</span>
-                    </button>
+                    <span class="pill pill-brand" x-text="current.tipe === 'essay' ? 'Essay · maks ' + current.bobot : (current.label_tipe || 'Pilihan ganda')"></span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="btn btn-ghost min-h-11 px-3 text-sm" x-on:click="$refs.dialogPintasan?.showModal()">
+                            <span>Pintasan (?)</span>
+                        </button>
+                        <button type="button" class="btn btn-ghost min-h-11 px-3" x-on:click="masukLayarPenuh()" x-bind:disabled="isFullscreen">
+                            <x-icon name="eye" :size="20" />
+                            <span class="hidden sm:inline">Layar penuh</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="mt-4 flex flex-wrap items-center gap-2">
@@ -1425,14 +1928,52 @@
                     </button>
                 </div>
 
+                <template x-if="pisahKonteksSoal && current.has_context_blocks">
+                    <div role="tablist" aria-label="Tampilan data soal dan jawaban" class="mt-4 inline-flex flex-wrap gap-2 rounded-2xl border border-outline bg-surface p-1.5">
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="tabKonteks === 'stimulus'"
+                            @click="tabKonteks = 'stimulus'"
+                            class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold transition"
+                            :class="tabKonteks === 'stimulus' ? 'bg-brand-deep text-white' : 'text-ink-muted hover:text-ink'"
+                        >
+                            1. Lihat Data / Gambar Soal
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="tabKonteks === 'jawab'"
+                            @click="tabKonteks = 'jawab'"
+                            class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold transition"
+                            :class="tabKonteks === 'jawab' ? 'bg-brand-deep text-white' : 'text-ink-muted hover:text-ink'"
+                        >
+                            2. Pertanyaan &amp; Jawaban
+                        </button>
+                    </div>
+                </template>
+
                 <h2
                     id="teks-soal"
+                    x-show="!pisahKonteksSoal || !current.has_context_blocks || tabKonteks === 'jawab'"
                     class="question-text mt-4 whitespace-pre-line"
                     x-bind:class="current.highlight_soal ? 'bg-sun-soft' : ''"
                     x-text="current.teks"
                 ></h2>
 
-                <div x-show="current.content_html" x-html="current.content_html" class="mt-4 space-y-4"></div>
+                <div
+                    x-show="current.content_html && (!pisahKonteksSoal || !current.has_context_blocks || tabKonteks === 'stimulus')"
+                    x-html="current.content_html"
+                    class="mt-4 space-y-4"
+                ></div>
+
+                <div x-show="pisahKonteksSoal && current.has_context_blocks && tabKonteks === 'stimulus'" class="mt-4">
+                    <button type="button" @click="tabKonteks = 'jawab'" class="btn btn-primary min-h-11">
+                        Buka Pertanyaan &amp; Pilihan Jawaban
+                    </button>
+                </div>
+
+                <div x-show="!pisahKonteksSoal || !current.has_context_blocks || tabKonteks === 'jawab'">
 
                 <template x-if="current.tipe === 'essay' && current.petunjuk?.length">
                     <div class="mt-4 rounded-xl border border-outline bg-page p-4">
@@ -1470,6 +2011,7 @@
                                 x-bind:disabled="berhenti"
                                 x-bind:value="jawabanTeks[current.id] ?? ''"
                                 x-on:keydown.tab="if (current.answer_format === 'code') { $event.preventDefault(); sisipkanTab($event) }"
+                                x-on:keydown="catatKetikan(current.id, $event)"
                                 x-on:input="ubahTeks(current, $event.target.value)"
                                 x-on:blur="simpanTeks(current)"
                                 x-bind:placeholder="current.answer_format === 'code' ? 'Tulis kode ' + (current.answer_config.language || '') + ' di sini' : 'Tulis jawaban lengkap di sini'"
@@ -1562,6 +2104,7 @@
                                             x-bind:disabled="berhenti"
                                             x-bind:value="(jawabanParts[current.id] ?? {})[bagian.key] ?? ''"
                                             x-on:keydown.tab="if (bagian.answer_format === 'code') { $event.preventDefault(); sisipkanTab($event) }"
+                                            x-on:keydown="catatKetikan(current.id, $event)"
                                             x-on:input="ubahBagian(current, bagian, $event.target.value)"
                                             x-on:blur="simpanBagian(current, bagian)"
                                             x-bind:placeholder="bagian.answer_format === 'code' ? 'Tulis kode ' + (bagian.answer_config.language || '') + ' di sini' : 'Tulis jawaban ' + kodeBagian(current, bagian) + ' di sini'"
@@ -1584,7 +2127,67 @@
                     </div>
                 </template>
 
-                <template x-if="current.tipe !== 'essay'">
+                <template x-if="current.tipe === 'isian_singkat'">
+                    <div class="mt-5">
+                        <label for="jawaban-isian-singkat" class="label">Jawaban singkat Anda</label>
+                        <input
+                            id="jawaban-isian-singkat"
+                            type="text"
+                            data-answer-input
+                            class="input max-w-xl font-medium"
+                            maxlength="500"
+                            autocomplete="off"
+                            x-bind:disabled="berhenti"
+                            x-bind:value="jawabanTeks[current.id] ?? ''"
+                            x-on:input="ubahTeks(current, $event.target.value)"
+                            x-on:blur="simpanTeks(current)"
+                            placeholder="Ketik jawaban singkat di sini..."
+                        >
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted max-w-xl">
+                            <span>Tulis tepat dan ringkas (maksimal 500 karakter).</span>
+                            <span aria-live="polite" x-text="statusTeksAktif"></span>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="current.tipe === 'pilihan_majemuk'">
+                    <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal">
+                        <p class="text-base text-ink-muted">Pilih semua jawaban yang benar (bisa lebih dari satu). Perubahan langsung tersimpan.</p>
+                        <template x-for="(opsi, opsiIndex) in current.opsi" :key="opsi.id">
+                            <div class="relative">
+                                <button
+                                    type="button"
+                                    role="checkbox"
+                                    class="tile w-full pr-12"
+                                    x-bind:class="opsiDisorot(current, opsi.id) ? 'ring-2 ring-sun bg-sun-soft' : ''"
+                                    x-bind:aria-checked="opsiMultiDipilih(current, opsi.id) ? 'true' : 'false'"
+                                    x-bind:aria-pressed="opsiMultiDipilih(current, opsi.id) ? 'true' : 'false'"
+                                    x-bind:disabled="menyimpan"
+                                    x-on:click="toggleMulti(current, opsi)"
+                                >
+                                    <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
+                                    <span class="tile-text" x-text="opsi.teks"></span>
+                                    <span class="tile-check" aria-hidden="true">
+                                        <x-icon name="check" :size="20" />
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-outline bg-page p-1.5 text-ink-muted hover:bg-sun-soft hover:text-sun-deep"
+                                    x-bind:class="opsiDisorot(current, opsi.id) ? 'border-sun bg-sun-soft text-sun-deep' : ''"
+                                    x-bind:aria-pressed="opsiDisorot(current, opsi.id) ? 'true' : 'false'"
+                                    x-on:click.stop="toggleHighlightOpsi(current, opsi.id)"
+                                    aria-label="Sorot opsi ini"
+                                    title="Sorot opsi ini"
+                                >
+                                    <x-icon name="highlight" :size="16" />
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <template x-if="current.tipe === 'pilihan_ganda'">
                     <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal">
                         <p class="text-base text-ink-muted">Pilih satu jawaban. Jawaban tersimpan saat diklik.</p>
                         <template x-for="(opsi, opsiIndex) in current.opsi" :key="opsi.id">
@@ -1605,7 +2208,7 @@
                                 </button>
                                 <button
                                     type="button"
-                                    class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-outline bg-page p-1.5 text-ink-muted hover:bg-sun-soft hover:text-sun-deep"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-outline bg-page p-1.5 text-ink-muted hover:bg-sun-soft hover:text-sun-deep"
                                     x-bind:class="opsiDisorot(current, opsi.id) ? 'border-sun bg-sun-soft text-sun-deep' : ''"
                                     x-bind:aria-pressed="opsiDisorot(current, opsi.id) ? 'true' : 'false'"
                                     x-on:click.stop="toggleHighlightOpsi(current, opsi.id)"
@@ -1620,28 +2223,64 @@
                 </template>
 
                 <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex gap-2">
-                        <button type="button" class="btn btn-secondary" x-on:click="pindah(index - 1)" x-bind:disabled="index === 0">
-                            <x-icon name="arrow-left" :size="20" />
-                            Sebelumnya
-                        </button>
-                        <button type="button" class="btn btn-secondary" x-on:click="pindah(index + 1)" x-bind:disabled="index === questions.length - 1">
-                            Berikutnya
-                        </button>
-                    </div>
-                    <p class="text-base text-ink-muted">Jawaban bisa diubah sampai waktu habis.</p>
+                    <template x-if="!isolasiSoal">
+                        <div class="flex gap-2">
+                            <button type="button" class="btn btn-secondary min-h-11" x-on:click="pindah(index - 1)" x-bind:disabled="index === 0">
+                                <x-icon name="arrow-left" :size="20" />
+                                <span>Sebelumnya</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary min-h-11" x-on:click="pindah(index + 1)" x-bind:disabled="index === questions.length - 1">
+                                <span>Berikutnya</span>
+                            </button>
+                        </div>
+                    </template>
+                    <template x-if="isolasiSoal">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button
+                                type="button"
+                                class="btn btn-primary min-h-11"
+                                :disabled="memuatSoalBerikutnya || berhenti"
+                                @click="mintaLanjutSoal(false)"
+                            >
+                                <span x-text="memuatSoalBerikutnya ? 'Memuat soal...' : ((current?.urutan ?? 1) >= totalSoal ? 'Kunci & selesaikan ujian' : 'Soal berikutnya (kunci soal ini)')"></span>
+                            </button>
+                        </div>
+                    </template>
+                    <p class="text-base text-ink-muted" x-text="isolasiSoal ? 'Soal yang sudah dilewati terkunci dan tidak dapat dibuka kembali.' : 'Jawaban bisa diubah sampai waktu habis.'"></p>
+                </div>
                 </div>
             </section>
         </template>
 
-        <section class="card" aria-labelledby="navigasi-soal">
+        <div
+            x-show="konfirmasiLanjutKosong"
+            x-cloak
+            class="fixed inset-0 z-[65] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="judul-lanjut-kosong"
+            @keydown.escape.window="konfirmasiLanjutKosong = false"
+        >
+            <div class="card w-full max-w-md border-2 border-sun-deep bg-page p-6 shadow-modal">
+                <h2 id="judul-lanjut-kosong" class="text-xl font-bold text-ink">Soal ini belum dijawab</h2>
+                <p class="mt-2 text-base text-ink-muted">
+                    Pada sesi sekuensial ini, soal yang dilewati akan langsung terkunci dan tidak dapat dibuka kembali. Yakin ingin lanjut?
+                </p>
+                <div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" class="btn btn-secondary min-h-11" @click="konfirmasiLanjutKosong = false">Kembali jawab</button>
+                    <button type="button" class="btn btn-primary min-h-11" @click="mintaLanjutSoal(true)">Tetap kunci &amp; lanjut</button>
+                </div>
+            </div>
+        </div>
+
+        <section x-show="!isolasiSoal" class="card" aria-labelledby="navigasi-soal">
             <h2 id="navigasi-soal" class="text-xl">Navigasi soal</h2>
             <div class="mt-3 grid grid-cols-6 gap-2 sm:grid-cols-10">
                 <template x-for="(soal, nomor) in questions" :key="soal.id">
                     <button
                         type="button"
                         class="flex h-12 items-center justify-center rounded-xl border-2 font-mono text-base font-bold"
-                        x-bind:class="nomor === index ? (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep ring-2 ring-brand' : 'border-brand bg-brand text-white') : (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep' : (sudahDijawab(soal) ? 'border-leaf bg-leaf-soft text-leaf-deep' : (terjawabSebagian(soal) ? 'border-sun-deep bg-sun-soft text-sun-deep' : 'border-outline bg-page text-ink-muted')))"
+                        x-bind:class="nomor === index ? (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep ring-2 ring-brand' : 'border-brand-deep bg-brand-deep text-white') : (soal.ragu_ragu ? 'border-coral-deep bg-coral-soft text-coral-deep' : (sudahDijawab(soal) ? 'border-leaf bg-leaf-soft text-leaf-deep' : (terjawabSebagian(soal) ? 'border-sun-deep bg-sun-soft text-sun-deep' : 'border-outline bg-page text-ink-muted')))"
                         x-bind:aria-current="nomor === index ? 'true' : 'false'"
                         x-bind:aria-label="'Soal ' + (nomor + 1) + (soal.ragu_ragu ? ', ditandai ragu-ragu' : (sudahDijawab(soal) ? ', sudah dijawab lengkap' : (terjawabSebagian(soal) ? ', sebagian dijawab' : ', belum dijawab')))"
                         x-on:click="pindah(nomor)"
@@ -1855,6 +2494,43 @@
                 </div>
             </div>
         </div>
+
+        <dialog x-ref="dialogPintasan" class="m-auto w-full max-w-md rounded-2xl border border-outline bg-page p-6 text-ink shadow-xl backdrop:bg-ink/50">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-xl font-bold text-ink">Pintasan keyboard ujian</h2>
+                    <p class="mt-1 text-sm text-ink-muted">Aktif saat kursor tidak berada di dalam kolom teks.</p>
+                </div>
+                <button type="button" class="btn btn-ghost min-h-11 min-w-11 px-3" aria-label="Tutup bantuan pintasan" x-on:click="$refs.dialogPintasan.close()">
+                    <x-icon name="x" :size="18" />
+                </button>
+            </div>
+            <dl class="mt-4 space-y-2.5 text-sm">
+                <div class="flex items-center justify-between gap-3 border-b border-outline pb-2">
+                    <dt class="text-ink-muted">Pilih / centang opsi A sampai F</dt>
+                    <dd class="font-mono font-bold text-ink">A - F atau 1 - 6</dd>
+                </div>
+                <div x-show="!isolasiSoal" class="flex items-center justify-between gap-3 border-b border-outline pb-2">
+                    <dt class="text-ink-muted">Soal sebelumnya / berikutnya</dt>
+                    <dd class="font-mono font-bold text-ink">&larr; / &rarr;</dd>
+                </div>
+                <div class="flex items-center justify-between gap-3 border-b border-outline pb-2">
+                    <dt class="text-ink-muted">Tandai soal ragu-ragu</dt>
+                    <dd class="font-mono font-bold text-ink">R</dd>
+                </div>
+                <div x-show="pisahKonteksSoal" class="flex items-center justify-between gap-3 border-b border-outline pb-2">
+                    <dt class="text-ink-muted">Ganti tab data soal / jawaban</dt>
+                    <dd class="font-mono font-bold text-ink">V</dd>
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                    <dt class="text-ink-muted">Buka panduan pintasan ini</dt>
+                    <dd class="font-mono font-bold text-ink">?</dd>
+                </div>
+            </dl>
+            <div class="mt-5 flex justify-end">
+                <button type="button" class="btn btn-primary min-h-11" x-on:click="$refs.dialogPintasan.close()">Mengerti</button>
+            </div>
+        </dialog>
 
         <p class="text-base text-ink-muted">
             Menutup jendela tidak menghentikan waktu. Attempt tetap berjalan sampai batas waktu server.

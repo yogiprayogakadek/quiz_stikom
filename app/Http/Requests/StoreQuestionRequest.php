@@ -48,9 +48,16 @@ class StoreQuestionRequest extends FormRequest
             'content_blocks.*.rows' => ['nullable', 'array', 'max:20'],
             'content_blocks.*.rows.*' => ['array', 'max:10'],
             'content_blocks.*.rows.*.*' => ['nullable', 'string', 'max:1000'],
-            'tipe' => ['required', Rule::in(['pilihan_ganda', 'essay'])],
+            'tipe' => ['required', Rule::in(['pilihan_ganda', 'pilihan_majemuk', 'isian_singkat', 'essay'])],
             'bobot' => ['required', 'integer', 'min:1', 'max:1000'],
-            'durasi_detik' => ['nullable', 'integer', 'min:5', 'max:300', 'required_if:tipe,pilihan_ganda'],
+            'urutan_tetap' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'durasi_detik' => [
+                'nullable',
+                'integer',
+                'min:5',
+                'max:300',
+                Rule::requiredIf(fn () => in_array($this->input('tipe'), ['pilihan_ganda', 'pilihan_majemuk', 'isian_singkat'], true)),
+            ],
             'pembahasan' => ['nullable', 'string', 'max:5000'],
             'kunci_essay' => ['nullable', 'string', 'max:5000'],
             'rubrik_essay' => ['nullable', 'array', 'max:10'],
@@ -100,9 +107,25 @@ class StoreQuestionRequest extends FormRequest
             'sub_soal.*.answer_config.cell_hints' => ['nullable', 'array', 'max:20'],
             'sub_soal.*.answer_config.cell_hints.*' => ['array', 'max:10'],
             'sub_soal.*.answer_config.cell_hints.*.*' => ['nullable', 'string', 'max:500'],
-            'opsi' => ['required_if:tipe,pilihan_ganda', 'array', 'min:2', 'max:6'],
-            'opsi.*.teks' => ['required_if:tipe,pilihan_ganda', 'string', 'max:500'],
-            'correct' => ['required_if:tipe,pilihan_ganda', 'integer', 'min:0', 'max:5'],
+            'opsi' => [
+                Rule::requiredIf(fn () => in_array($this->input('tipe'), ['pilihan_ganda', 'pilihan_majemuk'], true)),
+                'nullable',
+                'array',
+                'min:2',
+                'max:6',
+            ],
+            'opsi.*.teks' => [
+                Rule::requiredIf(fn () => in_array($this->input('tipe'), ['pilihan_ganda', 'pilihan_majemuk'], true)),
+                'nullable',
+                'string',
+                'max:500',
+            ],
+            'correct' => ['required_if:tipe,pilihan_ganda', 'nullable', 'integer', 'min:0', 'max:5'],
+            'correct_indices' => ['required_if:tipe,pilihan_majemuk', 'nullable', 'array', 'min:1'],
+            'correct_indices.*' => ['integer', 'min:0', 'max:5'],
+            'scoring_mode' => ['nullable', Rule::in(['all_or_nothing', 'partial'])],
+            'accepted_answers' => ['required_if:tipe,isian_singkat', 'nullable', 'string', 'max:2000'],
+            'case_sensitive' => ['nullable', 'boolean'],
         ];
     }
 
@@ -127,6 +150,39 @@ class StoreQuestionRequest extends FormRequest
                 }
 
                 $this->validateContentBlocks($validator, (array) $this->input('content_blocks', []), 'content_blocks');
+
+                return;
+            }
+
+            $this->validateContentBlocks($validator, (array) $this->input('content_blocks', []), 'content_blocks');
+
+            if ($this->input('tipe') === 'pilihan_majemuk') {
+                $jumlah = count((array) $this->input('opsi', []));
+                $indices = collect((array) $this->input('correct_indices', []))
+                    ->map(fn ($v) => (int) $v)
+                    ->filter(fn (int $idx) => $idx >= 0 && $idx < $jumlah)
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                if ($indices === []) {
+                    $validator->errors()->add('correct_indices', 'Pilih minimal satu jawaban benar untuk soal pilihan majemuk.');
+                }
+
+                return;
+            }
+
+            if ($this->input('tipe') === 'isian_singkat') {
+                $baris = array_values(array_filter(
+                    array_map('trim', preg_split('/\r\n|\r|\n|\|/', (string) $this->input('accepted_answers', '')) ?: []),
+                    fn (string $v) => $v !== ''
+                ));
+
+                if ($baris === []) {
+                    $validator->errors()->add('accepted_answers', 'Tulis minimal satu jawaban singkat yang diterima.');
+                } elseif (count($baris) > 15) {
+                    $validator->errors()->add('accepted_answers', 'Maksimal 15 variasi jawaban diterima per soal.');
+                }
 
                 return;
             }

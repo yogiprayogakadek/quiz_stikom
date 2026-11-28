@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Organization;
 use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizSession;
@@ -19,13 +20,23 @@ class TrialQuizSeeder extends Seeder
             return;
         }
 
-        $organizationId = $admin->organizations()->value('organizations.id');
+        $organizationId = $admin->organizations()
+            ->wherePivot('status', 'active')
+            ->orderBy('organizations.id')
+            ->value('organizations.id')
+            ?? Organization::query()->orderBy('id')->value('id');
 
-        $quiz = Quiz::updateOrCreate(
-            ['judul' => 'Kuis Uji Coba'],
+        if ($organizationId === null) {
+            return;
+        }
+
+        $quiz = Quiz::withoutGlobalScopes()->updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'judul' => 'Kuis Uji Coba',
+            ],
             [
                 'kelas_id' => null,
-                'organization_id' => $organizationId,
                 'jumlah_soal' => 3,
                 'acak_opsi' => true,
                 'is_percobaan' => true,
@@ -67,9 +78,10 @@ class TrialQuizSeeder extends Seeder
         ];
 
         foreach ($soal as $data) {
-            $question = Question::updateOrCreate(
+            $question = Question::withoutGlobalScopes()->updateOrCreate(
                 ['quiz_id' => $quiz->id, 'teks' => $data['teks']],
                 [
+                    'organization_id' => $organizationId,
                     'tipe' => 'pilihan_ganda',
                     'durasi_detik' => 60,
                     'bobot' => 10,
@@ -88,7 +100,7 @@ class TrialQuizSeeder extends Seeder
             }
         }
 
-        $session = QuizSession::firstOrCreate(
+        $session = QuizSession::withoutGlobalScopes()->firstOrCreate(
             ['quiz_id' => $quiz->id, 'nama' => 'Uji Coba Sistem'],
             [
                 'mode' => 'acak',
@@ -106,8 +118,12 @@ class TrialQuizSeeder extends Seeder
             ],
         );
 
+        $sessionUpdates = [];
+        if ((int) $session->organization_id !== (int) $organizationId) {
+            $sessionUpdates['organization_id'] = $organizationId;
+        }
         if ($session->status !== 'berjalan') {
-            $session->update([
+            $sessionUpdates += [
                 'status' => 'berjalan',
                 'fase' => null,
                 'soal_aktif_urutan' => null,
@@ -115,7 +131,11 @@ class TrialQuizSeeder extends Seeder
                 'soal_berakhir_at' => null,
                 'ditutup_at' => null,
                 'dibuka_at' => now(),
-            ]);
+            ];
+        }
+
+        if ($sessionUpdates !== []) {
+            $session->update($sessionUpdates);
         }
     }
 }

@@ -18,6 +18,7 @@ class Attempt extends Model
         'organization_id',
         'quiz_session_id',
         'status',
+        'posisi_terkunci_urutan',
         'mulai_at',
         'batas_akhir_at',
         'retry_duration_detik',
@@ -33,11 +34,15 @@ class Attempt extends Model
         'total_pengurangan_waktu_detik',
         'last_pelanggaran_action',
         'peringatan_mulai_at',
+        'initial_ip',
+        'ip_change_count',
+        'screen_peek_until',
     ];
 
     protected function casts(): array
     {
         return [
+            'posisi_terkunci_urutan' => 'integer',
             'mulai_at' => 'integer',
             'batas_akhir_at' => 'integer',
             'retry_duration_detik' => 'integer',
@@ -52,6 +57,8 @@ class Attempt extends Model
             'jumlah_pelanggaran' => 'integer',
             'total_pengurangan_waktu_detik' => 'integer',
             'peringatan_mulai_at' => 'integer',
+            'ip_change_count' => 'integer',
+            'screen_peek_until' => 'integer',
         ];
     }
 
@@ -151,6 +158,31 @@ class Attempt extends Model
     public function events(): HasMany
     {
         return $this->hasMany(AttemptEvent::class);
+    }
+
+    public function snapshots(): HasMany
+    {
+        return $this->hasMany(AttemptSnapshot::class)->orderByDesc('id');
+    }
+
+    public function catatPerubahanIp(?string $ip): void
+    {
+        if (! filled($ip)) {
+            return;
+        }
+
+        if ($this->initial_ip === null) {
+            $this->forceFill(['initial_ip' => $ip])->save();
+
+            return;
+        }
+
+        if ($this->initial_ip !== $ip) {
+            $this->forceFill([
+                'initial_ip' => $ip,
+                'ip_change_count' => (int) $this->ip_change_count + 1,
+            ])->save();
+        }
     }
 
     public function scopeBerjalan(Builder $query): Builder

@@ -24,7 +24,7 @@ class SessionController extends Controller
 {
     public function join(Request $request, QuizSession $session, QuizEngine $engine): RedirectResponse
     {
-        $engine->gabung($session, $request->user());
+        $engine->gabung($session, $request->user(), $request->input('kode_akses'));
 
         if ($session->mode === 'serempak') {
             return redirect()->route('peserta.session.play', $session)
@@ -157,6 +157,8 @@ class SessionController extends Controller
             return response()->json($base + [
                 'soal' => $soalAktif,
                 'jawaban_option_id' => $soalAktif['jawaban_option_id'],
+                'jawaban_option_ids' => $soalAktif['jawaban_option_ids'] ?? [],
+                'jawaban_teks' => $soalAktif['jawaban_teks'] ?? '',
             ]);
         }
 
@@ -221,25 +223,80 @@ class SessionController extends Controller
 
         $attemptQuestion->loadMissing('question');
 
-        if ($attemptQuestion->question?->isEssay()) {
+        $question = $attemptQuestion->question;
+
+        if ($question?->isEssay()) {
             return response()->json(['message' => 'Soal essay hanya didukung di Mode Acak.'], 422);
         }
 
-        $optionId = (int) $request->input('option_id');
+        $waktuMs = max(0, $now - (int) $session->soal_mulai_at);
+        $payloadRespons = ['ok' => true];
 
-        if (! in_array($optionId, array_map('intval', $attemptQuestion->urutan_opsi_json), true)) {
-            return response()->json(['message' => 'Opsi tidak sesuai dengan urutan soal Anda.'], 422);
+        if ($question?->tipe === 'pilihan_majemuk') {
+            $validIds = array_map('intval', $attemptQuestion->urutan_opsi_json);
+            $selectedIds = array_values(array_unique(array_map('intval', (array) $request->input('option_ids', []))));
+
+            if ($selectedIds === []) {
+                return response()->json(['message' => 'Pilih minimal satu opsi jawaban.'], 422);
+            }
+
+            foreach ($selectedIds as $optId) {
+                if (! in_array($optId, $validIds, true)) {
+                    return response()->json(['message' => 'Opsi tidak sesuai dengan urutan soal Anda.'], 422);
+                }
+            }
+
+            Answer::updateOrCreate(
+                ['attempt_id' => $attempt->id, 'question_id' => $attemptQuestion->question_id],
+                [
+                    'option_id' => null,
+                    'selected_option_ids_json' => $selectedIds,
+                    'jawaban_teks' => null,
+                    'waktu_jawab_ms' => $waktuMs,
+                    'skor' => 0,
+                    'answered_at' => now(),
+                ]
+            );
+            $payloadRespons['option_ids'] = $selectedIds;
+        } elseif ($question?->tipe === 'isian_singkat') {
+            $teks = trim((string) $request->input('jawaban_teks', ''));
+
+            if ($teks === '' || mb_strlen($teks) > 500) {
+                return response()->json(['message' => 'Isi jawaban singkat terlebih dahulu (maksimal 500 karakter).'], 422);
+            }
+
+            Answer::updateOrCreate(
+                ['attempt_id' => $attempt->id, 'question_id' => $attemptQuestion->question_id],
+                [
+                    'option_id' => null,
+                    'selected_option_ids_json' => null,
+                    'jawaban_teks' => $teks,
+                    'waktu_jawab_ms' => $waktuMs,
+                    'skor' => 0,
+                    'answered_at' => now(),
+                ]
+            );
+            $payloadRespons['jawaban_teks'] = $teks;
+        } else {
+            $optionId = (int) $request->input('option_id');
+
+            if (! in_array($optionId, array_map('intval', $attemptQuestion->urutan_opsi_json), true)) {
+                return response()->json(['message' => 'Opsi tidak sesuai dengan urutan soal Anda.'], 422);
+            }
+
+            Answer::updateOrCreate(
+                ['attempt_id' => $attempt->id, 'question_id' => $attemptQuestion->question_id],
+                [
+                    'option_id' => $optionId,
+                    'selected_option_ids_json' => null,
+                    'jawaban_teks' => null,
+                    'waktu_jawab_ms' => $waktuMs,
+                    'skor' => 0,
+                    'answered_at' => now(),
+                ]
+            );
+            $payloadRespons['option_id'] = $optionId;
         }
-
-        Answer::updateOrCreate(
-            ['attempt_id' => $attempt->id, 'question_id' => $attemptQuestion->question_id],
-            [
-                'option_id' => $optionId,
-                'waktu_jawab_ms' => max(0, $now - (int) $session->soal_mulai_at),
-                'skor' => 0,
-                'answered_at' => now(),
-            ]
-        );
 
         $totalPeserta = $session->attempts()->mengikuti()->count();
         $sudahMenjawab = Answer::query()
@@ -258,9 +315,7 @@ class SessionController extends Controller
             'question_id' => $attemptQuestion->question_id,
         ]);
 
-        return response()->json([
-            'ok' => true,
-            'option_id' => $optionId,
+        return response()->json($payloadRespons + [
             'sudah_menjawab' => $sudahMenjawab,
             'total_peserta' => $totalPeserta,
         ]);
@@ -289,19 +344,21 @@ class SessionController extends Controller
         $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban, $tampilkan) {
             $question = $aq->question;
             $jawabanSaya = $jawaban->get($question->id);
-            $benar = $question->correctOption();
+            $eval = $question->evaluasiOtomatis($jawabanSaya);
 
             return [
                 'teks' => $question->teks,
                 'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'tipe' => $question->tipe,
+                'label_tipe' => $question->labelTipe(),
                 'bobot' => $question->bobot,
-                'jawaban_saya' => $jawabanSaya?->option?->teks,
-                'jawaban_benar' => $tampilkan ? $benar?->teks : null,
+                'jawaban_saya' => $eval['teks_jawaban'],
+                'jawaban_benar' => $tampilkan ? $eval['teks_kunci'] : null,
                 'pembahasan' => $tampilkan ? $question->pembahasan : null,
-                'benar' => $jawabanSaya?->option?->is_correct === true,
+                'benar' => $eval['benar_penuh'],
+                'parsial' => ! $eval['benar_penuh'] && ($jawabanSaya?->skor ?? 0) > 0,
                 'dinilai_at' => null,
-                'skor' => $jawabanSaya?->skor ?? 0,
+                'skor' => $question->is_bonus ? 1000 : ($jawabanSaya?->skor ?? 0),
                 'urutan' => $aq->urutan,
             ];
         });
@@ -343,12 +400,12 @@ class SessionController extends Controller
             ->with('option')
             ->first();
 
-        $benar = $question->options->firstWhere('is_correct', true);
+        $eval = $question->evaluasiOtomatis($answer);
 
         return [
-            'jawaban_benar' => $benar?->teks,
-            'jawaban_saya' => $answer?->option?->teks,
-            'benar' => $answer?->option?->is_correct === true,
+            'jawaban_benar' => $eval['teks_kunci'],
+            'jawaban_saya' => $eval['teks_jawaban'],
+            'benar' => $eval['benar_penuh'],
             'skor_soal' => $answer?->skor ?? 0,
             'pembahasan' => $session->pembahasanTampil() ? $question->pembahasan : null,
         ];

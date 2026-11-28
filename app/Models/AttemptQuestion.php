@@ -17,6 +17,9 @@ class AttemptQuestion extends Model
         'ragu_ragu',
         'highlight_soal',
         'highlight_opsi_json',
+        'dibuka_at',
+        'berakhir_at',
+        'terkunci_at',
     ];
 
     protected function casts(): array
@@ -27,6 +30,9 @@ class AttemptQuestion extends Model
             'ragu_ragu' => 'boolean',
             'highlight_soal' => 'boolean',
             'highlight_opsi_json' => 'array',
+            'dibuka_at' => 'integer',
+            'berakhir_at' => 'integer',
+            'terkunci_at' => 'integer',
         ];
     }
 

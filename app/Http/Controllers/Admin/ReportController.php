@@ -17,6 +17,7 @@ use App\Models\QuizSession;
 use App\Services\AttemptResetService;
 use App\Services\EssayGrader;
 use App\Services\NilaiService;
+use App\Services\QuestionRegradeService;
 use App\Services\QuizEngine;
 use App\Services\TextSimilarityService;
 use App\Support\OrganizationContext;
@@ -112,7 +113,7 @@ class ReportController extends Controller
 
     public function attempt(Request $request, Attempt $attempt): View
     {
-        $attempt->load(['user', 'quizSession.quiz', 'events']);
+        $attempt->load(['user', 'quizSession.quiz', 'events', 'snapshots']);
 
         $attemptQuestions = $attempt->attemptQuestions()->with('question.options')->get();
         $jawaban = $attempt->answers()->with('option')->get()->keyBy('question_id');
@@ -130,7 +131,8 @@ class ReportController extends Controller
             $question = $aq->question;
             $answer = $jawaban->get($question->id);
             $essay = $question->isEssay();
-            $dijawab = $essay ? filled($answer?->jawaban_teks) : $answer !== null;
+            $eval = $essay ? null : $question->evaluasiOtomatis($answer);
+            $dijawab = $essay ? filled($answer?->jawaban_teks) : ($eval['teks_jawaban'] !== null);
             $riwayat = $answer ? ($history->get($answer->id) ?? collect()) : collect();
             $saranTerakhir = $riwayat->firstWhere('action', 'essay_ai_suggested');
 
@@ -139,6 +141,7 @@ class ReportController extends Controller
                 'answer_id' => $answer?->id,
                 'urutan' => $aq->urutan,
                 'tipe' => $question->tipe,
+                'label_tipe' => $question->labelTipe(),
                 'bobot' => $question->bobot,
                 'teks' => $question->teks,
                 'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
@@ -151,13 +154,15 @@ class ReportController extends Controller
                 'jawaban_data' => $essay ? ($answer?->jawaban_data_json ?? []) : [],
                 'answer_format' => QuestionContent::definition($question)['format'],
                 'answer_config' => QuestionContent::definition($question)['config'],
-                'jawaban_saya' => $essay ? $answer?->jawaban_teks : $answer?->option?->teks,
-                'jawaban_benar' => $essay ? null : $question->correctOption()?->teks,
+                'jawaban_saya' => $essay ? $answer?->jawaban_teks : $eval['teks_jawaban'],
+                'jawaban_benar' => $essay ? null : $eval['teks_kunci'],
                 'kunci_essay' => $essay ? $question->kunci_essay : null,
                 'rubrik_essay' => $essay ? ($question->rubrik_essay ?? []) : [],
-                'benar' => $essay ? null : ($answer?->option?->is_correct === true),
+                'benar' => $essay ? null : $eval['benar_penuh'],
+                'parsial' => $essay ? false : (! $eval['benar_penuh'] && $eval['skor_acak'] > 0),
+                'is_bonus' => (bool) $question->is_bonus,
                 'dinilai_at' => $answer?->dinilai_at,
-                'skor' => $answer?->skor ?? 0,
+                'skor' => $essay ? ($answer?->skor ?? 0) : $eval['skor_acak'],
                 'catatan_pengajar' => $answer?->catatan_pengajar,
                 'dijawab' => $dijawab,
                 'status' => ! $essay ? null : ($answer?->dinilai_at ? 'graded' : ($dijawab ? 'pending' : 'unanswered')),
@@ -173,6 +178,8 @@ class ReportController extends Controller
                 'ai_generated_score' => $answer?->ai_generated_score,
                 'ai_generated_reason' => $answer?->ai_generated_reason,
                 'ai_generated_at' => $answer?->ai_generated_at,
+                'typing_metrics' => $answer?->typing_metrics_json ?? [],
+                'typing_anomaly' => $answer?->indikasiTranskripsiEksternal(),
                 'history' => $riwayat,
             ];
         });
@@ -546,6 +553,31 @@ class ReportController extends Controller
         return back()->with('sukses', 'Pemindaian kemiripan selesai.');
     }
 
+    public function regradeQuestion(
+        Request $request,
+        QuizSession $session,
+        Question $question,
+        QuestionRegradeService $regradeService,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'mode_ralat' => ['required', 'in:ubah_kunci,anulir_bonus,batalkan_bonus'],
+            'correct_option_id' => ['nullable', 'integer'],
+            'correct_option_ids' => ['nullable', 'array'],
+            'correct_option_ids.*' => ['integer'],
+            'alasan' => ['nullable', 'string', 'max:500'],
+        ], [
+            'mode_ralat.required' => 'Pilih jenis ralat soal.',
+            'mode_ralat.in' => 'Jenis ralat soal tidak dikenali.',
+            'alasan.max' => 'Alasan ralat maksimal 500 karakter.',
+        ]);
+
+        $hasil = $regradeService->regrade($session, $question, $data, (int) $request->user()->id);
+
+        return redirect()
+            ->route('admin.reports.session', $session)
+            ->with('sukses', 'Kunci atau status bonus soal diperbarui. '.$hasil['affected_attempts'].' attempt telah dihitung ulang.');
+    }
+
     public function export(QuizSession $session): StreamedResponse
     {
         $attempts = $this->attemptsLaporan($session);
@@ -716,7 +748,7 @@ class ReportController extends Controller
         $questions = Question::withTrashed()
             ->with('options')
             ->whereIn('id', $ids)
-            ->where('tipe', 'pilihan_ganda')
+            ->where('tipe', '!=', 'essay')
             ->get();
 
         if ($questions->isEmpty()) {
@@ -726,15 +758,16 @@ class ReportController extends Controller
         $attempts = $session->attempts()->mengikuti()->get(['id', 'skor_total']);
         $attemptIds = $attempts->pluck('id')->all();
 
+        $questionsById = $questions->keyBy('id');
         $answers = Answer::query()
             ->whereIn('attempt_id', $attemptIds)
-            ->leftJoin('options', 'options.id', '=', 'answers.option_id')
-            ->get([
-                'answers.attempt_id',
-                'answers.question_id',
-                'answers.waktu_jawab_ms',
-                'options.is_correct',
-            ]);
+            ->whereIn('question_id', $questions->pluck('id'))
+            ->with('option')
+            ->get()
+            ->each(function (Answer $ans) use ($questionsById) {
+                $soal = $questionsById->get($ans->question_id);
+                $ans->setAttribute('is_correct', $soal ? $soal->evaluasiOtomatis($ans)['benar_penuh'] : false);
+            });
 
         $penerima = AttemptQuestion::query()
             ->whereIn('attempt_id', $attemptIds)
@@ -771,12 +804,14 @@ class ReportController extends Controller
         return $questions->map(function (Question $question) use ($answers, $penerima, $benarPerSoal, $waktuPerSoal, $kelompokAtas, $kelompokBawah) {
             $penerimaSoal = $penerima->get($question->id, []);
             $peserta = count($penerimaSoal);
-            $benar = (int) ($benarPerSoal[$question->id] ?? 0);
+            $benar = $question->is_bonus ? $peserta : (int) ($benarPerSoal[$question->id] ?? 0);
             $persen = $peserta > 0 ? round($benar / $peserta * 100, 1) : 0.0;
-            $kategori = $persen < 30 ? 'Sukar' : ($persen <= 70 ? 'Sedang' : 'Mudah');
+            $kategori = $question->is_bonus
+                ? 'Bonus'
+                : ($persen < 30 ? 'Sukar' : ($persen <= 70 ? 'Sedang' : 'Mudah'));
 
             $dayaBeda = null;
-            if ($kelompokAtas !== [] && $kelompokBawah !== []) {
+            if (! $question->is_bonus && $kelompokAtas !== [] && $kelompokBawah !== []) {
                 $atas = count(array_intersect($penerimaSoal, $kelompokAtas));
                 $bawah = count(array_intersect($penerimaSoal, $kelompokBawah));
 
@@ -791,6 +826,14 @@ class ReportController extends Controller
             $waktu = $waktuPerSoal[$question->id] ?? [];
 
             return [
+                'question_id' => $question->id,
+                'tipe' => $question->tipe,
+                'is_bonus' => (bool) $question->is_bonus,
+                'options' => $question->options->map(fn ($opsi) => [
+                    'id' => $opsi->id,
+                    'teks' => $opsi->teks,
+                    'is_correct' => (bool) $opsi->is_correct,
+                ])->values()->all(),
                 'teks' => $question->teks,
                 'peserta' => $peserta,
                 'benar' => $benar,

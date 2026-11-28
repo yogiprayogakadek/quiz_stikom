@@ -18,6 +18,10 @@ class Quiz extends Model
         'organization_id',
         'judul',
         'jumlah_soal',
+        'jumlah_soal_pg',
+        'jumlah_soal_essay',
+        'acak_soal',
+        'kelompokkan_tipe_soal',
         'acak_opsi',
         'auto_grade_essay',
         'is_percobaan',
@@ -32,6 +36,10 @@ class Quiz extends Model
             'source_quiz_id' => 'integer',
             'kelas_id' => 'integer',
             'jumlah_soal' => 'integer',
+            'jumlah_soal_pg' => 'integer',
+            'jumlah_soal_essay' => 'integer',
+            'acak_soal' => 'boolean',
+            'kelompokkan_tipe_soal' => 'boolean',
             'acak_opsi' => 'boolean',
             'auto_grade_essay' => 'boolean',
             'is_percobaan' => 'boolean',
@@ -67,6 +75,20 @@ class Quiz extends Model
 
     public function soalTerpilih(): int
     {
+        if ($this->jumlah_soal_pg !== null || $this->jumlah_soal_essay !== null) {
+            $totalObjektif = $this->questions()->where('tipe', '!=', 'essay')->count();
+            $totalEssay = $this->questions()->where('tipe', 'essay')->count();
+
+            $dipakaiObjektif = $this->jumlah_soal_pg === null
+                ? $totalObjektif
+                : min($this->jumlah_soal_pg, $totalObjektif);
+            $dipakaiEssay = $this->jumlah_soal_essay === null
+                ? $totalEssay
+                : min($this->jumlah_soal_essay, $totalEssay);
+
+            return $dipakaiObjektif + $dipakaiEssay;
+        }
+
         $total = $this->questions()->count();
 
         return $this->jumlah_soal === null ? $total : min($this->jumlah_soal, $total);

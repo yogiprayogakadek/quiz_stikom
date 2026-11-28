@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\PesertaDikeluarkan;
+use App\Events\PesertaDimintaLayar;
 use App\Events\PesertaDipaksaKumpul;
 use App\Events\PesertaWaktuDitambah;
 use App\Events\SesiStatusUpdated;
@@ -13,6 +14,7 @@ use App\Http\Requests\UpdateSessionRequest;
 use App\Models\Answer;
 use App\Models\Attempt;
 use App\Models\AttemptEvent;
+use App\Models\AttemptSnapshot;
 use App\Models\AuditLog;
 use App\Models\Kelas;
 use App\Models\Quiz;
@@ -46,6 +48,7 @@ class SessionController extends Controller
         $jenis = in_array($jenis, ['real', 'simulasi'], true) ? $jenis : null;
 
         $sessions = QuizSession::with('quiz', 'remidi', 'kelas')
+            ->whereHas('quiz')
             ->withCount('attempts')
             ->when($status !== null, fn ($q) => $q->where('status', $status))
             ->when($kelasFilter > 0, fn ($q) => $q->where('kelas_id', $kelasFilter))
@@ -84,8 +87,13 @@ class SessionController extends Controller
             'quiz_id' => $data['quiz_id'],
             'kelas_id' => $data['kelas_id'] ?? null,
             'nama' => $data['nama'],
+            'kode_akses' => filled($data['kode_akses'] ?? null) ? strtoupper(trim((string) $data['kode_akses'])) : null,
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
+            'navigasi_sekuensial' => $data['mode'] === 'acak' && $request->boolean('navigasi_sekuensial'),
+            'timer_per_soal' => $data['mode'] === 'acak' && $request->boolean('timer_per_soal'),
+            'pisah_konteks_soal' => $data['mode'] === 'acak' && $request->boolean('pisah_konteks_soal'),
+            'watermark_layar' => $request->boolean('watermark_layar'),
             'tampilkan_pembahasan' => $pembahasanMode === 'terbuka',
             'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
@@ -97,9 +105,12 @@ class SessionController extends Controller
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
             'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
+            'webcam_proctoring' => $request->boolean('webcam_proctoring'),
+            'screen_proctoring' => $data['screen_proctoring'] ?? 'off',
             'exam_tools_json' => $examTools,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
+            'batas_telat_menit' => $data['batas_telat_menit'] ?? null,
             ...$this->timingData($data),
             'status' => 'draft',
             'display_token' => Str::random(48),
@@ -350,6 +361,13 @@ class SessionController extends Controller
             ->limit(25)
             ->get();
 
+        $snapshotTerbaru = AttemptSnapshot::query()
+            ->whereHas('attempt', fn ($q) => $q->where('quiz_session_id', $session->id))
+            ->with('attempt.user')
+            ->latest('id')
+            ->limit(12)
+            ->get();
+
         return [
             'attempts' => $attempts,
             'soalAktif' => $soalAktif,
@@ -360,6 +378,7 @@ class SessionController extends Controller
                 ->count(),
             'onlineCount' => $attempts->filter(fn (Attempt $attempt) => $attempt->isOnline())->count(),
             'kejadianTerbaru' => $kejadianTerbaru,
+            'snapshotTerbaru' => $snapshotTerbaru,
         ];
     }
 
@@ -398,8 +417,13 @@ class SessionController extends Controller
             'quiz_id' => $data['quiz_id'],
             'kelas_id' => $data['kelas_id'] ?? null,
             'nama' => $data['nama'],
+            'kode_akses' => filled($data['kode_akses'] ?? null) ? strtoupper(trim((string) $data['kode_akses'])) : null,
             'mode' => $data['mode'],
             'acak_opsi' => $request->boolean('acak_opsi'),
+            'navigasi_sekuensial' => $data['mode'] === 'acak' && $request->boolean('navigasi_sekuensial'),
+            'timer_per_soal' => $data['mode'] === 'acak' && $request->boolean('timer_per_soal'),
+            'pisah_konteks_soal' => $data['mode'] === 'acak' && $request->boolean('pisah_konteks_soal'),
+            'watermark_layar' => $request->boolean('watermark_layar'),
             'tampilkan_pembahasan' => $pembahasanMode === 'terbuka',
             'pembahasan_mode' => $pembahasanMode,
             'leaderboard_live' => $request->boolean('leaderboard_live'),
@@ -411,9 +435,12 @@ class SessionController extends Controller
                 ? $data['pelanggaran_penalty_seconds']
                 : null,
             'clipboard_policy' => $data['clipboard_policy'] ?? 'monitor',
+            'webcam_proctoring' => $request->boolean('webcam_proctoring'),
+            'screen_proctoring' => $data['screen_proctoring'] ?? 'off',
             'exam_tools_json' => $examTools,
             'jeda_detik' => $data['jeda_detik'],
             'durasi_total_detik' => $this->durasiTotalDetik($data),
+            'batas_telat_menit' => $data['batas_telat_menit'] ?? null,
             ...$this->timingData($data),
         ]);
 
@@ -729,6 +756,39 @@ class SessionController extends Controller
         PesertaDikeluarkan::safeDispatch($session->id, $userId);
 
         return back()->with('sukses', $nama.' dikeluarkan dari sesi ini dan tidak bisa bergabung lagi.');
+    }
+
+    public function peekScreen(Request $request, QuizSession $session, Attempt $attempt): JsonResponse|RedirectResponse
+    {
+        $this->pastikanAttemptMilikSesi($session, $attempt);
+
+        if ($session->status !== 'berjalan' || $attempt->status !== 'berjalan') {
+            throw ValidationException::withMessages([
+                'peserta' => 'Intip layar hanya tersedia untuk peserta yang sedang mengerjakan ujian.',
+            ]);
+        }
+
+        $untilMs = now()->addSeconds(60)->getTimestampMs();
+        $attempt->forceFill(['screen_peek_until' => $untilMs])->save();
+
+        AuditLog::record('attempt_screen_peek_requested', 'attempt', $attempt->id, [
+            'quiz_session_id' => $session->id,
+            'participant_id' => $attempt->user_id,
+            'until_ms' => $untilMs,
+        ], $session->organization_id);
+
+        PesertaDimintaLayar::safeDispatch($session->id, $attempt->user_id, $attempt->id, $untilMs);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'screen_peek_until' => $untilMs,
+            ]);
+        }
+
+        $nama = $attempt->user?->nama ?? 'peserta';
+
+        return back()->with('sukses', "Permintaan tangkap layar 60 detik dikirim ke perangkat {$nama}.");
     }
 
     /**

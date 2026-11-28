@@ -14,6 +14,14 @@
     $timingMode = old('timing_mode', $session?->timing_mode ?? 'duration');
     $scheduledStart = old('scheduled_start_at', $session?->scheduled_start_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
     $scheduledEnd = old('scheduled_end_at', $session?->scheduled_end_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
+    $kodeAksesAwal = old('kode_akses', $session?->kode_akses ?? '');
+    $batasTelatAwal = old('batas_telat_menit', $session?->batas_telat_menit ?? '');
+    $navigasiSekuensial = (bool) old('navigasi_sekuensial', $session?->navigasi_sekuensial ?? false);
+    $timerPerSoal = (bool) old('timer_per_soal', $session?->timer_per_soal ?? false);
+    $pisahKonteksSoal = (bool) old('pisah_konteks_soal', $session?->pisah_konteks_soal ?? false);
+    $watermarkLayar = (bool) old('watermark_layar', $session?->watermark_layar ?? false);
+    $webcamProctoring = (bool) old('webcam_proctoring', $session?->webcam_proctoring ?? false);
+    $screenProctoring = old('screen_proctoring', $session?->screen_proctoring ?? 'off');
     $quizTerpilih = (string) old('quiz_id', $session?->quiz_id ?? request('quiz_id', ''));
     $quizzes->loadCount(['questions as essay_questions_count' => fn ($query) => $query->where('tipe', 'essay')]);
     $alatAwal = old('exam_tools', $session?->examTools() ?? optional($quizzes->firstWhere('id', (int) $quizTerpilih))->examTools() ?? []);
@@ -29,6 +37,17 @@
         mode: @js($modeAwal),
         timingMode: @js($timingMode),
         pelanggaranAction: @js($pelanggaranAction),
+        clipboardPolicy: @js($clipboardPolicy),
+        maxPelanggaran: @js($maxPelanggaran ?? ''),
+        durasiPeringatan: @js($durasiPeringatan),
+        kodeAkses: @js($kodeAksesAwal),
+        batasTelatMenit: @js($batasTelatAwal),
+        navigasiSekuensial: @js($navigasiSekuensial),
+        timerPerSoal: @js($timerPerSoal),
+        pisahKonteksSoal: @js($pisahKonteksSoal),
+        watermarkLayar: @js($watermarkLayar),
+        webcamProctoring: @js($webcamProctoring),
+        screenProctoring: @js($screenProctoring),
         selectedQuiz: @js($quizTerpilih),
         quizTools: @js($konfigurasiAlatKuis),
         tools: @js(array_values((array) $alatAwal)),
@@ -37,6 +56,50 @@
             this.tools = [...(this.quizTools[this.selectedQuiz]?.tools ?? [])];
             if (this.quizTools[this.selectedQuiz]?.has_essay && this.mode === 'serempak') {
                 this.mode = 'acak';
+            }
+        },
+        acakPin() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let pin = '';
+            for (let i = 0; i < 6; i++) {
+                pin += chars[Math.floor(Math.random() * chars.length)];
+            }
+            this.kodeAkses = pin;
+        },
+        terapkanPreset(jenis) {
+            if (jenis === 'latihan') {
+                this.navigasiSekuensial = false;
+                this.timerPerSoal = false;
+                this.pisahKonteksSoal = false;
+                this.watermarkLayar = false;
+                this.webcamProctoring = false;
+                this.screenProctoring = 'off';
+                this.clipboardPolicy = 'monitor';
+                this.maxPelanggaran = 5;
+                this.durasiPeringatan = 30;
+            } else if (jenis === 'kelas') {
+                if (!this.kodeAkses) this.acakPin();
+                this.batasTelatMenit = 15;
+                this.navigasiSekuensial = false;
+                this.timerPerSoal = false;
+                this.pisahKonteksSoal = false;
+                this.watermarkLayar = true;
+                this.webcamProctoring = false;
+                this.screenProctoring = 'desktop_only';
+                this.clipboardPolicy = 'block';
+                this.maxPelanggaran = 3;
+                this.durasiPeringatan = 20;
+            } else if (jenis === 'rumah') {
+                this.mode = 'acak';
+                this.navigasiSekuensial = true;
+                this.timerPerSoal = true;
+                this.pisahKonteksSoal = true;
+                this.watermarkLayar = true;
+                this.webcamProctoring = true;
+                this.screenProctoring = 'optional_mobile';
+                this.clipboardPolicy = 'block';
+                this.maxPelanggaran = 3;
+                this.durasiPeringatan = 15;
             }
         }
     }"
@@ -253,20 +316,58 @@
         @error('exam_tools.*') <p class="field-error mt-2">{{ $message }}</p> @enderror
     </fieldset>
 
+    <fieldset class="rounded-2xl border border-outline bg-surface p-4">
+        <legend class="label">Preset cepat keamanan sesi</legend>
+        <p class="help mt-1">Pilih satu pola awal, lalu sesuaikan rincian di bawah bila diperlukan.</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-3">
+            <button type="button" @click="terapkanPreset('latihan')" class="min-h-14 rounded-xl border border-outline bg-page p-3 text-left transition hover:border-brand">
+                <span class="block text-sm font-bold text-ink">Standar Latihan</span>
+                <span class="mt-0.5 block text-xs text-ink-muted">Navigasi bebas, pantau clipboard, tanpa tangkap layar.</span>
+            </button>
+            <button type="button" @click="terapkanPreset('kelas')" class="min-h-14 rounded-xl border border-outline bg-page p-3 text-left transition hover:border-brand">
+                <span class="block text-sm font-bold text-ink">Ujian Kelas / Lab</span>
+                <span class="mt-0.5 block text-xs text-ink-muted">PIN papan tulis, batas telat 15 menit, tangkap layar saat keluar tab.</span>
+            </button>
+            <button type="button" @click="terapkanPreset('rumah')" class="min-h-14 rounded-xl border border-outline bg-page p-3 text-left transition hover:border-brand">
+                <span class="block text-sm font-bold text-ink">Ujian Rumah Anti-Foto-AI</span>
+                <span class="mt-0.5 block text-xs text-ink-muted">1 soal aktif terkunci, timer per soal, pisah tab stimulus, kamera &amp; layar.</span>
+            </button>
+        </div>
+    </fieldset>
+
+    <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+            <label for="kode_akses" class="label">PIN masuk sesi (opsional)</label>
+            <div class="flex gap-2">
+                <input id="kode_akses" name="kode_akses" type="text" maxlength="16" x-model="kodeAkses" class="input font-mono uppercase" placeholder="Contoh: LAB402" @error('kode_akses') aria-invalid="true" @enderror>
+                <button type="button" @click="acakPin()" class="btn btn-secondary min-h-11 shrink-0 px-3">Buat PIN</button>
+            </div>
+            <p class="help mt-2">Umumkan di kelas sesaat sebelum ujian agar peserta di luar ruangan tidak ikut bergabung.</p>
+            @error('kode_akses') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
+            <label for="batas_telat_menit" class="label">Batas toleransi terlambat (menit, opsional)</label>
+            <input id="batas_telat_menit" name="batas_telat_menit" type="number" min="1" max="300" x-model="batasTelatMenit" class="input" placeholder="Contoh: 15" @error('batas_telat_menit') aria-invalid="true" @enderror>
+            <p class="help mt-2">Menolak peserta yang baru bergabung atau menekan mulai melewati batas menit sejak sesi berjalan.</p>
+            @error('batas_telat_menit') <p class="field-error">{{ $message }}</p> @enderror
+        </div>
+    </div>
+
     <fieldset class="rounded-2xl border border-outline bg-page p-4">
-        <legend class="label">Pengawasan</legend>
+        <legend class="label">Pengawasan &amp; Pertahanan Anti-Foto-AI</legend>
         <div class="mt-3 grid gap-5 sm:grid-cols-2">
             <div>
                 <label for="max_pelanggaran" class="label">Batas pelanggaran (opsional)</label>
-                <input id="max_pelanggaran" name="max_pelanggaran" type="number" min="1" max="100" value="{{ $maxPelanggaran }}" class="input" @error('max_pelanggaran') aria-invalid="true" @enderror>
+                <input id="max_pelanggaran" name="max_pelanggaran" type="number" min="1" max="100" x-model="maxPelanggaran" class="input" @error('max_pelanggaran') aria-invalid="true" @enderror>
                 <p class="help mt-2">Jika dikosongkan, habisnya satu timer peringatan langsung mengumpulkan ujian.</p>
                 @error('max_pelanggaran') <p class="field-error">{{ $message }}</p> @enderror
             </div>
 
             <div>
                 <label for="durasi_peringatan" class="label">Durasi peringatan (detik)</label>
-                <input id="durasi_peringatan" name="durasi_peringatan" type="number" min="5" max="300" value="{{ $durasiPeringatan }}" class="input" required @error('durasi_peringatan') aria-invalid="true" @enderror>
-                <p class="help mt-2">Waktu untuk kembali ke ujian. Saat batas pelanggaran sudah tercapai dan waktu habis, ujian dikumpulkan otomatis. Isi 5 sampai 300 detik.</p>
+                <input id="durasi_peringatan" name="durasi_peringatan" type="number" min="5" max="300" x-model="durasiPeringatan" class="input" required @error('durasi_peringatan') aria-invalid="true" @enderror>
+                <p class="help mt-2">Waktu untuk kembali ke ujian. Isi 5 sampai 300 detik.</p>
                 @error('durasi_peringatan') <p class="field-error">{{ $message }}</p> @enderror
             </div>
         </div>
@@ -291,15 +392,70 @@
             @error('pelanggaran_penalty_seconds') <p class="field-error">{{ $message }}</p> @enderror
         </div>
 
-        <div class="mt-5">
-            <label for="clipboard_policy" class="label">Copy dan paste saat ujian</label>
-            <select id="clipboard_policy" name="clipboard_policy" class="input">
-                <option value="allow" @selected($clipboardPolicy === 'allow')>Izinkan tanpa pencatatan</option>
-                <option value="monitor" @selected($clipboardPolicy === 'monitor')>Pantau tanpa menghukum</option>
-                <option value="block" @selected($clipboardPolicy === 'block')>Blokir dan hitung sebagai pelanggaran</option>
-            </select>
-            <p class="help mt-2">Mode Pantau memblokir copy soal dan mencatat paste jawaban, tetapi tidak menambah hitungan pelanggaran.</p>
-            @error('clipboard_policy') <p class="field-error">{{ $message }}</p> @enderror
+        <div class="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+                <label for="clipboard_policy" class="label">Copy dan paste saat ujian</label>
+                <select id="clipboard_policy" name="clipboard_policy" x-model="clipboardPolicy" class="input">
+                    <option value="allow">Izinkan tanpa pencatatan</option>
+                    <option value="monitor">Pantau tanpa menghukum</option>
+                    <option value="block">Blokir dan hitung sebagai pelanggaran</option>
+                </select>
+                <p class="help mt-2">Mode Pantau memblokir copy soal dan mencatat paste jawaban tanpa menambah pelanggaran.</p>
+                @error('clipboard_policy') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="screen_proctoring" class="label">Bukti tangkap layar saat keluar tab</label>
+                <select id="screen_proctoring" name="screen_proctoring" x-model="screenProctoring" class="input">
+                    <option value="off">Nonaktif</option>
+                    <option value="optional_mobile">Aktif di laptop (HP diizinkan tanpa berbagi layar)</option>
+                    <option value="desktop_only">Wajib berbagi seluruh layar monitor (khusus laptop/PC)</option>
+                </select>
+                <p class="help mt-2">Mengirim 0 KB selama peserta fokus di tab ujian. Hanya memotret layar WebP ringan ketika peserta keluar tab atau diminta pengajar.</p>
+                @error('screen_proctoring') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+        </div>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+            <label x-show="mode === 'acak'" class="flex cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5">
+                <input type="checkbox" name="navigasi_sekuensial" value="1" x-model="navigasiSekuensial" class="mt-1 h-5 w-5">
+                <span>
+                    <span class="block text-sm font-bold text-ink">Isolasi 1 soal aktif (maju satu arah)</span>
+                    <span class="mt-0.5 block text-xs text-ink-muted">Server hanya mengirim soal yang sedang dikerjakan dan mengunci soal sebelumnya.</span>
+                </span>
+            </label>
+
+            <label x-show="mode === 'acak'" class="flex cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5">
+                <input type="checkbox" name="timer_per_soal" value="1" x-model="timerPerSoal" @change="if (timerPerSoal) navigasiSekuensial = true" class="mt-1 h-5 w-5">
+                <span>
+                    <span class="block text-sm font-bold text-ink">Timer server per butir soal</span>
+                    <span class="mt-0.5 block text-xs text-ink-muted">Setiap butir terkunci otomatis saat durasi soalnya habis sehingga sulit difoto ke AI.</span>
+                </span>
+            </label>
+
+            <label x-show="mode === 'acak'" class="flex cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5">
+                <input type="checkbox" name="pisah_konteks_soal" value="1" x-model="pisahKonteksSoal" class="mt-1 h-5 w-5">
+                <span>
+                    <span class="block text-sm font-bold text-ink">Pisahkan tab data kasus &amp; jawaban</span>
+                    <span class="mt-0.5 block text-xs text-ink-muted">Gambar/tabel soal dan pilihan jawaban tidak tampil bersamaan dalam satu bidikan foto HP.</span>
+                </span>
+            </label>
+
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5">
+                <input type="checkbox" name="watermark_layar" value="1" x-model="watermarkLayar" class="mt-1 h-5 w-5">
+                <span>
+                    <span class="block text-sm font-bold text-ink">Watermark identitas &amp; blokir cetak</span>
+                    <span class="mt-0.5 block text-xs text-ink-muted">Menampilkan nama serta username peserta secara halus di area soal.</span>
+                </span>
+            </label>
+
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5 sm:col-span-2">
+                <input type="checkbox" name="webcam_proctoring" value="1" x-model="webcamProctoring" class="mt-1 h-5 w-5">
+                <span>
+                    <span class="block text-sm font-bold text-ink">Foto kamera pengawas berkala (opsional ujian rumah)</span>
+                    <span class="mt-0.5 block text-xs text-ink-muted">Mengambil snapshot wajah beresolusi rendah (~20 KB) secara acak dan saat perpindahan fokus, disimpan privat untuk pengajar.</span>
+                </span>
+            </label>
         </div>
     </fieldset>
 

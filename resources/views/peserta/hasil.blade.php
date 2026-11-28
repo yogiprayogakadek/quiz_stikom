@@ -179,7 +179,7 @@
                                 <td>
                                     <p class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 160) }}</p>
                                     {!! $baris['content_html'] ?? '' !!}
-                                    <p class="mt-1 text-sm text-ink-muted">{{ $baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda' }} · Bobot {{ $baris['bobot'] }}</p>
+                                    <p class="mt-1 text-sm text-ink-muted">{{ $baris['label_tipe'] ?? ($baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda') }} · Bobot {{ $baris['bobot'] }}</p>
                                     @if ($baris['pembahasan'])
                                         <p class="mt-1 text-base text-ink-muted">{{ $baris['pembahasan'] }}</p>
                                     @endif
@@ -233,6 +233,10 @@
                                         <span class="pill pill-leaf">
                                             <x-icon name="check" :size="14" />
                                             Benar
+                                        </span>
+                                    @elseif ($baris['parsial'] ?? false)
+                                        <span class="pill pill-sun">
+                                            Sebagian
                                         </span>
                                     @else
                                         <span class="pill pill-coral">

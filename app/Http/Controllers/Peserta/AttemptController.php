@@ -17,6 +17,7 @@ use App\Support\QuestionContent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class AttemptController extends Controller
@@ -40,7 +41,7 @@ class AttemptController extends Controller
             return redirect()->route('peserta.session.play', $session);
         }
 
-        $engine->mulaiAcak($attempt);
+        $engine->mulaiAcak($attempt, $request->ip());
 
         return redirect()->route('peserta.attempt.show', $attempt);
     }
@@ -77,87 +78,176 @@ class AttemptController extends Controller
             return redirect()->route('peserta.attempt.result', $attempt);
         }
 
+        $attempt->catatPerubahanIp(request()->ip());
+
+        $session = $attempt->quizSession;
+        $isolasiSoal = $session->pakaiIsolasiSatuSoal();
         $bankSoal = $attempt->attemptQuestions()->with('question.options')->get();
-
+        $totalSoal = $bankSoal->count();
         $jawaban = $attempt->answers()->get()->keyBy('question_id');
+        $nowMs = now()->getTimestampMs();
 
-        $questions = $bankSoal->map(function (AttemptQuestion $aq) use ($jawaban) {
-            $question = $aq->question;
-            $opsi = collect($aq->urutan_opsi_json)
-                ->map(fn ($id) => $question->options->firstWhere('id', (int) $id))
-                ->filter()
-                ->values()
-                ->map(fn ($o) => ['id' => $o->id, 'teks' => $o->teks])
-                ->all();
+        if ($isolasiSoal) {
+            $posisi = max(1, (int) ($attempt->posisi_terkunci_urutan ?: 1));
+            $aktifAq = $bankSoal->firstWhere('urutan', $posisi) ?? $bankSoal->first();
 
-            return [
-                'id' => $question->id,
-                'urutan' => $aq->urutan,
-                'teks' => $question->teks,
-                'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
-                'tipe' => $question->tipe,
-                'bobot' => $question->bobot,
-                'opsi' => $opsi,
-                'jawaban_option_id' => $jawaban->get($question->id)?->option_id,
-                'jawaban_teks' => $jawaban->get($question->id)?->jawaban_teks,
-                'jawaban_parts' => $jawaban->get($question->id)?->jawaban_parts_json ?? [],
-                'jawaban_data' => $jawaban->get($question->id)?->jawaban_data_json ?? [],
-                'petunjuk' => $question->petunjuk_json ?? [],
-                'answer_format' => QuestionContent::definition($question)['format'],
-                'answer_config' => QuestionContent::definition($question)['config'],
-                'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
-                    ...$part,
-                    'content_html' => QuestionContent::renderBlocks($part['content_blocks'] ?? []),
-                ])->all(),
-                'ragu_ragu' => (bool) $aq->ragu_ragu,
-                'highlight_soal' => (bool) $aq->highlight_soal,
-                'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
-            ];
-        })->values()->all();
+            if ($aktifAq === null) {
+                $engine->selesaikanAcak($attempt);
 
-        // Buka lagi di soal pertama yang belum lengkap setelah refresh atau koneksi putus.
-        $mulaiIndex = max(0, count($questions) - 1);
-        foreach ($questions as $i => $question) {
-            $answer = $jawaban->get($question['id']);
-            $lengkap = $answer !== null;
-
-            if ($lengkap && $question['tipe'] === 'essay' && $question['sub_soal'] !== []) {
-                $parts = $answer->jawaban_parts_json ?? [];
-                $answerData = $answer->jawaban_data_json ?? [];
-
-                foreach (array_filter($question['sub_soal'], fn (array $bagian) => $bagian['is_leaf']) as $bagian) {
-                    $definition = [
-                        'format' => $bagian['answer_format'] ?? 'rich_text',
-                        'config' => $bagian['answer_config'] ?? [],
-                    ];
-                    $stored = $answerData[$bagian['key']] ?? ['value' => $parts[$bagian['key']] ?? ''];
-                    if (! QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config'])) {
-                        $lengkap = false;
-                        break;
-                    }
-                }
-            } elseif ($lengkap && $question['tipe'] === 'essay') {
-                $definition = ['format' => $question['answer_format'], 'config' => $question['answer_config']];
-                $stored = ($answer->jawaban_data_json ?? [])['__main'] ?? ['value' => $answer->jawaban_teks ?? ''];
-                $lengkap = QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config']);
+                return redirect()->route('peserta.attempt.result', $attempt);
             }
 
-            if (! $lengkap) {
-                $mulaiIndex = $i;
-                break;
+            if ($aktifAq->dibuka_at === null) {
+                $durasiMs = max(5, (int) ($aktifAq->question?->durasi_detik ?: 60)) * 1000;
+                $batasAttempt = (int) ($attempt->batas_akhir_at ?: ($nowMs + $durasiMs));
+                $aktifAq->update([
+                    'dibuka_at' => $nowMs,
+                    'berakhir_at' => $session->timer_per_soal ? min($batasAttempt, $nowMs + $durasiMs) : null,
+                ]);
+                $aktifAq->refresh()->load('question.options');
+            }
+
+            $questions = [$this->formatQuestionPayload($aktifAq, $jawaban->get($aktifAq->question_id))];
+            $mulaiIndex = 0;
+        } else {
+            $questions = $bankSoal
+                ->map(fn (AttemptQuestion $aq) => $this->formatQuestionPayload($aq, $jawaban->get($aq->question_id)))
+                ->values()
+                ->all();
+
+            // Buka lagi di soal pertama yang belum lengkap setelah refresh atau koneksi putus.
+            $mulaiIndex = max(0, count($questions) - 1);
+            foreach ($questions as $i => $question) {
+                $answer = $jawaban->get($question['id']);
+                $lengkap = $answer !== null;
+
+                if ($lengkap && $question['tipe'] === 'essay' && $question['sub_soal'] !== []) {
+                    $parts = $answer->jawaban_parts_json ?? [];
+                    $answerData = $answer->jawaban_data_json ?? [];
+
+                    foreach (array_filter($question['sub_soal'], fn (array $bagian) => $bagian['is_leaf']) as $bagian) {
+                        $definition = [
+                            'format' => $bagian['answer_format'] ?? 'rich_text',
+                            'config' => $bagian['answer_config'] ?? [],
+                        ];
+                        $stored = $answerData[$bagian['key']] ?? ['value' => $parts[$bagian['key']] ?? ''];
+                        if (! QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config'])) {
+                            $lengkap = false;
+                            break;
+                        }
+                    }
+                } elseif ($lengkap && $question['tipe'] === 'essay') {
+                    $definition = ['format' => $question['answer_format'], 'config' => $question['answer_config']];
+                    $stored = ($answer->jawaban_data_json ?? [])['__main'] ?? ['value' => $answer->jawaban_teks ?? ''];
+                    $lengkap = QuestionContent::answerIsComplete($stored, $definition['format'], $definition['config']);
+                }
+
+                if (! $lengkap) {
+                    $mulaiIndex = $i;
+                    break;
+                }
             }
         }
 
         $data = [
             'attempt' => $attempt,
-            'session' => $attempt->quizSession,
+            'session' => $session,
             'questions' => $questions,
+            'total_soal' => $totalSoal,
+            'isolasi_soal' => $isolasiSoal,
             'mulai_index' => $mulaiIndex,
-            'server_now' => now()->getTimestampMs(),
+            'server_now' => $nowMs,
             'pesanAktif' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ];
 
         return view('peserta.attempt.show', $data);
+    }
+
+    public function nextQuestion(Request $request, Attempt $attempt, QuizEngine $engine): JsonResponse
+    {
+        abort_unless($attempt->user_id === $request->user()->id, 403);
+
+        $attempt->load('quizSession');
+        $engine->reconcileScheduledSession($attempt->quizSession);
+        $attempt->refresh()->load('quizSession');
+
+        if ($attempt->status !== 'berjalan') {
+            return response()->json([
+                'message' => 'Attempt sudah selesai.',
+                'selesai' => true,
+                'redirect_url' => route('peserta.attempt.result', $attempt),
+            ], 403);
+        }
+
+        if ($attempt->isLewatBatas()) {
+            $engine->selesaikanAcak($attempt);
+
+            return response()->json([
+                'ok' => true,
+                'selesai' => true,
+                'redirect_url' => route('peserta.attempt.result', $attempt),
+            ]);
+        }
+
+        $session = $attempt->quizSession;
+        $nowMs = now()->getTimestampMs();
+
+        $nextAq = DB::transaction(function () use ($attempt, $session, $nowMs) {
+            $locked = Attempt::lockForUpdate()->findOrFail($attempt->id);
+            $posisi = max(1, (int) ($locked->posisi_terkunci_urutan ?: 1));
+
+            $currentAq = $locked->attemptQuestions()->where('urutan', $posisi)->first();
+            if ($currentAq !== null && $currentAq->terkunci_at === null) {
+                $currentAq->update(['terkunci_at' => $nowMs]);
+            }
+
+            $berikutnya = $locked->attemptQuestions()
+                ->where('urutan', '>', $posisi)
+                ->orderBy('urutan')
+                ->with('question.options')
+                ->first();
+
+            if ($berikutnya === null) {
+                return null;
+            }
+
+            $locked->update(['posisi_terkunci_urutan' => $berikutnya->urutan]);
+
+            if ($berikutnya->dibuka_at === null) {
+                $durasiMs = max(5, (int) ($berikutnya->question?->durasi_detik ?: 60)) * 1000;
+                $batasAttempt = (int) ($locked->batas_akhir_at ?: ($nowMs + $durasiMs));
+                $berikutnya->update([
+                    'dibuka_at' => $nowMs,
+                    'berakhir_at' => $session->timer_per_soal ? min($batasAttempt, $nowMs + $durasiMs) : null,
+                ]);
+                $berikutnya->refresh()->load('question.options');
+            }
+
+            return $berikutnya;
+        });
+
+        if ($nextAq === null) {
+            $engine->selesaikanAcak($attempt);
+            $engine->siarkanDisplay($session->fresh());
+
+            return response()->json([
+                'ok' => true,
+                'selesai' => true,
+                'redirect_url' => route('peserta.attempt.result', $attempt),
+            ]);
+        }
+
+        $answer = $attempt->answers()->where('question_id', $nextAq->question_id)->first();
+
+        return response()->json([
+            'ok' => true,
+            'selesai' => false,
+            'posisi_terkunci_urutan' => $nextAq->urutan,
+            'total_soal' => $attempt->attemptQuestions()->count(),
+            'answered_count' => $attempt->answers()->count(),
+            'server_now' => $nowMs,
+            'question' => $this->formatQuestionPayload($nextAq, $answer),
+        ]);
     }
 
     public function answer(StoreAnswerRequest $request, Attempt $attempt, QuizEngine $engine): JsonResponse
@@ -200,8 +290,33 @@ class AttemptController extends Controller
             return response()->json(['message' => 'Soal ini bukan bagian dari attempt Anda.'], 422);
         }
 
-        $question = $attemptQuestion->question;
+        $attempt->catatPerubahanIp($request->ip());
         $now = now()->getTimestampMs();
+
+        if ($attempt->quizSession->pakaiIsolasiSatuSoal()) {
+            $posisiAktif = max(1, (int) ($attempt->posisi_terkunci_urutan ?: 1));
+            if ((int) $attemptQuestion->urutan !== $posisiAktif || $attemptQuestion->terkunci_at !== null) {
+                return response()->json([
+                    'message' => 'Soal ini sudah dikunci atau belum dibuka.',
+                    'question_locked' => true,
+                ], 403);
+            }
+
+            if (
+                $attempt->quizSession->timer_per_soal
+                && $attemptQuestion->berakhir_at !== null
+                && $now > (int) $attemptQuestion->berakhir_at
+            ) {
+                $attemptQuestion->update(['terkunci_at' => $now]);
+
+                return response()->json([
+                    'message' => 'Waktu pengerjaan butir soal ini sudah habis.',
+                    'question_expired' => true,
+                ], 403);
+            }
+        }
+
+        $question = $attemptQuestion->question;
         $waktuJawab = max(0, $now - (int) $attempt->mulai_at);
 
         if ($question->isEssay()) {
@@ -281,6 +396,11 @@ class AttemptController extends Controller
                 $answer?->delete();
                 $parts = [];
             } else {
+                $typingMetrics = $this->normalisasiTypingMetrics(
+                    $request->input('typing_metrics'),
+                    $answer?->typing_metrics_json
+                );
+
                 Answer::updateOrCreate(
                     ['attempt_id' => $attempt->id, 'question_id' => $questionId],
                     [
@@ -289,6 +409,7 @@ class AttemptController extends Controller
                         'jawaban_parts_json' => $partKey !== '' ? $parts : null,
                         'jawaban_data_json' => $answerData,
                         'waktu_jawab_ms' => $waktuJawab,
+                        'typing_metrics_json' => $typingMetrics,
                         'skor' => 0,
                         'dinilai_at' => null,
                         'dinilai_oleh' => null,
@@ -311,6 +432,85 @@ class AttemptController extends Controller
             ]);
         }
 
+        if ($question->tipe === 'pilihan_majemuk') {
+            $validIds = array_map('intval', $attemptQuestion->urutan_opsi_json);
+            $selectedIds = array_values(array_unique(array_map('intval', (array) $request->input('option_ids', []))));
+
+            foreach ($selectedIds as $optId) {
+                if (! in_array($optId, $validIds, true)) {
+                    return response()->json(['message' => 'Opsi tidak sesuai dengan urutan soal Anda.'], 422);
+                }
+            }
+
+            if ($selectedIds === []) {
+                Answer::where('attempt_id', $attempt->id)->where('question_id', $questionId)->delete();
+            } else {
+                Answer::updateOrCreate(
+                    ['attempt_id' => $attempt->id, 'question_id' => $questionId],
+                    [
+                        'option_id' => null,
+                        'selected_option_ids_json' => $selectedIds,
+                        'jawaban_teks' => null,
+                        'waktu_jawab_ms' => $waktuJawab,
+                        'skor' => 0,
+                        'answered_at' => now(),
+                    ]
+                );
+            }
+
+            $engine->siarkanDisplayTerbatas($attempt->quizSession);
+            SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+                'action' => 'answer_submitted',
+                'user_id' => $attempt->user_id,
+                'question_id' => $questionId,
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'question_id' => $questionId,
+                'option_ids' => $selectedIds,
+                'answered_count' => $attempt->answers()->count(),
+            ]);
+        }
+
+        if ($question->tipe === 'isian_singkat') {
+            $teks = trim((string) $request->input('jawaban_teks', ''));
+
+            if (mb_strlen($teks) > 500) {
+                return response()->json(['message' => 'Jawaban isian singkat maksimal 500 karakter.'], 422);
+            }
+
+            if ($teks === '') {
+                Answer::where('attempt_id', $attempt->id)->where('question_id', $questionId)->delete();
+            } else {
+                Answer::updateOrCreate(
+                    ['attempt_id' => $attempt->id, 'question_id' => $questionId],
+                    [
+                        'option_id' => null,
+                        'selected_option_ids_json' => null,
+                        'jawaban_teks' => $teks,
+                        'waktu_jawab_ms' => $waktuJawab,
+                        'skor' => 0,
+                        'answered_at' => now(),
+                    ]
+                );
+            }
+
+            $engine->siarkanDisplayTerbatas($attempt->quizSession);
+            SessionMonitorUpdated::safeDispatch($attempt->quiz_session_id, [
+                'action' => 'answer_submitted',
+                'user_id' => $attempt->user_id,
+                'question_id' => $questionId,
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'question_id' => $questionId,
+                'jawaban_teks' => $teks,
+                'answered_count' => $attempt->answers()->count(),
+            ]);
+        }
+
         $optionId = (int) $request->input('option_id');
 
         if ($optionId <= 0) {
@@ -325,6 +525,7 @@ class AttemptController extends Controller
             ['attempt_id' => $attempt->id, 'question_id' => $questionId],
             [
                 'option_id' => $optionId,
+                'selected_option_ids_json' => null,
                 'jawaban_teks' => null,
                 'waktu_jawab_ms' => $waktuJawab,
                 'skor' => 0,
@@ -448,15 +649,19 @@ class AttemptController extends Controller
             ]);
         }
 
-        $attempt->forceFill(['last_seen_at' => now()->getTimestampMs()])->save();
+        $nowMs = now()->getTimestampMs();
+        $attempt->forceFill(['last_seen_at' => $nowMs])->save();
+        $peekUntil = (int) ($attempt->screen_peek_until ?? 0);
 
         return response()->json([
             'status' => $attempt->status,
             'selesai' => $attempt->status === 'selesai',
             'batas_akhir_at' => $attempt->batas_akhir_at,
-            'server_now' => now()->getTimestampMs(),
+            'server_now' => $nowMs,
             'proctoring_action' => $outcome['action'] ?? 'none',
             'penalty_seconds' => $outcome['penalty_seconds'] ?? null,
+            'screen_peek_active' => $peekUntil > $nowMs,
+            'screen_peek_until' => $peekUntil > $nowMs ? $peekUntil : null,
             'pesan' => SessionMessage::aktifUntukAttempt($attempt->id)->map->untukPeserta()->values(),
         ]);
     }
@@ -481,13 +686,14 @@ class AttemptController extends Controller
         $rincian = $attemptQuestions->map(function (AttemptQuestion $aq) use ($jawaban, $tampilkan) {
             $question = $aq->question;
             $jawabanSaya = $jawaban->get($question->id);
-            $benar = $question->correctOption();
             $essay = $question->isEssay();
+            $eval = $essay ? null : $question->evaluasiOtomatis($jawabanSaya);
 
             return [
                 'teks' => $question->teks,
                 'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? []),
                 'tipe' => $question->tipe,
+                'label_tipe' => $question->labelTipe(),
                 'bobot' => $question->bobot,
                 'petunjuk' => $question->petunjuk_json ?? [],
                 'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
@@ -498,14 +704,15 @@ class AttemptController extends Controller
                 'jawaban_data' => $essay ? ($jawabanSaya?->jawaban_data_json ?? []) : [],
                 'answer_format' => QuestionContent::definition($question)['format'],
                 'answer_config' => QuestionContent::definition($question)['config'],
-                'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $jawabanSaya?->option?->teks,
+                'jawaban_saya' => $essay ? $jawabanSaya?->jawaban_teks : $eval['teks_jawaban'],
                 'jawaban_benar' => $essay
                     ? ($tampilkan ? $question->kunci_essay : null)
-                    : ($tampilkan ? $benar?->teks : null),
+                    : ($tampilkan ? $eval['teks_kunci'] : null),
                 'pembahasan' => $tampilkan ? $question->pembahasan : null,
-                'benar' => $essay ? null : ($jawabanSaya?->option?->is_correct === true),
+                'benar' => $essay ? null : $eval['benar_penuh'],
+                'parsial' => $essay ? false : (! $eval['benar_penuh'] && $eval['skor_acak'] > 0),
                 'dinilai_at' => $essay ? $jawabanSaya?->dinilai_at : null,
-                'skor' => $jawabanSaya?->skor ?? 0,
+                'skor' => $essay ? ($jawabanSaya?->skor ?? 0) : $eval['skor_acak'],
                 'catatan_pengajar' => $essay ? $jawabanSaya?->catatan_pengajar : null,
                 'urutan' => $aq->urutan,
             ];
@@ -663,5 +870,81 @@ class AttemptController extends Controller
         }
 
         return implode("\n\n", $bagian);
+    }
+
+    private function formatQuestionPayload(AttemptQuestion $aq, ?Answer $answer): array
+    {
+        $question = $aq->question;
+        $opsi = $question->tipe === 'isian_singkat'
+            ? []
+            : collect($aq->urutan_opsi_json)
+                ->map(fn ($id) => $question->options->firstWhere('id', (int) $id))
+                ->filter()
+                ->values()
+                ->map(fn ($o) => ['id' => $o->id, 'teks' => $o->teks])
+                ->all();
+
+        $blocks = $question->content_blocks_json ?? [];
+
+        return [
+            'id' => $question->id,
+            'urutan' => $aq->urutan,
+            'teks' => $question->teks,
+            'content_html' => QuestionContent::renderBlocks($blocks),
+            'has_context_blocks' => $blocks !== [],
+            'tipe' => $question->tipe,
+            'label_tipe' => $question->labelTipe(),
+            'bobot' => $question->bobot,
+            'durasi_detik' => $question->durasi_detik,
+            'opsi' => $opsi,
+            'jawaban_option_id' => $answer?->option_id,
+            'jawaban_option_ids' => array_values(array_map('intval', $answer?->selected_option_ids_json ?? [])),
+            'jawaban_teks' => $answer?->jawaban_teks,
+            'jawaban_parts' => $answer?->jawaban_parts_json ?? [],
+            'jawaban_data' => $answer?->jawaban_data_json ?? [],
+            'petunjuk' => $question->petunjuk_json ?? [],
+            'answer_format' => QuestionContent::definition($question)['format'],
+            'answer_config' => QuestionContent::definition($question)['config'],
+            'sub_soal' => collect($question->subSoalTerstruktur())->map(fn (array $part) => [
+                ...$part,
+                'content_html' => QuestionContent::renderBlocks($part['content_blocks'] ?? []),
+            ])->all(),
+            'ragu_ragu' => (bool) $aq->ragu_ragu,
+            'highlight_soal' => (bool) $aq->highlight_soal,
+            'highlight_opsi' => array_map('intval', $aq->highlight_opsi_json ?? []),
+            'dibuka_at' => $aq->dibuka_at,
+            'berakhir_at' => $aq->berakhir_at,
+            'terkunci_at' => $aq->terkunci_at,
+        ];
+    }
+
+    /**
+     * @param  mixed  $incoming
+     * @param  array<string, int>|null  $existing
+     * @return array<string, int>|null
+     */
+    private function normalisasiTypingMetrics(mixed $incoming, ?array $existing): ?array
+    {
+        if (! is_array($incoming)) {
+            return $existing;
+        }
+
+        $keys = [
+            'first_input_delay_ms',
+            'typing_duration_ms',
+            'total_keys',
+            'backspace_keys',
+            'paste_events',
+            'idle_gaps',
+        ];
+
+        $result = $existing ?? [];
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $incoming) && $incoming[$key] !== null) {
+                $result[$key] = max(0, (int) $incoming[$key]);
+            }
+        }
+
+        return $result !== [] ? $result : null;
     }
 }

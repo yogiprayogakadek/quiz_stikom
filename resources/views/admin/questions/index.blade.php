@@ -17,13 +17,17 @@
                     <x-icon name="arrow-left" :size="18" />
                     <span>Kembali</span>
                 </a>
-                <a href="{{ $ruteAi }}" class="btn btn-secondary">
+                <a href="{{ $ruteAi }}" class="btn btn-secondary min-h-11">
                     <x-icon name="sparkles" :size="18" />
                     <span>Generate AI</span>
                 </a>
-                <a href="{{ $ruteImport }}" class="btn btn-secondary">
+                <a href="{{ route('admin.quizzes.questions.bank', $quiz) }}" class="btn btn-secondary min-h-11">
+                    <x-icon name="copy" :size="18" />
+                    <span>Ambil dari Kuis Lain</span>
+                </a>
+                <a href="{{ $ruteImport }}" class="btn btn-secondary min-h-11">
                     <x-icon name="upload" :size="18" />
-                    <span>Impor CSV</span>
+                    <span>Tempel Cepat / CSV</span>
                 </a>
                 <a
                     href="{{ $ruteExport }}"
@@ -64,12 +68,13 @@
         >
             @if (isset($quiz))
                 <div class="mt-4 flex flex-wrap justify-center gap-3">
-                    <a href="{{ $ruteCreate }}" class="btn btn-primary">Tambah soal pertama</a>
-                    <a href="{{ $ruteAi }}" class="btn btn-secondary">
+                    <a href="{{ $ruteCreate }}" class="btn btn-primary min-h-11">Tambah soal pertama</a>
+                    <a href="{{ $ruteImport }}" class="btn btn-secondary min-h-11">Tempel Cepat / CSV</a>
+                    <a href="{{ route('admin.quizzes.questions.bank', $quiz) }}" class="btn btn-secondary min-h-11">Ambil dari Kuis Lain</a>
+                    <a href="{{ $ruteAi }}" class="btn btn-secondary min-h-11">
                         <x-icon name="sparkles" :size="18" />
                         <span>Generate AI</span>
                     </a>
-                    <a href="{{ $ruteImport }}" class="btn btn-secondary">Impor via CSV</a>
                 </div>
             @endif
         </x-empty-state>
@@ -158,10 +163,12 @@
 
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="pill {{ $soal->tipe === 'essay' ? 'pill-sun' : 'pill-leaf' }}">{{ $soal->tipe === 'essay' ? 'Essay' : 'Pilihan ganda' }}</span>
+                                            <span class="pill {{ $soal->tipe === 'essay' ? 'pill-sun' : 'pill-leaf' }}">{{ $soal->labelTipe() }}</span>
                                             <span class="pill pill-neutral">Bobot {{ $soal->bobot }}</span>
-                                            @if ($soal->tipe !== 'essay')
+                                            @if (in_array($soal->tipe, ['pilihan_ganda', 'pilihan_majemuk'], true))
                                                 <span class="pill pill-neutral">{{ $soal->options_count }} opsi</span>
+                                            @elseif ($soal->tipe === 'isian_singkat')
+                                                <span class="pill pill-neutral">{{ $soal->options_count }} kunci</span>
                                             @endif
                                             <span class="pill pill-brand">{{ $soal->durasi_detik }} detik</span>
                                             @if ($soalTerkunci)

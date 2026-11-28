@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\FeedbackController as AdminFeedbackController;
 use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Admin\SessionMessageController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\WorkspaceController;
+use App\Http\Controllers\AttemptSnapshotController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
@@ -142,6 +144,7 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'platform_admin'])
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organization_member'])->group(function () {
     Route::get('/', [DashboardController::class, 'admin'])->name('dashboard');
+    Route::get('feedback', [AdminFeedbackController::class, 'index'])->name('feedback.index');
     Route::get('/dashboard/search', [DashboardController::class, 'adminSearch'])->name('dashboard.search');
     Route::get('/dashboard/peserta-online', [DashboardController::class, 'pesertaOnline'])->name('dashboard.peserta-online');
     Route::get('workspace', [WorkspaceController::class, 'index'])->name('workspace.index');
@@ -183,6 +186,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::get('quizzes/{quiz}/questions/import', [QuestionController::class, 'importForm'])->name('quizzes.questions.import');
     Route::post('quizzes/{quiz}/questions/import', [QuestionController::class, 'import'])->name('quizzes.questions.import.store');
     Route::get('quizzes/{quiz}/questions/import/result', [QuestionController::class, 'importResult'])->name('quizzes.questions.import.result');
+    Route::post('quizzes/{quiz}/questions/quick-paste/preview', [QuestionController::class, 'quickPastePreview'])->name('quizzes.questions.quick-paste.preview');
+    Route::post('quizzes/{quiz}/questions/quick-paste', [QuestionController::class, 'quickPasteStore'])->name('quizzes.questions.quick-paste.store');
+    Route::get('quizzes/{quiz}/questions/bank', [QuestionController::class, 'bank'])->name('quizzes.questions.bank');
+    Route::post('quizzes/{quiz}/questions/bank', [QuestionController::class, 'copyFromBank'])->name('quizzes.questions.bank.copy');
     Route::get('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiForm'])->name('quizzes.questions.ai.form');
     Route::post('quizzes/{quiz}/questions/ai-generate', [QuestionController::class, 'aiGenerate'])->name('quizzes.questions.ai.generate');
     Route::post('quizzes/{quiz}/questions/ai-store', [QuestionController::class, 'aiStore'])->name('quizzes.questions.ai.store');
@@ -200,10 +207,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
     Route::post('classes/{kelas}/regenerate-cover', [KelasController::class, 'regenerateCover'])->name('classes.regenerate-cover');
 
     Route::get('sessions/{session}/laporan', [ReportController::class, 'session'])->name('reports.session');
+    Route::post('sessions/{session}/soal/{question}/ralat-kunci', [ReportController::class, 'regradeQuestion'])->name('reports.session.regrade-question');
     Route::post('sessions/{session}/laporan/scan-plagiarisme', [ReportController::class, 'scanPlagiarism'])->name('reports.session.scan-plagiarism');
     Route::get('sessions/{session}/laporan/csv', [ReportController::class, 'export'])->name('reports.export');
     Route::get('sessions/{session}/laporan/berita-acara', [ReportController::class, 'beritaAcara'])->name('reports.berita-acara');
     Route::get('attempts/{attempt}', [ReportController::class, 'attempt'])->name('reports.attempt');
+    Route::get('snapshots/{snapshot}', [AttemptSnapshotController::class, 'show'])
+        ->whereNumber('snapshot')
+        ->name('snapshots.show');
     Route::post('attempts/{attempt}/nilai', [ReportController::class, 'nilaiEssay'])->name('attempts.nilai');
     Route::post('answers/{answer}/saran-ai', [ReportController::class, 'saranNilaiEssay'])->name('answers.ai-suggestion');
     Route::post('answers/{answer}/detect-ai', [ReportController::class, 'detectAi'])->name('answers.detect-ai');
@@ -238,6 +249,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
         ->name('sessions.attempts.reset');
     Route::post('sessions/{session}/peserta/{attempt}/keluarkan', [AdminSessionController::class, 'kick'])
         ->name('sessions.attempts.kick');
+    Route::post('sessions/{session}/peserta/{attempt}/intip-layar', [AdminSessionController::class, 'peekScreen'])
+        ->name('sessions.attempts.peek-screen');
     Route::post('sessions/{session}/pesan', [SessionMessageController::class, 'store'])->name('sessions.pesan');
 });
 
@@ -267,6 +280,11 @@ Route::middleware(['auth', 'role:peserta', 'organization_member', 'participant_p
     Route::post('/attempt/{attempt}/jawab', [AttemptController::class, 'answer'])
         ->middleware('throttle:answers')
         ->name('peserta.attempt.answer');
+    Route::post('/attempt/{attempt}/lanjut-soal', [AttemptController::class, 'nextQuestion'])
+        ->name('peserta.attempt.next-question');
+    Route::post('/attempt/{attempt}/snapshot', [AttemptSnapshotController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('peserta.attempt.snapshot');
     Route::post('/attempt/{attempt}/selesai', [AttemptController::class, 'finish'])->name('peserta.attempt.finish');
     Route::post('/pesan/{message}/tutup', [PesertaSessionMessageController::class, 'tutup'])->name('peserta.pesan.tutup');
     Route::get('/attempt/{attempt}/status', [AttemptController::class, 'status'])->name('peserta.attempt.status');

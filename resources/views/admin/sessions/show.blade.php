@@ -80,13 +80,42 @@
     </x-slot:aksi>
 
     <section class="mb-6 rounded-2xl border border-outline bg-page p-4" aria-labelledby="alat-bantu-sesi">
-        <h2 id="alat-bantu-sesi" class="text-base font-bold text-ink">Alat bantu peserta</h2>
-        <div class="mt-2 flex flex-wrap gap-2">
-            @forelse (\App\Support\ExamTools::details($session->examTools()) as $alat)
-                <span class="pill pill-brand">{{ $alat['label'] }}</span>
-            @empty
-                <span class="text-sm text-ink-muted">Tidak ada alat bantu pada sesi ini.</span>
-            @endforelse
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 id="alat-bantu-sesi" class="text-base font-bold text-ink">Alat bantu &amp; proteksi sesi</h2>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    @forelse (\App\Support\ExamTools::details($session->examTools()) as $alat)
+                        <span class="pill pill-brand">{{ $alat['label'] }}</span>
+                    @empty
+                        <span class="text-sm text-ink-muted">Tanpa kalkulator.</span>
+                    @endforelse
+                    @if ($session->batas_telat_menit)
+                        <span class="pill pill-neutral">Batas telat {{ $session->batas_telat_menit }} menit</span>
+                    @endif
+                    @if ($session->navigasi_sekuensial)
+                        <span class="pill pill-leaf">1 Soal Aktif Sekuensial</span>
+                    @endif
+                    @if ($session->timer_per_soal)
+                        <span class="pill pill-leaf">Timer per Soal</span>
+                    @endif
+                    @if ($session->pisah_konteks_soal)
+                        <span class="pill pill-neutral">Pisah Tab Stimulus</span>
+                    @endif
+                    @if ($session->pakaiScreenProctoring())
+                        <span class="pill pill-sun">Bukti Tangkap Layar Aktif</span>
+                    @endif
+                    @if ($session->webcam_proctoring)
+                        <span class="pill pill-sun">Kamera Berkala Aktif</span>
+                    @endif
+                </div>
+            </div>
+
+            @if ($session->butuhKodeAkses())
+                <div class="rounded-xl border border-brand bg-brand-soft px-4 py-2.5">
+                    <p class="text-xs font-bold text-brand-deep">PIN Masuk Sesi</p>
+                    <p class="mt-0.5 font-mono text-2xl font-extrabold tracking-wider text-ink">{{ $session->kode_akses }}</p>
+                </div>
+            @endif
         </div>
         @if ($session->status === 'draft')
             <p class="mt-2 text-sm text-ink-muted">Pilihan masih dapat diubah melalui Pengaturan sebelum lobby dibuka.</p>

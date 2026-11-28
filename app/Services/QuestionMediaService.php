@@ -75,11 +75,11 @@ class QuestionMediaService
             });
     }
 
-    public function cloneBlocks(Question $source, Question $target, array $blocks, array &$storedPaths = []): array
+    public function cloneBlocks(Question $source, Question $target, array $blocks, array &$storedPaths = [], string $errorKey = 'trial'): array
     {
         $mapping = [];
 
-        return collect(QuestionContent::normalizeBlocks($blocks))->map(function (array $block) use ($source, $target, &$storedPaths, &$mapping) {
+        return collect(QuestionContent::normalizeBlocks($blocks))->map(function (array $block) use ($source, $target, &$storedPaths, &$mapping, $errorKey) {
             if ($block['type'] !== 'image') {
                 return $block;
             }
@@ -93,13 +93,13 @@ class QuestionMediaService
 
             $media = $source->media()->whereKey($sourceId)->firstOrFail();
             if (! $this->usage->canStore((int) $target->organization_id, $media->size_bytes)) {
-                throw ValidationException::withMessages(['trial' => 'Kuota penyimpanan tidak cukup untuk menyalin media simulasi.']);
+                throw ValidationException::withMessages([$errorKey => 'Kuota penyimpanan tidak cukup untuk menyalin media soal.']);
             }
 
             $extension = pathinfo($media->path, PATHINFO_EXTENSION);
             $path = 'question-media/'.$target->organization_id.'/'.Str::uuid().($extension !== '' ? '.'.$extension : '');
             if (! Storage::disk('local')->copy($media->path, $path)) {
-                throw ValidationException::withMessages(['trial' => 'Media soal gagal disalin. Coba lagi.']);
+                throw ValidationException::withMessages([$errorKey => 'Media soal gagal disalin. Coba lagi.']);
             }
             $storedPaths[] = $path;
 

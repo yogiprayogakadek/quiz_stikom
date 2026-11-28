@@ -126,4 +126,42 @@ class NilaiService
 
         return ['diterapkan' => $diterapkan, 'dilewati' => $dilewati];
     }
+
+    public function sinkronkanSetelahRalat(QuizSession $session, ?int $actorId = null): void
+    {
+        if ($session->isRemidi()) {
+            $this->terapkanUntukSesi($session, null, $actorId);
+        }
+
+        $gradesAwal = QuizGrade::query()
+            ->where('sesi_awal_id', $session->id)
+            ->get();
+
+        if ($gradesAwal->isNotEmpty()) {
+            $attemptsAwal = $session->attempts()
+                ->whereIn('user_id', $gradesAwal->pluck('user_id'))
+                ->where('status', 'selesai')
+                ->get()
+                ->keyBy('user_id');
+
+            foreach ($gradesAwal as $grade) {
+                $awal = $attemptsAwal->get($grade->user_id);
+                if ($awal === null) {
+                    continue;
+                }
+
+                $nilaiAwal = $this->attempt($awal);
+                $nilaiRemidi = $grade->nilai_remidi !== null ? (int) $grade->nilai_remidi : null;
+                $nilaiAkhir = $nilaiRemidi !== null ? max($nilaiAwal, $nilaiRemidi) : $nilaiAwal;
+
+                $grade->update([
+                    'nilai_awal' => $nilaiAwal,
+                    'nilai_akhir' => $nilaiAkhir,
+                    'sumber' => ($nilaiRemidi !== null && $nilaiRemidi > $nilaiAwal) ? 'remidi' : 'awal',
+                    'ditetapkan_oleh' => $actorId ?? $grade->ditetapkan_oleh,
+                    'ditetapkan_at' => now(),
+                ]);
+            }
+        }
+    }
 }

@@ -25,6 +25,8 @@ class Question extends Model
         'tipe',
         'durasi_detik',
         'bobot',
+        'urutan_tetap',
+        'is_bonus',
         'pembahasan',
         'kunci_essay',
         'rubrik_essay',
@@ -41,6 +43,8 @@ class Question extends Model
             'quiz_id' => 'integer',
             'durasi_detik' => 'integer',
             'bobot' => 'integer',
+            'urutan_tetap' => 'integer',
+            'is_bonus' => 'boolean',
             'rubrik_essay' => 'array',
             'petunjuk_json' => 'array',
             'sub_soal_json' => 'array',
@@ -52,6 +56,146 @@ class Question extends Model
     public function isEssay(): bool
     {
         return $this->tipe === 'essay';
+    }
+
+    public function labelTipe(): string
+    {
+        return match ($this->tipe) {
+            'essay' => 'Essay',
+            'pilihan_majemuk' => 'Pilihan majemuk',
+            'isian_singkat' => 'Isian singkat',
+            default => 'Pilihan ganda',
+        };
+    }
+
+    /**
+     * @return array{benar_penuh: bool, rasio: float, skor_acak: int, teks_jawaban: ?string, teks_kunci: ?string}
+     */
+    public function evaluasiOtomatis(?Answer $answer): array
+    {
+        if (! $this->relationLoaded('options')) {
+            $this->load('options');
+        }
+
+        $bobot = max(1, (int) $this->bobot);
+
+        $teksKunci = match (true) {
+            (bool) $this->is_bonus => 'Bonus (dianulir)',
+            $this->tipe === 'pilihan_majemuk' => $this->options->where('is_correct', true)->pluck('teks')->implode(', ') ?: null,
+            $this->tipe === 'isian_singkat' => $this->options->where('is_correct', true)->pluck('teks')->implode(' / ') ?: null,
+            default => $this->correctOption()?->teks,
+        };
+
+        $teksJawaban = null;
+        if ($answer !== null) {
+            if ($this->tipe === 'pilihan_majemuk') {
+                $selectedIds = array_values(array_unique(array_map(
+                    'intval',
+                    $answer->selected_option_ids_json ?? ($answer->option_id ? [$answer->option_id] : [])
+                )));
+                $joined = $this->options->whereIn('id', $selectedIds)->pluck('teks')->implode(', ');
+                $teksJawaban = $joined !== '' ? $joined : null;
+            } elseif ($this->tipe === 'isian_singkat') {
+                $trimmed = trim((string) ($answer->jawaban_teks ?? ''));
+                $teksJawaban = $trimmed !== '' ? $trimmed : null;
+            } else {
+                $teksJawaban = $answer->relationLoaded('option') && $answer->option !== null
+                    ? $answer->option->teks
+                    : ($answer->option_id ? $this->options->firstWhere('id', (int) $answer->option_id)?->teks : null);
+            }
+        }
+
+        if ($this->is_bonus) {
+            return [
+                'benar_penuh' => true,
+                'rasio' => 1.0,
+                'skor_acak' => $bobot,
+                'teks_jawaban' => $teksJawaban,
+                'teks_kunci' => 'Bonus (dianulir)',
+            ];
+        }
+
+        if ($this->tipe === 'pilihan_majemuk') {
+            $kunciIds = $this->options
+                ->where('is_correct', true)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->sort()
+                ->values()
+                ->all();
+
+            $selectedIds = collect($answer?->selected_option_ids_json ?? ($answer?->option_id ? [$answer->option_id] : []))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all();
+
+            if ($kunciIds === [] || $selectedIds === []) {
+                return [
+                    'benar_penuh' => false,
+                    'rasio' => 0.0,
+                    'skor_acak' => 0,
+                    'teks_jawaban' => $teksJawaban,
+                    'teks_kunci' => $teksKunci,
+                ];
+            }
+
+            $benarPenuh = $selectedIds === $kunciIds;
+            $scoringMode = (string) ($this->answer_config_json['scoring_mode'] ?? 'all_or_nothing');
+
+            if ($scoringMode === 'partial') {
+                $benarDipilih = count(array_intersect($selectedIds, $kunciIds));
+                $salahDipilih = count(array_diff($selectedIds, $kunciIds));
+                $rasio = max(0.0, min(1.0, ($benarDipilih - $salahDipilih) / max(1, count($kunciIds))));
+                $skorAcak = $benarPenuh ? $bobot : (int) round($bobot * $rasio);
+            } else {
+                $rasio = $benarPenuh ? 1.0 : 0.0;
+                $skorAcak = $benarPenuh ? $bobot : 0;
+            }
+
+            return [
+                'benar_penuh' => $benarPenuh,
+                'rasio' => $rasio,
+                'skor_acak' => $skorAcak,
+                'teks_jawaban' => $teksJawaban,
+                'teks_kunci' => $teksKunci,
+            ];
+        }
+
+        if ($this->tipe === 'isian_singkat') {
+            $caseSensitive = (bool) ($this->answer_config_json['case_sensitive'] ?? false);
+            $normalisasi = static function (string $nilai) use ($caseSensitive): string {
+                $rapi = preg_replace('/\s+/u', ' ', trim($nilai)) ?? '';
+
+                return $caseSensitive ? $rapi : mb_strtolower($rapi);
+            };
+
+            $inputNorm = $normalisasi((string) ($answer?->jawaban_teks ?? ''));
+            $tepat = $inputNorm !== '' && $this->options
+                ->where('is_correct', true)
+                ->contains(fn ($opt) => $normalisasi((string) $opt->teks) === $inputNorm);
+
+            return [
+                'benar_penuh' => $tepat,
+                'rasio' => $tepat ? 1.0 : 0.0,
+                'skor_acak' => $tepat ? $bobot : 0,
+                'teks_jawaban' => $teksJawaban,
+                'teks_kunci' => $teksKunci,
+            ];
+        }
+
+        $opsiId = (int) ($answer?->option_id ?? 0);
+        $tepat = ($answer?->relationLoaded('option') && $answer->option?->is_correct === true)
+            || ($opsiId > 0 && $this->options->firstWhere('id', $opsiId)?->is_correct === true);
+
+        return [
+            'benar_penuh' => $tepat,
+            'rasio' => $tepat ? 1.0 : 0.0,
+            'skor_acak' => $tepat ? $bobot : 0,
+            'teks_jawaban' => $teksJawaban,
+            'teks_kunci' => $teksKunci,
+        ];
     }
 
     public function teksUntukPenilaian(): string

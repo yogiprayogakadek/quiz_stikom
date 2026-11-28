@@ -12,12 +12,17 @@
             peringatanList: [],
             peringatanDilihat: {},
             tampilkanSkor: localStorage.getItem('display_tampilkan_skor') !== 'false',
+            tampilkanPengawasan: localStorage.getItem('display_tampilkan_pengawasan') !== 'false',
             skorLimit: localStorage.getItem('display_skor_limit') || '5',
             halamanSkor: 1,
             polling: null,
             toggleSkor() {
                 this.tampilkanSkor = !this.tampilkanSkor;
                 localStorage.setItem('display_tampilkan_skor', this.tampilkanSkor);
+            },
+            togglePengawasan() {
+                this.tampilkanPengawasan = !this.tampilkanPengawasan;
+                localStorage.setItem('display_tampilkan_pengawasan', this.tampilkanPengawasan);
             },
             setSkorLimit(nilai) {
                 this.skorLimit = nilai;
@@ -145,6 +150,7 @@
                     waktu: item.waktu || new Date().toLocaleTimeString('id-ID', { hour12: false }),
                     jumlah: item.jumlah_pelanggaran || 1,
                     tipe: item.tipe || 'peringatan',
+                    bukti_layar_aktif: Boolean(item.bukti_layar_aktif),
                 };
 
                 this.peringatanList.unshift(data);
@@ -280,6 +286,12 @@
 
                         <p class="mt-0.5 text-sm text-ink-muted leading-tight" x-text="item.pesan"></p>
 
+                        <template x-if="item.bukti_layar_aktif">
+                            <p class="mt-1 inline-block rounded-md bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand-deep">
+                                Bukti layar dikirim ke pengawas
+                            </p>
+                        </template>
+
                         <template x-if="item.jumlah > 1">
                             <p class="mt-1 text-xs font-semibold text-coral-deep" x-text="'Pelanggaran ke-' + item.jumlah"></p>
                         </template>
@@ -338,6 +350,19 @@
                     </template>
                 </button>
 
+                <!-- Supervision Status Bar Toggle Button -->
+                <button
+                    type="button"
+                    @click="togglePengawasan()"
+                    class="flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition"
+                    :class="tampilkanPengawasan
+                        ? 'border-brand bg-brand-soft/60 text-brand-deep hover:bg-brand-soft'
+                        : 'border-outline bg-surface text-ink-muted opacity-70 hover:opacity-100'"
+                    :aria-pressed="tampilkanPengawasan"
+                >
+                    <span x-text="tampilkanPengawasan ? 'Pengawasan: Tampil' : 'Pengawasan: Tersembunyi'"></span>
+                </button>
+
                 <!-- Score Visibility Toggle Button -->
                 <button
                     type="button"
@@ -390,6 +415,29 @@
         </header>
 
         <p x-show="error" x-cloak class="mx-auto mt-4 w-full max-w-[1500px] rounded-2xl bg-coral-soft px-4 py-2 text-base font-bold text-coral-deep" x-text="error"></p>
+
+        <section
+            x-show="tampilkanPengawasan && state?.sedang_di_luar && state.sedang_di_luar.length > 0"
+            x-cloak
+            aria-label="Peserta di luar layar ujian"
+            class="mx-auto mt-4 w-full max-w-[1500px] rounded-2xl border-2 border-sun-deep bg-sun-soft px-5 py-3.5"
+        >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-lg bg-sun-deep px-2.5 py-1 text-xs font-bold uppercase text-white">Perhatian Kelas</span>
+                    <p class="text-base font-bold text-ink">Peserta sedang di luar layar ujian:</p>
+                    <template x-for="luar in state.sedang_di_luar" :key="luar.username">
+                        <span class="rounded-full border border-sun-deep/40 bg-page px-3 py-1 text-sm font-bold text-ink">
+                            <span x-text="luar.nama"></span>
+                            <span class="font-mono text-xs text-ink-muted" x-text="'(' + luar.sejak_detik + 'd)'"></span>
+                        </span>
+                    </template>
+                </div>
+                <template x-if="state?.bukti_layar_aktif">
+                    <span class="text-sm font-bold text-brand-deep">Tangkapan layar dikirim khusus ke ruang kendali pengawas</span>
+                </template>
+            </div>
+        </section>
 
         <main class="mx-auto mt-8 w-full max-w-[1500px]">
             <template x-if="!state">

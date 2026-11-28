@@ -10,7 +10,7 @@
     <div>
         <label for="kelas_id" class="label">Kelas</label>
         <select id="kelas_id" name="kelas_id" class="input" required @error('kelas_id') aria-invalid="true" @enderror>
-            <option value="">-- Pilih Kelas --</option>
+            <option value="">Pilih kelas</option>
             @foreach ($kelasList as $itemKelas)
                 <option value="{{ $itemKelas->id }}" @selected((int) old('kelas_id', $quiz?->kelas_id) === $itemKelas->id)>
                     {{ $itemKelas->nama }}
@@ -27,12 +27,57 @@
         @error('judul') <p class="field-error">{{ $message }}</p> @enderror
     </div>
 
-    <div>
-        <label for="jumlah_soal" class="label">Jumlah soal dipakai (opsional)</label>
-        <input id="jumlah_soal" name="jumlah_soal" type="number" min="1" value="{{ old('jumlah_soal', $quiz?->jumlah_soal) }}" class="input" @error('jumlah_soal') aria-invalid="true" @enderror>
-        <p class="help mt-2">Kosongkan jika ingin memakai semua soal kuis ini. Jika diisi (misal: 10), sistem akan memilih secara acak sebanyak angka tersebut saat sesi dibuka.</p>
-        @error('jumlah_soal') <p class="field-error">{{ $message }}</p> @enderror
-    </div>
+    <input type="hidden" name="composition_present" value="1">
+
+    <fieldset class="rounded-2xl border border-outline bg-page p-4 space-y-4">
+        <legend class="label">Komposisi & urutan soal</legend>
+        <p class="help">Atur kuota soal yang ditarik dari bank soal kuis ini saat sesi dimulai. Isi kuota per tipe bila ujian menggabungkan soal objektif dan essay.</p>
+
+        <div class="grid gap-4 sm:grid-cols-3">
+            <div>
+                <label for="jumlah_soal" class="label">Total soal dipakai (opsional)</label>
+                <input id="jumlah_soal" name="jumlah_soal" type="number" min="1" value="{{ old('jumlah_soal', $quiz?->jumlah_soal) }}" class="input" placeholder="Semua" @error('jumlah_soal') aria-invalid="true" @enderror>
+                <p class="help mt-1">Dipakai jika kuota per tipe di samping dikosongkan.</p>
+                @error('jumlah_soal') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="jumlah_soal_pg" class="label">Kuota soal objektif (opsional)</label>
+                <input id="jumlah_soal_pg" name="jumlah_soal_pg" type="number" min="0" max="500" value="{{ old('jumlah_soal_pg', $quiz?->jumlah_soal_pg) }}" class="input" placeholder="Semua objektif" @error('jumlah_soal_pg') aria-invalid="true" @enderror>
+                <p class="help mt-1">Jumlah pilihan ganda/isian yang ditarik per peserta.</p>
+                @error('jumlah_soal_pg') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="jumlah_soal_essay" class="label">Kuota soal essay (opsional)</label>
+                <input id="jumlah_soal_essay" name="jumlah_soal_essay" type="number" min="0" max="500" value="{{ old('jumlah_soal_essay', $quiz?->jumlah_soal_essay) }}" class="input" placeholder="Semua essay" @error('jumlah_soal_essay') aria-invalid="true" @enderror>
+                <p class="help mt-1">Jumlah soal essay yang ditarik per peserta.</p>
+                @error('jumlah_soal_essay') <p class="field-error">{{ $message }}</p> @enderror
+            </div>
+        </div>
+
+        @php
+            $acakSoalKuis = (bool) old('acak_soal', $quiz?->acak_soal ?? true);
+            $kelompokTipeKuis = (bool) old('kelompokkan_tipe_soal', $quiz?->kelompokkan_tipe_soal ?? false);
+        @endphp
+        <div class="grid gap-3 sm:grid-cols-2">
+            <label class="flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                <input type="checkbox" name="acak_soal" value="1" class="mt-0.5 h-5 w-5 shrink-0" @checked($acakSoalKuis)>
+                <span>
+                    <span class="block text-sm font-bold text-ink">Acak urutan nomor soal</span>
+                    <span class="mt-0.5 block text-xs leading-relaxed text-ink-muted">Matikan bila soal harus tampil berurutan sesuai nomor urutan tetap.</span>
+                </span>
+            </label>
+
+            <label class="flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border border-outline bg-surface p-3.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                <input type="checkbox" name="kelompokkan_tipe_soal" value="1" class="mt-0.5 h-5 w-5 shrink-0" @checked($kelompokTipeKuis)>
+                <span>
+                    <span class="block text-sm font-bold text-ink">Kelompokkan objektif dulu, essay di akhir</span>
+                    <span class="mt-0.5 block text-xs leading-relaxed text-ink-muted">Peserta mengerjakan seluruh soal objektif sebelum masuk ke soal uraian.</span>
+                </span>
+            </label>
+        </div>
+    </fieldset>
 
     <div>
         @php

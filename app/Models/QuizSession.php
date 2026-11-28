@@ -19,11 +19,16 @@ class QuizSession extends Model
         'organization_id',
         'kelas_id',
         'nama',
+        'kode_akses',
         'mode',
         'jenis',
         'remidi_dari_session_id',
         'remidi_soal',
         'acak_opsi',
+        'navigasi_sekuensial',
+        'timer_per_soal',
+        'pisah_konteks_soal',
+        'watermark_layar',
         'tampilkan_pembahasan',
         'pembahasan_mode',
         'nilai_ditampilkan',
@@ -34,12 +39,15 @@ class QuizSession extends Model
         'pelanggaran_action',
         'pelanggaran_penalty_seconds',
         'clipboard_policy',
+        'webcam_proctoring',
+        'screen_proctoring',
         'exam_tools_json',
         'jeda_detik',
         'durasi_total_detik',
         'timing_mode',
         'scheduled_start_at',
         'scheduled_end_at',
+        'batas_telat_menit',
         'status',
         'fase',
         'soal_aktif_urutan',
@@ -55,6 +63,11 @@ class QuizSession extends Model
     {
         return [
             'acak_opsi' => 'boolean',
+            'navigasi_sekuensial' => 'boolean',
+            'timer_per_soal' => 'boolean',
+            'pisah_konteks_soal' => 'boolean',
+            'watermark_layar' => 'boolean',
+            'webcam_proctoring' => 'boolean',
             'tampilkan_pembahasan' => 'boolean',
             'nilai_ditampilkan' => 'boolean',
             'leaderboard_live' => 'boolean',
@@ -65,6 +78,7 @@ class QuizSession extends Model
             'exam_tools_json' => 'array',
             'jeda_detik' => 'integer',
             'durasi_total_detik' => 'integer',
+            'batas_telat_menit' => 'integer',
             'scheduled_start_at' => 'datetime',
             'scheduled_end_at' => 'datetime',
             'soal_aktif_urutan' => 'integer',
@@ -256,5 +270,46 @@ class QuizSession extends Model
     public function examTools(): array
     {
         return ExamTools::forQuiz($this->exam_tools_json, (bool) $this->quiz?->is_percobaan);
+    }
+
+    public function butuhKodeAkses(): bool
+    {
+        return filled($this->kode_akses);
+    }
+
+    public function verifikasiKodeAkses(?string $input): bool
+    {
+        if (! $this->butuhKodeAkses()) {
+            return true;
+        }
+
+        return hash_equals(
+            mb_strtoupper(trim((string) $this->kode_akses)),
+            mb_strtoupper(trim((string) $input))
+        );
+    }
+
+    public function sudahLewatBatasTelat(): bool
+    {
+        if ($this->batas_telat_menit === null || (int) $this->batas_telat_menit <= 0 || $this->status !== 'berjalan') {
+            return false;
+        }
+
+        $acuan = $this->scheduled_start_at ?? $this->dibuka_at;
+        if ($acuan === null) {
+            return false;
+        }
+
+        return now()->greaterThan($acuan->copy()->addMinutes((int) $this->batas_telat_menit));
+    }
+
+    public function pakaiIsolasiSatuSoal(): bool
+    {
+        return $this->mode === 'acak' && ($this->navigasi_sekuensial || $this->timer_per_soal);
+    }
+
+    public function pakaiScreenProctoring(): bool
+    {
+        return in_array($this->screen_proctoring ?? 'off', ['optional_mobile', 'desktop_only'], true);
     }
 }

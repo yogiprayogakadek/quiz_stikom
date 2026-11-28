@@ -1,4 +1,4 @@
-<x-layouts.admin :judul="'Detail '.($attempt->user?->nama ?? 'peserta')" :keterangan="$attempt->quizSession->nama.' · '.$attempt->quizSession->quiz->judul">
+<x-layouts.admin :judul="'Detail '.($attempt->user?->nama ?? 'peserta')" :keterangan="$attempt->quizSession->nama.' · '.($attempt->quizSession->quiz?->judul ?? 'Kuis tidak tersedia')">
     <x-slot:aksi>
         <a href="{{ route('admin.reports.session', $attempt->quiz_session_id) }}" class="btn btn-ghost">
             <x-icon name="arrow-left" :size="20" />
@@ -116,6 +116,74 @@
             </div>
         @endif
     </section>
+
+    @php
+        $anomaliKetikanList = $rincian->filter(fn ($baris) => ! empty($baris['typing_anomaly']));
+    @endphp
+
+    @if ($anomaliKetikanList->isNotEmpty() || $attempt->snapshots->isNotEmpty() || $attempt->ip_change_count > 0)
+        <section class="mt-6 card space-y-5" aria-labelledby="bukti-pengawasan-heading">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 id="bukti-pengawasan-heading" class="text-2xl">Bukti pengawasan &amp; telemetri pengerjaan</h2>
+                    <p class="mt-1 text-base text-ink-muted">Data ini hanya terlihat oleh pengajar di workspace untuk membantu verifikasi kejujuran ujian.</p>
+                </div>
+                @if ($attempt->ip_change_count > 0)
+                    <span class="pill pill-sun">Perpindahan jaringan/IP {{ $attempt->ip_change_count }} kali</span>
+                @endif
+            </div>
+
+            @if ($anomaliKetikanList->isNotEmpty())
+                <div class="space-y-2.5">
+                    @foreach ($anomaliKetikanList as $barisAnomali)
+                        <div class="rounded-2xl border border-coral-deep bg-coral-soft/70 p-4">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="pill pill-coral">{{ $barisAnomali['typing_anomaly']['label'] }}</span>
+                                <span class="text-sm font-bold text-ink">Soal #{{ $barisAnomali['urutan'] }}</span>
+                            </div>
+                            <p class="mt-1.5 text-sm text-ink">{{ $barisAnomali['typing_anomaly']['reason'] }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            @if ($attempt->snapshots->isNotEmpty())
+                <div>
+                    <h3 class="text-lg font-bold text-ink">Galeri tangkapan layar &amp; kamera ({{ $attempt->snapshots->count() }})</h3>
+                    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        @foreach ($attempt->snapshots as $snap)
+                            <a
+                                href="{{ $snap->url() }}"
+                                target="_blank"
+                                rel="noopener"
+                                class="block overflow-hidden rounded-xl border border-outline bg-page transition hover:border-brand"
+                            >
+                                <img
+                                    src="{{ $snap->url() }}"
+                                    alt="Snapshot {{ $snap->capture_source }} soal {{ $snap->question_urutan ?? '-' }}"
+                                    width="320"
+                                    height="180"
+                                    loading="lazy"
+                                    class="aspect-video w-full object-cover bg-slate-900"
+                                >
+                                <div class="p-2.5 text-xs">
+                                    <p class="font-bold text-ink">
+                                        {{ $snap->capture_source === 'screen' ? 'Layar Peserta' : 'Kamera Peserta' }}
+                                        @if ($snap->question_urutan)
+                                            · Soal #{{ $snap->question_urutan }}
+                                        @endif
+                                    </p>
+                                    <p class="mt-0.5 text-ink-muted">
+                                        {{ $snap->trigger_type }} · {{ $snap->captured_at?->timezone($orgTimezone)->format('d M H:i:s') }}
+                                    </p>
+                                </div>
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </section>
+    @endif
 
     @if ($ruangPenilaian)
         @php
@@ -1146,7 +1214,7 @@
                                     <p class="font-bold text-ink">{{ \Illuminate\Support\Str::limit($baris['teks'], 140) }}</p>
                                     {!! $baris['content_html'] ?? '' !!}
                                     <p class="mt-1 text-sm text-ink-muted">
-                                        {{ $baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda' }} · Bobot {{ $baris['bobot'] }}
+                                        {{ $baris['label_tipe'] ?? ($baris['tipe'] === 'essay' ? 'Essay' : 'Pilihan ganda') }} · Bobot {{ $baris['bobot'] }}
                                     </p>
                                 </td>
                                 <td>
@@ -1203,6 +1271,8 @@
                                         @endif
                                     @elseif ($baris['benar'])
                                         <span class="pill pill-leaf">Benar</span>
+                                    @elseif ($baris['parsial'] ?? false)
+                                        <span class="pill pill-sun">Sebagian</span>
                                     @else
                                         <span class="pill pill-coral">Salah</span>
                                     @endif

@@ -52,6 +52,12 @@ class QuizController extends Controller
                 'kelas_id' => $data['kelas_id'],
                 'judul' => $data['judul'],
                 'jumlah_soal' => $data['jumlah_soal'] ?? null,
+                'jumlah_soal_pg' => $data['jumlah_soal_pg'] ?? null,
+                'jumlah_soal_essay' => $data['jumlah_soal_essay'] ?? null,
+                'acak_soal' => $request->boolean('composition_present')
+                    ? $request->boolean('acak_soal')
+                    : $request->boolean('acak_soal', true),
+                'kelompokkan_tipe_soal' => $request->boolean('kelompokkan_tipe_soal'),
                 'acak_opsi' => $request->boolean('acak_opsi', true),
                 'auto_grade_essay' => $request->boolean('auto_grade_essay'),
                 'is_percobaan' => $request->boolean('is_percobaan'),
@@ -84,6 +90,14 @@ class QuizController extends Controller
             'kelas_id' => $data['kelas_id'],
             'judul' => $data['judul'],
             'jumlah_soal' => $data['jumlah_soal'] ?? null,
+            'jumlah_soal_pg' => array_key_exists('jumlah_soal_pg', $data) ? $data['jumlah_soal_pg'] : $quiz->jumlah_soal_pg,
+            'jumlah_soal_essay' => array_key_exists('jumlah_soal_essay', $data) ? $data['jumlah_soal_essay'] : $quiz->jumlah_soal_essay,
+            'acak_soal' => $request->boolean('composition_present')
+                ? $request->boolean('acak_soal')
+                : ($request->has('acak_soal') ? $request->boolean('acak_soal') : ($quiz->acak_soal ?? true)),
+            'kelompokkan_tipe_soal' => $request->boolean('composition_present')
+                ? $request->boolean('kelompokkan_tipe_soal')
+                : ($request->has('kelompokkan_tipe_soal') ? $request->boolean('kelompokkan_tipe_soal') : (bool) $quiz->kelompokkan_tipe_soal),
             'acak_opsi' => $request->boolean('acak_opsi'),
             'auto_grade_essay' => $request->boolean('auto_grade_essay'),
             'is_percobaan' => $request->boolean('is_percobaan'),

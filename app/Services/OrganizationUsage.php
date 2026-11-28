@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\AiUsageEvent;
+use App\Models\AttemptSnapshot;
 use App\Models\Kelas;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\QuestionMedia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
@@ -115,8 +117,13 @@ class OrganizationUsage
         $questionBytes = (int) QuestionMedia::withoutGlobalScopes()
             ->where('organization_id', $organizationId)
             ->sum('size_bytes');
+        $snapshotBytes = Schema::hasTable('attempt_snapshots')
+            ? (int) AttemptSnapshot::withoutGlobalScopes()
+                ->where('organization_id', $organizationId)
+                ->sum('size_bytes')
+            : 0;
 
-        return $publicBytes + $questionBytes;
+        return $publicBytes + $questionBytes + $snapshotBytes;
     }
 
     public function storageLimitBytes(int $organizationId): int

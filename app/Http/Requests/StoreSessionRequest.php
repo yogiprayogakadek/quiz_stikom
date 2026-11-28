@@ -20,8 +20,13 @@ class StoreSessionRequest extends FormRequest
             'kelas_id' => ['nullable', 'integer', Rule::exists('kelas', 'id')
                 ->where('organization_id', app(OrganizationContext::class)->id())],
             'nama' => ['required', 'string', 'max:160'],
+            'kode_akses' => ['nullable', 'string', 'max:16', 'alpha_num'],
             'mode' => ['required', 'in:acak,serempak'],
             'acak_opsi' => ['boolean'],
+            'navigasi_sekuensial' => ['boolean'],
+            'timer_per_soal' => ['boolean'],
+            'pisah_konteks_soal' => ['boolean'],
+            'watermark_layar' => ['boolean'],
             'tampilkan_pembahasan' => ['boolean'],
             'pembahasan_mode' => ['nullable', 'in:tersembunyi,otomatis,terbuka'],
             'leaderboard_live' => ['boolean'],
@@ -31,6 +36,8 @@ class StoreSessionRequest extends FormRequest
             'pelanggaran_action' => ['nullable', 'in:submit,reduce_time'],
             'pelanggaran_penalty_seconds' => ['nullable', 'integer', 'min:1', 'max:36000'],
             'clipboard_policy' => ['nullable', 'in:allow,monitor,block'],
+            'webcam_proctoring' => ['boolean'],
+            'screen_proctoring' => ['nullable', 'in:off,optional_mobile,desktop_only'],
             'exam_tools_present' => ['nullable', 'boolean'],
             'exam_tools' => ['nullable', 'array'],
             'exam_tools.*' => ['string', 'distinct', Rule::in(ExamTools::keys())],
@@ -39,6 +46,7 @@ class StoreSessionRequest extends FormRequest
             'timing_mode' => ['nullable', 'in:duration,scheduled'],
             'scheduled_start_at' => ['nullable', 'date'],
             'scheduled_end_at' => ['nullable', 'date'],
+            'batas_telat_menit' => ['nullable', 'integer', 'min:1', 'max:300'],
         ];
     }
 

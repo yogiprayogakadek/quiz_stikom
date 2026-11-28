@@ -203,9 +203,13 @@
                 const sisa = [];
                 for (const item of this.antreanOffline) {
                     try {
+                        const body = { question_id: item.question_id };
+                        if (item.option_ids) body.option_ids = item.option_ids;
+                        else if (item.jawaban_teks !== undefined) body.jawaban_teks = item.jawaban_teks;
+                        else body.option_id = item.option_id;
                         const res = await window.kuisFetch(config.answerUrl, {
                             method: 'POST',
-                            body: { question_id: item.question_id, option_id: item.option_id },
+                            body,
                             progress: false
                         });
                         if (!res.ok) {
@@ -219,6 +223,71 @@
                 this.antreanOffline = sisa;
                 this.simpanAntreanKeStorage();
                 this.sedangSinkron = false;
+            },
+            opsiMultiSerempak(opsiId) {
+                return (this.state?.soal?.jawaban_option_ids ?? []).includes(opsiId);
+            },
+            async toggleMultiSerempak(opsi) {
+                if (!this.state?.soal || this.menyimpan || this.berhenti) return;
+                const set = new Set(this.state.soal.jawaban_option_ids ?? []);
+                if (set.has(opsi.id)) set.delete(opsi.id);
+                else set.add(opsi.id);
+                const ids = Array.from(set);
+                this.state.soal.jawaban_option_ids = ids;
+                if (ids.length === 0) return;
+
+                this.menyimpan = true;
+                this.pesan = '';
+                const qId = this.state.soal.id;
+                try {
+                    const hasil = await window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: qId, option_ids: ids },
+                        progress: false
+                    });
+                    this.menyimpan = false;
+                    if (hasil.ok) {
+                        this.state.sudah_menjawab = hasil.data.sudah_menjawab;
+                        return;
+                    }
+                    this.pesan = hasil.data?.message ?? 'Jawaban gagal dikirim.';
+                } catch (e) {
+                    this.menyimpan = false;
+                    this.antreanOffline = this.antreanOffline.filter((i) => i.question_id !== qId);
+                    this.antreanOffline.push({ question_id: qId, option_ids: ids });
+                    this.simpanAntreanKeStorage();
+                }
+            },
+            async jawabIsianSerempak() {
+                if (!this.state?.soal || this.menyimpan || this.berhenti) return;
+                const teks = String(this.state.soal.jawaban_teks ?? '').trim();
+                if (!teks) {
+                    this.pesan = 'Ketik jawaban singkat terlebih dahulu.';
+                    return;
+                }
+                this.menyimpan = true;
+                this.pesan = '';
+                const qId = this.state.soal.id;
+                try {
+                    const hasil = await window.kuisFetch(config.answerUrl, {
+                        method: 'POST',
+                        body: { question_id: qId, jawaban_teks: teks },
+                        progress: false
+                    });
+                    this.menyimpan = false;
+                    if (hasil.ok) {
+                        this.state.soal.jawaban_teks = hasil.data.jawaban_teks ?? teks;
+                        this.state.soal.isian_tersimpan = true;
+                        this.state.sudah_menjawab = hasil.data.sudah_menjawab;
+                        return;
+                    }
+                    this.pesan = hasil.data?.message ?? 'Jawaban gagal dikirim.';
+                } catch (e) {
+                    this.menyimpan = false;
+                    this.antreanOffline = this.antreanOffline.filter((i) => i.question_id !== qId);
+                    this.antreanOffline.push({ question_id: qId, jawaban_teks: teks });
+                    this.simpanAntreanKeStorage();
+                }
             },
             async jawab(opsi) {
                 if (!this.state?.soal || this.menyimpan || this.berhenti) {
@@ -665,30 +734,78 @@
                 </div>
 
                 <div class="card" data-protected-question>
-                    <span class="pill pill-brand">Pilihan ganda</span>
+                    <span class="pill pill-brand" x-text="state.soal.label_tipe || 'Pilihan ganda'"></span>
 
                     <h2 id="teks-soal-serempak" class="question-text mt-4 whitespace-pre-line" x-text="state.soal.teks"></h2>
                     <div x-show="state.soal.content_html" x-html="state.soal.content_html" class="mt-4 space-y-4"></div>
 
-                    <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
-                        <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">
-                            <button
-                                type="button"
-                                class="tile"
-                                x-bind:aria-pressed="state.soal.jawaban_option_id === opsi.id ? 'true' : 'false'"
-                                x-on:click="jawab(opsi)"
-                                x-bind:disabled="menyimpan"
-                            >
-                                <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
-                                <span class="tile-text" x-text="opsi.teks"></span>
-                                <span class="tile-check" aria-hidden="true">
-                                    <x-icon name="check" :size="20" />
-                                </span>
-                            </button>
-                        </template>
-                    </div>
+                    <template x-if="state.soal.tipe === 'isian_singkat'">
+                        <form class="mt-5 space-y-3" x-on:submit.prevent="jawabIsianSerempak()">
+                            <div>
+                                <label for="serempak-isian" class="label">Jawaban singkat Anda</label>
+                                <div class="flex flex-col gap-3 sm:flex-row">
+                                    <input
+                                        id="serempak-isian"
+                                        type="text"
+                                        maxlength="500"
+                                        autocomplete="off"
+                                        class="input flex-1"
+                                        x-model="state.soal.jawaban_teks"
+                                        placeholder="Ketik jawaban singkat lalu tekan Kirim..."
+                                        x-bind:disabled="menyimpan"
+                                    >
+                                    <button type="submit" class="btn btn-primary min-h-11" x-bind:disabled="menyimpan">
+                                        <span x-text="menyimpan ? 'Mengirim...' : 'Kirim jawaban'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                            <p x-show="state.soal.isian_tersimpan" class="text-sm font-semibold text-leaf-deep">Jawaban tersimpan. Anda masih dapat memperbaruinya sebelum waktu habis.</p>
+                        </form>
+                    </template>
 
-                    <p class="mt-4 text-base text-ink-muted">Jawaban bisa diubah sampai soal ditutup. Tombol yang dipilih berarti tersimpan.</p>
+                    <template x-if="state.soal.tipe === 'pilihan_majemuk'">
+                        <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
+                            <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">
+                                <button
+                                    type="button"
+                                    role="checkbox"
+                                    class="tile"
+                                    x-bind:aria-checked="opsiMultiSerempak(opsi.id) ? 'true' : 'false'"
+                                    x-bind:aria-pressed="opsiMultiSerempak(opsi.id) ? 'true' : 'false'"
+                                    x-on:click="toggleMultiSerempak(opsi)"
+                                    x-bind:disabled="menyimpan"
+                                >
+                                    <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
+                                    <span class="tile-text" x-text="opsi.teks"></span>
+                                    <span class="tile-check" aria-hidden="true">
+                                        <x-icon name="check" :size="20" />
+                                    </span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="!state.soal.tipe || state.soal.tipe === 'pilihan_ganda'">
+                        <div class="mt-5 space-y-3" role="group" aria-labelledby="teks-soal-serempak">
+                            <template x-for="(opsi, opsiIndex) in state.soal.opsi" :key="opsi.id">
+                                <button
+                                    type="button"
+                                    class="tile"
+                                    x-bind:aria-pressed="state.soal.jawaban_option_id === opsi.id ? 'true' : 'false'"
+                                    x-on:click="jawab(opsi)"
+                                    x-bind:disabled="menyimpan"
+                                >
+                                    <span class="tile-mark" x-text="String.fromCharCode(65 + opsiIndex)"></span>
+                                    <span class="tile-text" x-text="opsi.teks"></span>
+                                    <span class="tile-check" aria-hidden="true">
+                                        <x-icon name="check" :size="20" />
+                                    </span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
+                    <p class="mt-4 text-base text-ink-muted">Jawaban bisa diubah sampai soal ditutup.</p>
                 </div>
             </section>
         </template>

@@ -20,6 +20,7 @@ use App\Models\AttemptEvent;
 use App\Models\AttemptQuestion;
 use App\Models\Option;
 use App\Models\Question;
+use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\SessionQuestion;
 use App\Models\User;
@@ -33,12 +34,12 @@ use Illuminate\Validation\ValidationException;
 
 class QuizEngine
 {
-    public function gabung(QuizSession $session, User $user): Attempt
+    public function gabung(QuizSession $session, User $user, ?string $kodeAkses = null): Attempt
     {
         $this->reconcileScheduledSession($session);
         $session->refresh();
 
-        $attempt = DB::transaction(function () use ($session, $user) {
+        $attempt = DB::transaction(function () use ($session, $user, $kodeAkses) {
             $session = QuizSession::lockForUpdate()->findOrFail($session->id);
 
             $attempt = Attempt::where('user_id', $user->id)
@@ -52,6 +53,18 @@ class QuizEngine
             if ($session->status === 'draft' || $session->status === 'selesai') {
                 throw ValidationException::withMessages([
                     'gabung' => 'Sesi ini belum dibuka atau sudah selesai.',
+                ]);
+            }
+
+            if (! $session->verifikasiKodeAkses($kodeAkses)) {
+                throw ValidationException::withMessages([
+                    'kode_akses' => 'PIN sesi tidak sesuai. Periksa kembali kode akses dari pengajar.',
+                ]);
+            }
+
+            if ($session->sudahLewatBatasTelat()) {
+                throw ValidationException::withMessages([
+                    'gabung' => 'Batas waktu bergabung ('.$session->batas_telat_menit.' menit sejak sesi dibuka) sudah berakhir.',
                 ]);
             }
 
@@ -124,12 +137,12 @@ class QuizEngine
         return $attempt;
     }
 
-    public function mulaiAcak(Attempt $attempt): Attempt
+    public function mulaiAcak(Attempt $attempt, ?string $ip = null): Attempt
     {
         $attempt->loadMissing('quizSession');
         $this->reconcileScheduledSession($attempt->quizSession);
 
-        return DB::transaction(function () use ($attempt) {
+        return DB::transaction(function () use ($attempt, $ip) {
             $attempt = Attempt::lockForUpdate()->findOrFail($attempt->id);
 
             if ($attempt->status !== 'menunggu') {
@@ -149,6 +162,12 @@ class QuizEngine
                     'attempt' => $session->status === 'selesai'
                         ? 'Sesi ini sudah selesai. Hubungi admin untuk sesi berikutnya.'
                         : 'Sesi belum dimulai oleh admin. Mohon tunggu hingga admin memulai sesi.',
+                ]);
+            }
+
+            if ($attempt->mulai_at === null && $session->sudahLewatBatasTelat()) {
+                throw ValidationException::withMessages([
+                    'attempt' => 'Batas waktu mulai ujian ('.$session->batas_telat_menit.' menit) sudah berakhir. Hubungi pengajar.',
                 ]);
             }
 
@@ -179,10 +198,27 @@ class QuizEngine
 
             $attempt->update([
                 'status' => 'berjalan',
+                'posisi_terkunci_urutan' => max(1, (int) ($attempt->posisi_terkunci_urutan ?: 1)),
                 'mulai_at' => $now,
                 'batas_akhir_at' => $deadline,
                 'retry_duration_detik' => null,
+                'initial_ip' => $attempt->initial_ip ?: $ip,
             ]);
+
+            if ($session->pakaiIsolasiSatuSoal()) {
+                $firstAq = $attempt->attemptQuestions()
+                    ->where('urutan', max(1, (int) $attempt->posisi_terkunci_urutan))
+                    ->with('question')
+                    ->first();
+
+                if ($firstAq !== null && $firstAq->dibuka_at === null) {
+                    $durasiMs = max(5, (int) ($firstAq->question?->durasi_detik ?: 60)) * 1000;
+                    $firstAq->update([
+                        'dibuka_at' => $now,
+                        'berakhir_at' => $session->timer_per_soal ? min($deadline, $now + $durasiMs) : null,
+                    ]);
+                }
+            }
 
             return $attempt->fresh();
         });
@@ -225,7 +261,7 @@ class QuizEngine
      */
     public function hitungSkorAcak(Attempt $attempt): Attempt
     {
-        $attempt->loadMissing('attemptQuestions.question');
+        $attempt->loadMissing('attemptQuestions.question.options');
 
         $answers = $attempt->answers()->with('option')->get()->keyBy('question_id');
         $poin = 0;
@@ -249,15 +285,14 @@ class QuizEngine
                 continue;
             }
 
-            $tepat = $jawaban?->option?->is_correct === true;
-
-            if ($tepat) {
-                $poin += $bobot;
+            $eval = $question->evaluasiOtomatis($jawaban);
+            $poin += $eval['skor_acak'];
+            if ($eval['benar_penuh']) {
                 $benar++;
             }
 
-            if ($jawaban !== null && $jawaban->skor !== ($tepat ? $bobot : 0)) {
-                $jawaban->update(['skor' => $tepat ? $bobot : 0]);
+            if ($jawaban !== null && $jawaban->skor !== $eval['skor_acak']) {
+                $jawaban->update(['skor' => $eval['skor_acak']]);
             }
         }
 
@@ -559,7 +594,7 @@ class QuizEngine
             }
 
             $question = $sessionQuestion->question;
-            $benarOption = $question->options->firstWhere('is_correct', true);
+            $kunciTeks = $question->evaluasiOtomatis(null)['teks_kunci'];
 
             $answers = Answer::query()
                 ->where('question_id', $question->id)
@@ -570,13 +605,16 @@ class QuizEngine
             $attemptIds = $answers->pluck('attempt_id')->unique();
 
             foreach ($answers as $answer) {
-                $correct = $answer->option !== null && $answer->option->is_correct;
+                $eval = $question->evaluasiOtomatis($answer);
 
                 $skor = 0;
-                if ($correct) {
+                if ($question->is_bonus) {
+                    $skor = 1000;
+                } elseif ($eval['rasio'] > 0) {
                     $durasiMs = max(1, $question->durasi_detik * 1000);
-                    $rasio = min(1, max(0, (float) $answer->waktu_jawab_ms / $durasiMs));
-                    $skor = (int) round(1000 * (1 - $rasio / 2));
+                    $rasioWaktu = min(1, max(0, (float) $answer->waktu_jawab_ms / $durasiMs));
+                    $skorKecepatan = (int) round(1000 * (1 - $rasioWaktu / 2));
+                    $skor = (int) round($skorKecepatan * $eval['rasio']);
                 }
 
                 $answer->update(['skor' => $skor]);
@@ -587,7 +625,7 @@ class QuizEngine
             }
 
             $distribusi = $answers
-                ->groupBy(fn (Answer $a) => $a->option?->teks ?? 'Tidak dijawab')
+                ->groupBy(fn (Answer $a) => $question->evaluasiOtomatis($a)['teks_jawaban'] ?? 'Tidak dijawab')
                 ->map(fn (Collection $group, string $teks) => [
                     'teks' => $teks,
                     'jumlah' => $group->count(),
@@ -606,7 +644,7 @@ class QuizEngine
                 'session_id' => $session->id,
                 'urutan' => $urutan,
                 'total' => $session->sessionQuestions()->count(),
-                'jawaban_benar' => $benarOption?->teks,
+                'jawaban_benar' => $kunciTeks,
                 'pembahasan' => $session->pembahasanTampil() ? $question->pembahasan : null,
                 'distribusi' => $distribusi,
                 'top5' => $session->leaderboard_live ? $top5 : [],
@@ -856,22 +894,31 @@ class QuizEngine
 
     public function hitungUlangSkorSerempak(int $attemptId): void
     {
-        $attempt = Attempt::find($attemptId);
+        $attempt = Attempt::with('quizSession.sessionQuestions.question')->find($attemptId);
 
         if ($attempt === null) {
             return;
         }
 
-        $answers = Answer::where('attempt_id', $attemptId)->get();
+        $sessionQuestions = $attempt->quizSession?->sessionQuestions ?? collect();
+        $bonusIds = $sessionQuestions
+            ->filter(fn (SessionQuestion $sq) => (bool) $sq->question?->is_bonus)
+            ->pluck('question_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
 
-        $benar = Answer::query()
-            ->where('answers.attempt_id', $attemptId)
-            ->join('options', 'options.id', '=', 'answers.option_id')
-            ->where('options.is_correct', true)
+        $answers = Answer::where('attempt_id', $attemptId)
+            ->with(['question.options', 'option'])
+            ->get();
+        $answersNonBonus = $bonusIds === [] ? $answers : $answers->whereNotIn('question_id', $bonusIds);
+
+        $benarNonBonus = $answersNonBonus
+            ->filter(fn (Answer $ans) => $ans->question !== null && $ans->question->evaluasiOtomatis($ans)['benar_penuh'])
             ->count();
 
-        $totalSoal = max(1, $attempt->quizSession?->sessionQuestions()->count() ?? 1);
-        $skor = (int) $answers->sum('skor');
+        $benar = $benarNonBonus + count($bonusIds);
+        $totalSoal = max(1, $sessionQuestions->count() ?: 1);
+        $skor = (int) $answersNonBonus->sum('skor') + (count($bonusIds) * 1000);
 
         $attempt->update([
             'jumlah_benar' => $benar,
@@ -885,10 +932,52 @@ class QuizEngine
      */
     public function pilihSoal(QuizSession $session): Collection
     {
-        $questions = $session->quiz->questions()->get()->shuffle();
+        $quiz = $session->quiz;
+        $acakSoal = $quiz->acak_soal ?? true;
 
-        if ($session->quiz->jumlah_soal !== null) {
-            $questions = $questions->take($session->quiz->jumlah_soal);
+        $semua = $quiz->questions()
+            ->orderByRaw('CASE WHEN urutan_tetap IS NULL THEN 1 ELSE 0 END ASC')
+            ->orderBy('urutan_tetap')
+            ->orderBy('id')
+            ->get();
+
+        if ($quiz->jumlah_soal_pg !== null || $quiz->jumlah_soal_essay !== null) {
+            $objektif = $semua->filter(fn (Question $q) => ! $q->isEssay())->values();
+            $essay = $semua->filter(fn (Question $q) => $q->isEssay())->values();
+
+            if ($acakSoal) {
+                $objektif = $objektif->shuffle();
+                $essay = $essay->shuffle();
+            }
+
+            if ($quiz->jumlah_soal_pg !== null) {
+                $objektif = $objektif->take($quiz->jumlah_soal_pg);
+            }
+
+            if ($quiz->jumlah_soal_essay !== null) {
+                $essay = $essay->take($quiz->jumlah_soal_essay);
+            }
+
+            if ($quiz->kelompokkan_tipe_soal) {
+                return $objektif->concat($essay)->values();
+            }
+
+            $gabung = $objektif->concat($essay)->values();
+
+            return $acakSoal ? $gabung->shuffle()->values() : $gabung;
+        }
+
+        $questions = $acakSoal ? $semua->shuffle()->values() : $semua->values();
+
+        if ($quiz->jumlah_soal !== null) {
+            $questions = $questions->take($quiz->jumlah_soal)->values();
+        }
+
+        if ($quiz->kelompokkan_tipe_soal) {
+            $objektif = $questions->filter(fn (Question $q) => ! $q->isEssay())->values();
+            $essay = $questions->filter(fn (Question $q) => $q->isEssay())->values();
+
+            return $objektif->concat($essay)->values();
         }
 
         return $questions->values();
@@ -959,15 +1048,37 @@ class QuizEngine
     public function displayState(QuizSession $session): array
     {
         $session->loadMissing('quiz');
+        $quiz = $session->quiz ?? Quiz::withoutGlobalScopes()->find($session->quiz_id);
+
+        $nowMs = now()->getTimestampMs();
+        $sedangDiLuar = $session->status === 'berjalan'
+            ? $session->attempts()
+                ->where('status', 'berjalan')
+                ->whereNotNull('peringatan_mulai_at')
+                ->with('user')
+                ->orderBy('peringatan_mulai_at')
+                ->limit(12)
+                ->get()
+                ->map(fn (Attempt $a) => [
+                    'nama' => $a->user?->nama ?? 'Peserta',
+                    'username' => $a->user?->username ?? '-',
+                    'jumlah_pelanggaran' => max(1, (int) $a->jumlah_pelanggaran),
+                    'sejak_detik' => max(0, (int) round(($nowMs - (int) $a->peringatan_mulai_at) / 1000)),
+                ])
+                ->values()
+                ->all()
+            : [];
 
         $base = [
             'nama' => $session->nama,
-            'kuis' => $session->quiz->judul,
+            'kuis' => $quiz?->judul ?? 'Kuis tidak tersedia',
             'mode' => $session->mode,
             'status' => $session->status,
-            'percobaan' => (bool) $session->quiz->is_percobaan,
+            'percobaan' => (bool) $quiz?->is_percobaan,
             'nilai_ditampilkan' => $session->nilaiTampil(),
-            'server_now' => now()->getTimestampMs(),
+            'bukti_layar_aktif' => $session->pakaiScreenProctoring(),
+            'sedang_di_luar' => $sedangDiLuar,
+            'server_now' => $nowMs,
             'total_peserta' => $session->attempts()->mengikuti()->count(),
             'peringatan' => $this->peringatanTerbaru($session),
         ];
@@ -1023,7 +1134,7 @@ class QuizEngine
             ->get()
             ->reverse()
             ->values()
-            ->map(function (AttemptEvent $kejadian) {
+            ->map(function (AttemptEvent $kejadian) use ($session) {
                 $label = AttemptEvent::label($kejadian->tipe);
 
                 return [
@@ -1035,6 +1146,7 @@ class QuizEngine
                     'level' => $label['level'],
                     'waktu' => $kejadian->created_at?->timezone(app(OrganizationContext::class)->timezone())->format('H:i:s'),
                     'jumlah_pelanggaran' => max(1, (int) ($kejadian->attempt?->jumlah_pelanggaran ?? 0)),
+                    'bukti_layar_aktif' => $session->pakaiScreenProctoring(),
                 ];
             })
             ->all();
@@ -1069,11 +1181,11 @@ class QuizEngine
 
             if ($session->fase === 'jeda') {
                 $data['distribusi'] = $answers
-                    ->groupBy(fn (Answer $a) => $a->option?->teks ?? 'Tidak dijawab')
+                    ->groupBy(fn (Answer $a) => $question->evaluasiOtomatis($a)['teks_jawaban'] ?? 'Tidak dijawab')
                     ->map(fn (Collection $group, string $teks) => ['teks' => $teks, 'jumlah' => $group->count()])
                     ->values()
                     ->all();
-                $data['jawaban_benar'] = $question->options->firstWhere('is_correct', true)?->teks;
+                $data['jawaban_benar'] = $question->evaluasiOtomatis(null)['teks_kunci'];
                 $leaderboard = $session->leaderboard_live ? $this->leaderboard($session, null) : [];
                 $data['top5'] = array_slice($leaderboard, 0, 5);
                 $data['leaderboard'] = $leaderboard;
@@ -1149,8 +1261,10 @@ class QuizEngine
             ->values()
             ->all();
 
+        $quiz = $session->quiz ?? Quiz::withoutGlobalScopes()->find($session->quiz_id);
+
         return [
-            'leaderboard' => $session->quiz->is_percobaan ? [] : $attempts
+            'leaderboard' => ($quiz?->is_percobaan ?? false) ? [] : $attempts
                 ->sortBy([['skor_total', 'desc'], ['selesai_at', 'asc']])
                 ->values()
                 ->map(fn (Attempt $a, int $i) => [
@@ -1185,10 +1299,12 @@ class QuizEngine
         $question = $attemptQuestion->question;
         $order = $attemptQuestion->urutan_opsi_json;
 
-        $options = collect($order)
-            ->map(fn ($id) => $question->options->firstWhere('id', (int) $id))
-            ->filter()
-            ->values();
+        $options = $question->tipe === 'isian_singkat'
+            ? collect()
+            : collect($order)
+                ->map(fn ($id) => $question->options->firstWhere('id', (int) $id))
+                ->filter()
+                ->values();
 
         $answer = Answer::where('attempt_id', $attempt->id)
             ->where('question_id', $question->id)
@@ -1199,10 +1315,13 @@ class QuizEngine
             'teks' => $question->teks,
             'content_html' => QuestionContent::renderBlocks($question->content_blocks_json ?? [], true),
             'tipe' => $question->tipe,
+            'label_tipe' => $question->labelTipe(),
             'bobot' => $question->bobot,
             'durasi_detik' => $question->durasi_detik,
             'opsi' => $options->map(fn (Option $o) => ['id' => $o->id, 'teks' => $o->teks])->all(),
             'jawaban_option_id' => $answer?->option_id,
+            'jawaban_option_ids' => array_values(array_map('intval', $answer?->selected_option_ids_json ?? [])),
+            'jawaban_teks' => $answer?->jawaban_teks ?? '',
             'urutan' => $urutan,
             'total_soal' => $session->sessionQuestions()->count(),
         ];

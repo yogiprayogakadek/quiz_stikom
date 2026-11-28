@@ -689,7 +689,7 @@
                     <div class="space-y-4">
                         @foreach ($sesiAktif as $sesi)
                             <article
-                                x-show="!cari || '{{ strtolower(addslashes($sesi->nama . ' ' . $sesi->quiz->judul . ' ' . ($sesi->kelas?->nama ?? ''))) }}'.includes(cari.toLowerCase().trim())"
+                                x-show="!cari || '{{ strtolower(addslashes($sesi->nama . ' ' . ($sesi->quiz?->judul ?? '') . ' ' . ($sesi->kelas?->nama ?? ''))) }}'.includes(cari.toLowerCase().trim())"
                                 class="group rounded-2xl bg-white border border-slate-200/80 p-5 sm:p-6 shadow-xs hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-5"
                             >
                                 <div class="flex items-start gap-4 min-w-0">
@@ -714,7 +714,7 @@
 
                                         <h3 class="text-lg sm:text-xl font-extrabold text-slate-900 truncate">{{ $sesi->nama }}</h3>
                                         <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                                            {{ $sesi->quiz->judul }} · {{ $sesi->attempts_count }} peserta bergabung
+                                            {{ $sesi->quiz?->judul ?? 'Kuis tidak tersedia' }} · {{ $sesi->attempts_count }} peserta bergabung
                                         </p>
                                     </div>
                                 </div>

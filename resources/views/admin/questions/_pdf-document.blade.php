@@ -185,7 +185,10 @@
                                 @endif
                             @endforeach
 
-                            @if ($soal['tipe'] === 'pilihan_ganda' && ! empty($soal['options']))
+                            @if (in_array($soal['tipe'], ['pilihan_ganda', 'pilihan_majemuk'], true) && ! empty($soal['options']))
+                                @if ($soal['tipe'] === 'pilihan_majemuk')
+                                    <div class="q-block-caption" style="margin-top: 4px;">(Pilihan majemuk: pilih semua jawaban yang benar)</div>
+                                @endif
                                 <table class="q-options" role="presentation">
                                     @foreach ($soal['options'] as $opt)
                                         <tr>
@@ -199,6 +202,19 @@
                                         </tr>
                                     @endforeach
                                 </table>
+                            @elseif ($soal['tipe'] === 'isian_singkat')
+                                @if ($meta['varian'] === 'pengajar')
+                                    <div class="teacher-notes">
+                                        <div class="teacher-note-row">
+                                            <strong>Kunci Isian Singkat Diterima:</strong>
+                                            <span>{{ collect($soal['options'])->where('is_correct', true)->pluck('teks')->implode(' / ') ?: '-' }}</span>
+                                        </div>
+                                    </div>
+                                @else
+                                    <div style="margin-top: 8px; font-size: 9.5pt; color: #334155;">
+                                        <strong>Jawaban singkat:</strong> ..................................................................................
+                                    </div>
+                                @endif
                             @endif
 
                             @if (! empty($soal['sub_soal']))

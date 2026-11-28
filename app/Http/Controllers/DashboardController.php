@@ -25,10 +25,11 @@ class DashboardController extends Controller
             'peserta' => User::where('role', 'peserta')->inCurrentOrganization()->count(),
             'soal' => Question::whereHas('quiz')->count(),
             'kuis' => Quiz::count(),
-            'sesi_aktif' => QuizSession::whereIn('status', ['lobby', 'berjalan'])->count(),
+            'sesi_aktif' => QuizSession::whereHas('quiz')->whereIn('status', ['lobby', 'berjalan'])->count(),
         ];
 
         $sesiAktif = QuizSession::with(['quiz', 'kelas'])
+            ->whereHas('quiz')
             ->withCount('attempts')
             ->whereIn('status', ['lobby', 'berjalan'])
             ->orderByDesc('updated_at')
@@ -36,6 +37,7 @@ class DashboardController extends Controller
             ->get();
 
         $sesiTerakhir = QuizSession::with(['quiz', 'kelas'])
+            ->whereHas('quiz')
             ->withCount('attempts')
             ->where('status', 'selesai')
             ->orderByDesc('ditutup_at')
@@ -182,16 +184,19 @@ class DashboardController extends Controller
         }
 
         $sesi = QuizSession::with(['quiz', 'kelas'])
-            ->where('nama', 'like', "%{$q}%")
-            ->orWhereHas('quiz', fn ($query) => $query->where('judul', 'like', "%{$q}%"))
-            ->orWhereHas('kelas', fn ($query) => $query->where('nama', 'like', "%{$q}%"))
+            ->whereHas('quiz')
+            ->where(function ($query) use ($q) {
+                $query->where('nama', 'like', "%{$q}%")
+                    ->orWhereHas('quiz', fn ($quizQuery) => $quizQuery->where('judul', 'like', "%{$q}%"))
+                    ->orWhereHas('kelas', fn ($kelasQuery) => $kelasQuery->where('nama', 'like', "%{$q}%"));
+            })
             ->latest('updated_at')
             ->limit(5)
             ->get()
             ->map(fn (QuizSession $s) => [
                 'id' => $s->id,
                 'nama' => $s->nama,
-                'sub' => ($s->quiz->judul ?? '').($s->kelas ? ' · '.$s->kelas->nama : ''),
+                'sub' => ($s->quiz?->judul ?? 'Kuis tidak tersedia').($s->kelas ? ' · '.$s->kelas->nama : ''),
                 'status' => $s->status,
                 'mode' => $s->mode,
                 'url' => route('admin.sessions.show', $s),
@@ -199,8 +204,10 @@ class DashboardController extends Controller
 
         $kuis = Quiz::with('kelas')
             ->withCount('questions')
-            ->where('judul', 'like', "%{$q}%")
-            ->orWhereHas('kelas', fn ($query) => $query->where('nama', 'like', "%{$q}%"))
+            ->where(function ($query) use ($q) {
+                $query->where('judul', 'like', "%{$q}%")
+                    ->orWhereHas('kelas', fn ($kelasQuery) => $kelasQuery->where('nama', 'like', "%{$q}%"));
+            })
             ->latest('updated_at')
             ->limit(5)
             ->get()
@@ -255,6 +262,7 @@ class DashboardController extends Controller
         $kelasSaya = $user->kelas()->withCount(['quizzes', 'sessions'])->orderBy('nama')->get();
 
         $sesiTersedia = QuizSession::with(['kelas', 'quiz' => fn ($q) => $q->withCount('questions')])
+            ->whereHas('quiz')
             ->withCount('attempts')
             ->whereIn('status', ['lobby', 'berjalan'])
             ->untukPeserta($user)
@@ -333,6 +341,7 @@ class DashboardController extends Controller
         $user = $request->user();
 
         $sesiTersedia = QuizSession::with(['kelas', 'quiz' => fn ($q) => $q->withCount('questions')])
+            ->whereHas('quiz')
             ->withCount('attempts')
             ->whereIn('status', ['lobby', 'berjalan'])
             ->untukPeserta($user)
@@ -425,7 +434,7 @@ class DashboardController extends Controller
         return $sesiTersedia->map(function (QuizSession $sesi) use ($attempts, $timezone) {
             $attempt = $attempts->firstWhere('quiz_session_id', $sesi->id);
             $penuh = $sesi->max_peserta !== null && $sesi->attempts_count >= $sesi->max_peserta;
-            $jumlahSoal = $sesi->quiz->jumlah_soal ?? $sesi->quiz->questions_count;
+            $jumlahSoal = $sesi->quiz?->jumlah_soal ?? $sesi->quiz?->questions_count ?? 0;
 
             return [
                 'id' => $sesi->id,
@@ -433,11 +442,12 @@ class DashboardController extends Controller
                 'kelas_nama' => $sesi->kelas?->nama,
                 'mode' => $sesi->mode,
                 'status' => $sesi->status,
-                'quiz_judul' => $sesi->quiz->judul,
+                'quiz_judul' => $sesi->quiz?->judul ?? 'Kuis tidak tersedia',
                 'jumlah_soal' => $jumlahSoal,
                 'attempts_count' => $sesi->attempts_count,
                 'max_peserta' => $sesi->max_peserta,
                 'penuh' => $penuh,
+                'butuh_kode_akses' => $sesi->butuhKodeAkses(),
                 'rules' => [
                     'timing_mode' => $sesi->timing_mode ?? 'duration',
                     'duration_minutes' => $sesi->durasi_total_detik !== null
@@ -445,12 +455,17 @@ class DashboardController extends Controller
                         : null,
                     'scheduled_start' => $sesi->scheduled_start_at?->timezone($timezone)->format('d/m/Y H:i'),
                     'scheduled_end' => $sesi->scheduled_end_at?->timezone($timezone)->format('d/m/Y H:i'),
+                    'batas_telat_menit' => $sesi->batas_telat_menit,
                     'timezone' => $timezone,
                     'max_violations' => $sesi->max_pelanggaran,
                     'warning_seconds' => $sesi->durasiPeringatan(),
                     'violation_action' => $sesi->pelanggaran_action ?? 'submit',
                     'penalty_seconds' => $sesi->pelanggaran_penalty_seconds,
                     'clipboard_policy' => $sesi->clipboard_policy ?? 'monitor',
+                    'navigasi_sekuensial' => (bool) $sesi->navigasi_sekuensial,
+                    'timer_per_soal' => (bool) $sesi->timer_per_soal,
+                    'screen_proctoring' => $sesi->screen_proctoring ?? 'off',
+                    'webcam_proctoring' => (bool) $sesi->webcam_proctoring,
                     'exam_tools' => ExamTools::details($sesi->examTools()),
                 ],
                 'attempt' => $attempt ? [

@@ -355,6 +355,12 @@
                 </div>
 
                 {{-- Tampilan Kosong (Jika belum ada sesi) --}}
+                @if ($errors->any())
+                    <div role="alert" class="mb-4 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-bold text-rose-900">
+                        {{ $errors->first() }}
+                    </div>
+                @endif
+
                 <template x-if="sesiList.length === 0">
                     <div class="rounded-2xl bg-white border border-slate-200/80 p-8 text-center shadow-xs">
                         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
@@ -428,11 +434,25 @@
                                             <span class="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-2 rounded-xl">Kuota Penuh</span>
                                         </template>
                                         <template x-if="!(sesi.mode === 'serempak' && sesi.status === 'berjalan') && !sesi.penuh">
-                                            <form method="POST" :action="sesi.urls.join">
+                                            <form method="POST" :action="sesi.urls.join" class="flex flex-wrap items-center gap-2">
                                                 <input type="hidden" name="_token" :value="csrfToken">
+                                                <template x-if="sesi.butuh_kode_akses">
+                                                    <div>
+                                                        <label :for="'pin-sesi-' + sesi.id" class="mb-1 block text-xs font-bold text-slate-700">PIN sesi</label>
+                                                        <input
+                                                            :id="'pin-sesi-' + sesi.id"
+                                                            type="text"
+                                                            name="kode_akses"
+                                                            required
+                                                            maxlength="16"
+                                                            placeholder="Contoh: 482910"
+                                                            class="min-h-11 w-32 rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm uppercase text-slate-900 focus:border-blue-700"
+                                                        >
+                                                    </div>
+                                                </template>
                                                 <button
                                                     type="submit"
-                                                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition active:scale-[0.98]"
+                                                    class="inline-flex min-h-11 items-center gap-2 self-end rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-blue-800 active:scale-[0.98]"
                                                 >
                                                     <span>Gabung sesi</span>
                                                     <x-icon name="play" :size="16" />

@@ -12,7 +12,18 @@ class ParticipantFeedbackController extends Controller
     {
         $feedbacks = ParticipantFeedback::query()
             ->submitted()
-            ->with('organization')
+            ->with([
+                'organization',
+                'user' => fn ($q) => $q->withTrashed()->with([
+                    'kelas' => fn ($kq) => $kq->withoutGlobalScopes(),
+                ]),
+                'attempt' => fn ($q) => $q->withoutGlobalScopes()->with([
+                    'quizSession' => fn ($sq) => $sq->withoutGlobalScopes()->with([
+                        'quiz' => fn ($qz) => $qz->withoutGlobalScopes(),
+                        'kelas' => fn ($kl) => $kl->withoutGlobalScopes(),
+                    ]),
+                ]),
+            ])
             ->latest('responded_at')
             ->latest('id')
             ->paginate(20);

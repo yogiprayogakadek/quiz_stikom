@@ -16,6 +16,11 @@ class StoreQuizRequest extends FormRequest
                 ->where('organization_id', app(OrganizationContext::class)->id())],
             'judul' => ['required', 'string', 'max:160'],
             'jumlah_soal' => ['nullable', 'integer', 'min:1'],
+            'jumlah_soal_pg' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'jumlah_soal_essay' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'acak_soal' => ['nullable', 'boolean'],
+            'kelompokkan_tipe_soal' => ['nullable', 'boolean'],
+            'composition_present' => ['nullable', 'boolean'],
             'acak_opsi' => ['nullable', 'boolean'],
             'auto_grade_essay' => ['nullable', 'boolean'],
             'is_percobaan' => ['nullable', 'boolean'],
@@ -34,6 +39,13 @@ class StoreQuizRequest extends FormRequest
                 if ($totalSoal > 0 && (int) $this->input('jumlah_soal') > $totalSoal) {
                     $validator->errors()->add('jumlah_soal', 'Jumlah soal tidak boleh melebihi total soal kuis ('.$totalSoal.').');
                 }
+            }
+
+            if ($this->filled('jumlah_soal_pg')
+                && $this->filled('jumlah_soal_essay')
+                && (int) $this->input('jumlah_soal_pg') === 0
+                && (int) $this->input('jumlah_soal_essay') === 0) {
+                $validator->errors()->add('jumlah_soal_pg', 'Kuota soal objektif dan essay tidak boleh sama-sama nol.');
             }
 
             if (! $this->boolean('is_percobaan')

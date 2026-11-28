@@ -115,13 +115,13 @@
                     <article
                         data-item
                         data-item-key="sesi-{{ $sesi->id }}"
-                        data-search="{{ strtolower($sesi->nama.' '.$sesi->quiz->judul.' '.($sesi->kelas?->nama ?? '').' '.$sesi->status.' '.$sesi->mode.' '.($sesi->quiz->is_percobaan ? 'simulasi' : 'ujian nyata')) }}"
+                        data-search="{{ strtolower($sesi->nama.' '.($sesi->quiz?->judul ?? '').' '.($sesi->kelas?->nama ?? '').' '.$sesi->status.' '.$sesi->mode.' '.($sesi->quiz?->is_percobaan ? 'simulasi' : 'ujian nyata')) }}"
                         class="card card-hover flex flex-col"
                     >
                         <div class="flex flex-wrap items-center gap-2">
                             <x-status-badge :status="$sesi->status" />
                             <x-mode-badge :mode="$sesi->mode" />
-                            @if ($sesi->quiz->is_percobaan)
+                            @if ($sesi->quiz?->is_percobaan)
                                 <span class="pill pill-neutral text-xs">Simulasi</span>
                             @endif
                             @if ($sesi->kelas)
@@ -136,7 +136,7 @@
                         </div>
 
                         <h2 class="mt-3 text-2xl">{{ $sesi->nama }}</h2>
-                        <p class="mt-1 text-base text-ink-muted">{{ $sesi->quiz->judul }}</p>
+                        <p class="mt-1 text-base text-ink-muted">{{ $sesi->quiz?->judul ?? 'Kuis tidak tersedia' }}</p>
 
                         <dl class="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-surface p-4 text-base">
                             <div>
@@ -155,7 +155,7 @@
                             <a href="{{ route('admin.sessions.show', $sesi) }}" class="btn btn-primary">Ruang kendali</a>
                             @if ($sesi->status === 'selesai')
                                 <a href="{{ route('admin.reports.session', $sesi) }}" class="btn btn-secondary">Laporan</a>
-                                @if ($sesi->jenis === 'utama' && ! $sesi->quiz->is_percobaan)
+                                @if ($sesi->jenis === 'utama' && ! $sesi->quiz?->is_percobaan)
                                     @php $remidi = $sesi->remidi->first(); @endphp
                                     <a href="{{ $remidi ? route('admin.sessions.remidi.laporan', $remidi) : route('admin.sessions.remidi.create', $sesi) }}" class="btn btn-ghost">
                                         {{ $remidi ? 'Laporan remidi' : 'Remidi' }}

@@ -240,19 +240,34 @@
         @endif
 
         @if ($statistikSoal === [])
-            <p class="mt-4 text-base text-ink-muted">Belum ada data jawaban pilihan ganda.</p>
+            <p class="mt-4 text-base text-ink-muted">Belum ada data jawaban soal objektif.</p>
         @else
             <ul class="mt-4 space-y-4">
                 @foreach ($statistikSoal as $stat)
-                    <li>
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="pill {{ ($stat['kategori'] ?? '') === 'Sukar' ? 'pill-coral' : (($stat['kategori'] ?? '') === 'Sedang' ? 'pill-sun' : 'pill-leaf') }} text-xs font-bold">
-                                    {{ $stat['kategori'] ?? 'Sedang' }}
+                    @php
+                        $dialogId = 'dialog-ralat-'.$stat['question_id'];
+                        $kunciAwal = collect($stat['options'] ?? [])->firstWhere('is_correct', true)['id'] ?? ($stat['options'][0]['id'] ?? null);
+                    @endphp
+                    <li class="rounded-2xl border border-outline bg-page p-4" x-data="{ modeRalat: '{{ ($stat['is_bonus'] ?? false) ? 'batalkan_bonus' : 'ubah_kunci' }}' }">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                                <span class="pill {{ ($stat['is_bonus'] ?? false) ? 'pill-brand' : (($stat['kategori'] ?? '') === 'Sukar' ? 'pill-coral' : (($stat['kategori'] ?? '') === 'Sedang' ? 'pill-sun' : 'pill-leaf')) }} text-xs font-bold">
+                                    {{ ($stat['is_bonus'] ?? false) ? 'Bonus / Dianulir' : ($stat['kategori'] ?? 'Sedang') }}
                                 </span>
                                 <p class="text-base font-bold text-ink">{{ \Illuminate\Support\Str::limit($stat['teks'], 160) }}</p>
                             </div>
-                            <p class="font-mono text-base text-ink-muted shrink-0">{{ $stat['benar'] }}/{{ $stat['peserta'] }} benar</p>
+                            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                                <p class="font-mono text-base text-ink-muted">{{ $stat['benar'] }}/{{ $stat['peserta'] }} benar</p>
+                                @if (! empty($stat['question_id']))
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary min-h-11 px-3 text-xs"
+                                        onclick="document.getElementById('{{ $dialogId }}')?.showModal()"
+                                    >
+                                        Ralat kunci / bonus
+                                    </button>
+                                @endif
+                            </div>
                         </div>
                         <div class="mt-2 flex items-center gap-3">
                             <div class="progress flex-1">
@@ -261,9 +276,75 @@
                             <span class="w-16 text-right font-mono text-base font-bold text-ink">{{ $stat['persen'] }}%</span>
                         </div>
                         <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
-                            <span>Rata-rata waktu: <strong class="text-ink">{{ $stat['rata_detik'] !== null ? $stat['rata_detik'].' dtk' : '—' }}</strong></span>
+                            <span>Rata-rata waktu: <strong class="text-ink">{{ $stat['rata_detik'] !== null ? $stat['rata_detik'].' dtk' : '-' }}</strong></span>
                             <span>Daya beda: <strong class="text-ink">{{ $stat['daya_beda'] !== null ? number_format($stat['daya_beda'], 2) : 'butuh minimal 6 peserta' }}</strong></span>
                         </div>
+
+                        @if (! empty($stat['question_id']))
+                            <dialog id="{{ $dialogId }}" class="m-auto w-full max-w-lg rounded-2xl border border-outline bg-surface p-6 text-ink shadow-xl backdrop:bg-slate-900/50">
+                                <form method="POST" action="{{ route('admin.reports.session.regrade-question', [$session, $stat['question_id']]) }}" class="space-y-4">
+                                    @csrf
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <h3 class="text-lg font-bold text-ink">Ralat kunci atau anulir soal</h3>
+                                            <p class="mt-1 text-sm text-ink-muted">{{ \Illuminate\Support\Str::limit($stat['teks'], 120) }}</p>
+                                        </div>
+                                        <button type="button" class="btn btn-ghost min-h-11 min-w-11 px-3" aria-label="Tutup dialog ralat" onclick="this.closest('dialog').close()">
+                                            <x-icon name="x" :size="18" />
+                                        </button>
+                                    </div>
+
+                                    <fieldset class="space-y-2">
+                                        <legend class="label">Tindakan koreksi</legend>
+                                        @if (! empty($stat['options']) && ($stat['tipe'] ?? 'pilihan_ganda') !== 'isian_singkat')
+                                            <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-outline bg-page px-3 py-2.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                                                <input type="radio" name="mode_ralat" value="ubah_kunci" x-model="modeRalat" class="h-4 w-4">
+                                                <span class="text-sm font-semibold text-ink">Pindahkan kunci jawaban yang benar</span>
+                                            </label>
+                                        @endif
+                                        <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-outline bg-page px-3 py-2.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                                            <input type="radio" name="mode_ralat" value="anulir_bonus" x-model="modeRalat" class="h-4 w-4">
+                                            <span class="text-sm font-semibold text-ink">Anulir soal &amp; beri poin penuh ke semua peserta</span>
+                                        </label>
+                                        @if ($stat['is_bonus'] ?? false)
+                                            <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-outline bg-page px-3 py-2.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+                                                <input type="radio" name="mode_ralat" value="batalkan_bonus" x-model="modeRalat" class="h-4 w-4">
+                                                <span class="text-sm font-semibold text-ink">Batalkan bonus &amp; kembali ke kunci soal</span>
+                                            </label>
+                                        @endif
+                                    </fieldset>
+
+                                    @if (! empty($stat['options']) && ($stat['tipe'] ?? 'pilihan_ganda') !== 'isian_singkat')
+                                        <fieldset x-show="modeRalat === 'ubah_kunci'" x-cloak class="space-y-2 rounded-xl border border-outline bg-page p-3">
+                                            <legend class="label">Pilih kunci jawaban baru</legend>
+                                            @foreach ($stat['options'] as $opsi)
+                                                @if (($stat['tipe'] ?? 'pilihan_ganda') === 'pilihan_majemuk')
+                                                    <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface">
+                                                        <input type="checkbox" name="correct_option_ids[]" value="{{ $opsi['id'] }}" @checked($opsi['is_correct']) class="h-4 w-4">
+                                                        <span class="text-sm text-ink">{{ $opsi['teks'] }}</span>
+                                                    </label>
+                                                @else
+                                                    <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface">
+                                                        <input type="radio" name="correct_option_id" value="{{ $opsi['id'] }}" @checked((int) $kunciAwal === (int) $opsi['id']) class="h-4 w-4">
+                                                        <span class="text-sm text-ink">{{ $opsi['teks'] }}</span>
+                                                    </label>
+                                                @endif
+                                            @endforeach
+                                        </fieldset>
+                                    @endif
+
+                                    <div>
+                                        <label for="alasan-ralat-{{ $stat['question_id'] }}" class="label">Alasan koreksi (dicatat di audit log)</label>
+                                        <textarea id="alasan-ralat-{{ $stat['question_id'] }}" name="alasan" rows="2" maxlength="500" class="input" placeholder="Contoh: Kunci awal tertukar antara pilihan A dan B."></textarea>
+                                    </div>
+
+                                    <div class="flex flex-wrap justify-end gap-2 pt-2">
+                                        <button type="button" class="btn btn-ghost min-h-11" onclick="this.closest('dialog').close()">Batal</button>
+                                        <button type="submit" class="btn btn-primary min-h-11">Simpan &amp; hitung ulang nilai</button>
+                                    </div>
+                                </form>
+                            </dialog>
+                        @endif
                     </li>
                 @endforeach
             </ul>
