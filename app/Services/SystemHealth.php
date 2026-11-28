@@ -9,11 +9,28 @@ use Illuminate\Queue\RedisQueue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class SystemHealth
 {
+    public const SCHEDULER_HEARTBEAT_FILE = 'scheduler-heartbeat.json';
+
+    public const SCHEDULER_STALE_SECONDS = 180;
+
     public function __construct(private DatabaseBackupService $backup) {}
+
+    public function recordSchedulerHeartbeat(): void
+    {
+        try {
+            Storage::disk('local')->put(
+                self::SCHEDULER_HEARTBEAT_FILE,
+                (string) json_encode(['last_run_at' => now()->timestamp]),
+            );
+        } catch (\Throwable) {
+            // Jangan gagalkan eksekusi perintah terjadwal bila disk sedang tidak dapat ditulis.
+        }
+    }
 
     /**
      * @return array{
@@ -28,6 +45,7 @@ class SystemHealth
      *     redis: array{configured: bool, available: bool, latency_ms: ?float, error: ?string},
      *     database_latency_ms: ?float,
      *     reverb: array{available: bool, latency_ms: ?float, host: string, port: int},
+     *     scheduler: array{active: bool, last_run_at: ?int, age_seconds: ?int},
      *     mail_configured: bool,
      *     disk_free: ?int,
      *     disk_total: ?int,
@@ -65,6 +83,7 @@ class SystemHealth
             'redis' => $this->redisHealth(),
             'database_latency_ms' => $this->databaseLatency(),
             'reverb' => $this->reverbHealth(),
+            'scheduler' => $this->schedulerHealth(),
             'last_backup' => $this->backup->daftar()[0] ?? null,
             'debug' => (bool) config('app.debug'),
             'queue' => (string) config('queue.default'),
@@ -168,6 +187,36 @@ class SystemHealth
             'host' => $host,
             'port' => $port,
         ];
+    }
+
+    /** @return array{active: bool, last_run_at: ?int, age_seconds: ?int} */
+    private function schedulerHealth(): array
+    {
+        try {
+            $disk = Storage::disk('local');
+            if (! $disk->exists(self::SCHEDULER_HEARTBEAT_FILE)) {
+                return ['active' => false, 'last_run_at' => null, 'age_seconds' => null];
+            }
+
+            $decoded = json_decode((string) $disk->get(self::SCHEDULER_HEARTBEAT_FILE), true);
+            $lastRunAt = isset($decoded['last_run_at']) && is_numeric($decoded['last_run_at'])
+                ? (int) $decoded['last_run_at']
+                : null;
+
+            if ($lastRunAt === null || $lastRunAt <= 0) {
+                return ['active' => false, 'last_run_at' => null, 'age_seconds' => null];
+            }
+
+            $age = max(0, now()->timestamp - $lastRunAt);
+
+            return [
+                'active' => $age <= self::SCHEDULER_STALE_SECONDS,
+                'last_run_at' => $lastRunAt,
+                'age_seconds' => $age,
+            ];
+        } catch (\Throwable) {
+            return ['active' => false, 'last_run_at' => null, 'age_seconds' => null];
+        }
     }
 
     public function failedJobsCount(): int

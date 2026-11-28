@@ -802,3 +802,13 @@
     min-width: 11rem;
     background: var(--color-page);
 }
+
+.answer-table-editor-scroll {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 28rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}

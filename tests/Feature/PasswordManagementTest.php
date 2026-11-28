@@ -43,6 +43,22 @@ class PasswordManagementTest extends TestCase
         $this->assertFalse($participant->fresh()->must_change_password);
     }
 
+    public function test_password_sementara_dapat_dikonfirmasi_dengan_nilai_yang_sama(): void
+    {
+        $participant = $this->user('peserta', true);
+
+        $this->actingAs($participant)
+            ->withSession(['auth_token' => $participant->current_session_token])
+            ->post(route('password.change.update'), [
+                'password' => 'password123',
+                'password_confirmation' => 'password123',
+            ])
+            ->assertRedirect(route('peserta.dashboard'));
+
+        $this->assertFalse($participant->fresh()->must_change_password);
+        $this->assertTrue(Hash::check('password123', $participant->fresh()->password));
+    }
+
     public function test_perubahan_sukarela_menolak_password_lama_yang_salah(): void
     {
         $admin = $this->user('admin', false);

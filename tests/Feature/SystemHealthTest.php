@@ -144,6 +144,51 @@ class SystemHealthTest extends TestCase
             ->assertSee('Tidak ada job gagal. Antrean bersih.');
     }
 
+    public function test_kesehatan_sistem_memantau_detak_scheduler_aktif_dan_usang(): void
+    {
+        Storage::fake('local');
+        $master = $this->master();
+
+        $awal = app(SystemHealth::class)->snapshot();
+        $this->assertFalse($awal['scheduler']['active']);
+        $this->assertNull($awal['scheduler']['last_run_at']);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => 'master-token'])
+            ->get(route('master.system.index'))
+            ->assertOk()
+            ->assertSee('Scheduler tidak aktif.')
+            ->assertSee('Belum berjalan');
+
+        $this->artisan('kuis:tutup-attempt-kedaluwarsa')->assertExitCode(0);
+
+        $aktif = app(SystemHealth::class)->snapshot();
+        $this->assertTrue($aktif['scheduler']['active']);
+        $this->assertNotNull($aktif['scheduler']['last_run_at']);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => 'master-token'])
+            ->get(route('master.system.index'))
+            ->assertOk()
+            ->assertDontSee('Scheduler tidak aktif.')
+            ->assertSee('Scheduler');
+
+        Storage::disk('local')->put(
+            SystemHealth::SCHEDULER_HEARTBEAT_FILE,
+            (string) json_encode(['last_run_at' => now()->subMinutes(5)->timestamp]),
+        );
+
+        $usang = app(SystemHealth::class)->snapshot();
+        $this->assertFalse($usang['scheduler']['active']);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => 'master-token'])
+            ->get(route('master.system.index'))
+            ->assertOk()
+            ->assertSee('Scheduler tidak aktif.')
+            ->assertSee('Tertunda');
+    }
+
     private function failedJob(): string
     {
         $uuid = (string) Str::uuid();

@@ -1,4 +1,4 @@
-<div class="space-y-3" x-show="{{ $visibleExpression ?? 'true' }}">
+<div class="min-w-0 max-w-full space-y-3" x-show="{{ $visibleExpression ?? 'true' }}">
     <div>
         <label class="label" x-bind:for="{{ $idExpression }}">Format jawaban peserta</label>
         <select
@@ -24,7 +24,7 @@
     </template>
 
     <template x-if="{{ $formatExpression }} === 'table'">
-        <div class="space-y-3">
+        <div class="min-w-0 max-w-full space-y-3">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p class="label">Struktur tabel jawaban</p>
@@ -40,8 +40,8 @@
                 </div>
             </div>
 
-            <div class="max-h-[28rem] max-w-full overflow-auto overscroll-contain rounded-xl border border-outline" tabindex="0" aria-label="Pratinjau struktur tabel jawaban">
-                <table class="answer-table min-w-[42rem]">
+            <div class="answer-table-editor-scroll rounded-xl border border-outline" tabindex="0" role="region" aria-label="Editor tabel jawaban; gulir untuk melihat kolom dan baris lainnya">
+                <table class="answer-table w-max min-w-full">
                     <thead>
                         <tr>
                             <th scope="col" class="sticky left-0 top-0 z-30 min-w-52">

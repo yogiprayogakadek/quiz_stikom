@@ -211,7 +211,7 @@
             this.subSoal = this.subSoal.filter((bagian) => bagian.key !== key && !this.turunanDari(bagian, key));
         }
     }"
-    class="space-y-6"
+    class="min-w-0 space-y-6"
 >
     <div>
         <label for="teks" class="label">Teks soal</label>
@@ -343,7 +343,7 @@
         @error('correct') <p class="field-error">{{ $message }}</p> @enderror
     </fieldset>
 
-    <div x-show="tipe === 'essay'" x-cloak class="space-y-5">
+    <div x-show="tipe === 'essay'" x-cloak class="min-w-0 space-y-5">
         <details class="rounded-2xl border border-outline bg-surface p-4">
             <summary class="cursor-pointer font-bold text-ink">Pola soal subnetting</summary>
             <div class="mt-3 grid gap-3 text-sm leading-relaxed text-ink-muted sm:grid-cols-3">
@@ -362,7 +362,7 @@
             </div>
         </details>
 
-        <section x-show="subSoal.length === 0" class="border-b border-outline pb-5">
+        <section x-show="subSoal.length === 0" class="min-w-0 border-b border-outline pb-5">
             @include('admin.questions._answer-format-editor', [
                 'formatExpression' => 'answerFormat',
                 'configExpression' => 'answerConfig',
@@ -400,9 +400,9 @@
                 </button>
             </div>
 
-            <div class="mt-3 space-y-3">
+            <div class="mt-3 min-w-0 space-y-3">
                 <template x-for="(bagian, index) in subSoal" :key="bagian.key">
-                    <div class="space-y-3 rounded-xl border border-outline p-4">
+                    <div class="min-w-0 max-w-full space-y-3 rounded-xl border border-outline p-4">
                         <input type="hidden" x-bind:name="'sub_soal[' + index + '][key]'" x-bind:value="bagian.key">
                         <input type="hidden" x-bind:name="'sub_soal[' + index + '][parent_key]'" x-bind:value="bagian.parent_key ?? ''">
                         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-outline pb-3">
@@ -435,14 +435,14 @@
                             <textarea x-bind:id="'sub-petunjuk-' + index" x-bind:name="'sub_soal[' + index + '][petunjuk]'" x-model="bagian.petunjuk" rows="3" class="input" maxlength="5000" x-bind:disabled="tipe !== 'essay'"></textarea>
                             <p class="help mt-1">Satu poin per baris.</p>
                         </div>
-                        <div class="border-t border-outline pt-4">
+                        <div class="min-w-0 border-t border-outline pt-4">
                             @include('admin.questions._content-block-editor', [
                                 'label' => 'Konten tambahan bagian (opsional)',
                                 'blocksExpression' => 'bagian.content_blocks',
                                 'nameExpression' => "'sub_soal[' + index + '][content_blocks][' + blockIndex + ']'",
                             ])
                         </div>
-                        <div class="border-t border-outline pt-4">
+                        <div class="min-w-0 border-t border-outline pt-4">
                             @include('admin.questions._answer-format-editor', [
                                 'formatExpression' => 'bagian.answer_format',
                                 'configExpression' => 'bagian.answer_config',

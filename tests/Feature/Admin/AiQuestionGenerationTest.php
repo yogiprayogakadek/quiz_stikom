@@ -10,6 +10,7 @@ use App\Models\Quiz;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Services\AiQuestionService;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -262,6 +263,60 @@ class AiQuestionGenerationTest extends TestCase
         $this->assertNotNull($savedQuestion);
         $this->assertCount(2, $savedQuestion->options);
         $this->assertEquals('Model View Controller', $savedQuestion->correctOption()?->teks);
+    }
+
+    public function test_job_mengembalikan_sisa_kuota_ai_saat_batch_gagal_di_tengah_jalan(): void
+    {
+        config(['platform.ai_monthly_requests' => 10]);
+        $organization = Organization::firstOrFail();
+        $this->quiz->update(['organization_id' => $organization->id]);
+
+        $usage = app(OrganizationUsage::class);
+        $usage->reserveAi($organization->id, 'questions', 2);
+
+        $generation = AiGeneration::create([
+            'organization_id' => $organization->id,
+            'user_id' => $this->admin->id,
+            'quiz_id' => $this->quiz->id,
+            'status' => 'pending',
+            'params' => [
+                'model' => 'ag/gemini-3.8-flash-medium',
+                'topik' => 'Jaringan',
+                'rps_text' => 'Protokol TCP/IP',
+                'jumlah_pg' => 5,
+                'jumlah_essay' => 5,
+                'nilai_maksimal' => 100,
+                'porsi_pg' => 50,
+            ],
+            'total' => 2,
+        ]);
+
+        $mockService = Mockery::mock(AiQuestionService::class);
+        $mockService->shouldReceive('generateQuestions')
+            ->once()
+            ->andReturn([
+                [
+                    'teks' => 'Soal Batch 1',
+                    'tipe' => 'pilihan_ganda',
+                    'bobot' => 10,
+                    'durasi_detik' => 60,
+                    'opsi' => [
+                        ['teks' => 'A', 'is_correct' => true],
+                        ['teks' => 'B', 'is_correct' => false],
+                    ],
+                ],
+            ]);
+        $mockService->shouldReceive('generateQuestions')
+            ->once()
+            ->andThrow(new \RuntimeException('Koneksi AI terputus pada batch kedua.'));
+
+        $this->app->instance(AiQuestionService::class, $mockService);
+
+        (new GenerateAiQuestionsJob($generation->id))->handle(app(OrganizationContext::class));
+
+        $generation->refresh();
+        $this->assertSame('gagal', $generation->status);
+        $this->assertSame(1, $usage->aiUsed($organization->id));
     }
 
     private function aiPayload(): array

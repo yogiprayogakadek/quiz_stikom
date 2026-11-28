@@ -222,9 +222,9 @@ class DashboardController extends Controller
             ->map(fn (User $u) => [
                 'id' => $u->id,
                 'nama' => $u->nama,
-                'sub' => $u->role === 'peserta' ? ('NIM/Username: '.$u->username) : ('Administrator ('.$u->username.')'),
+                'sub' => $u->isPeserta() ? ('NIM/Username: '.$u->username) : ('Administrator ('.$u->username.')'),
                 'role' => $u->role,
-                'url' => $u->role === 'peserta'
+                'url' => $u->isPeserta()
                     ? route('admin.participants.index', ['q' => $u->username])
                     : route('admin.dashboard'),
             ]);

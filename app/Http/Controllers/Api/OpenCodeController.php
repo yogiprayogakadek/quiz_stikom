@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessWithOpenCode;
 use App\Services\OpenCode\OpenCodeClient;
 use App\Services\OpenCode\OpenCodeException;
+use App\Services\OrganizationUsage;
+use App\Support\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -48,6 +50,17 @@ class OpenCodeController extends Controller
 
             if ($error !== null) {
                 return $error;
+            }
+        }
+
+        $organizationId = app(OrganizationContext::class)->id();
+        if ($organizationId !== null) {
+            try {
+                app(OrganizationUsage::class)->reserveAi($organizationId, 'opencode_api', 1);
+            } catch (\RuntimeException $exception) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 429);
             }
         }
 

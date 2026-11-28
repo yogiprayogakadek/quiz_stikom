@@ -15,9 +15,11 @@
     $scheduledStart = old('scheduled_start_at', $session?->scheduled_start_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
     $scheduledEnd = old('scheduled_end_at', $session?->scheduled_end_at?->timezone($orgTimezone)->format('Y-m-d\TH:i'));
     $quizTerpilih = (string) old('quiz_id', $session?->quiz_id ?? request('quiz_id', ''));
+    $quizzes->loadCount(['questions as essay_questions_count' => fn ($query) => $query->where('tipe', 'essay')]);
     $alatAwal = old('exam_tools', $session?->examTools() ?? optional($quizzes->firstWhere('id', (int) $quizTerpilih))->examTools() ?? []);
     $konfigurasiAlatKuis = $quizzes->mapWithKeys(fn ($kuis) => [(string) $kuis->id => [
         'is_trial' => (bool) $kuis->is_percobaan,
+        'has_essay' => (int) ($kuis->essay_questions_count ?? 0) > 0,
         'tools' => $kuis->examTools(),
     ]])->all();
 @endphp
@@ -33,6 +35,9 @@
         pilihKuis(value) {
             this.selectedQuiz = String(value || '');
             this.tools = [...(this.quizTools[this.selectedQuiz]?.tools ?? [])];
+            if (this.quizTools[this.selectedQuiz]?.has_essay && this.mode === 'serempak') {
+                this.mode = 'acak';
+            }
         }
     }"
     x-on:searchable-select-change="if ($event.detail.name === 'quiz_id') pilihKuis($event.detail.value)"
@@ -130,12 +135,12 @@
                 <span class="mt-2 block text-base text-ink-muted">Setiap peserta mengerjakan sendiri. Soal, urutan, dan opsi diacak per peserta.</span>
             </label>
 
-            <label class="rounded-2xl border-2 border-outline bg-page p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
+            <label class="rounded-2xl border-2 border-outline bg-page p-4 has-[:checked]:border-brand has-[:checked]:bg-brand-soft" x-bind:class="quizTools[selectedQuiz]?.has_essay && 'cursor-not-allowed opacity-60'">
                 <span class="flex items-center gap-3">
-                    <input type="radio" name="{{ $terkunci ? 'mode_terkunci' : 'mode' }}" value="serempak" x-model="mode" class="h-5 w-5" @checked($modeAwal === 'serempak') @disabled($terkunci)>
+                    <input type="radio" name="{{ $terkunci ? 'mode_terkunci' : 'mode' }}" value="serempak" x-model="mode" class="h-5 w-5" @checked($modeAwal === 'serempak') x-bind:disabled="{{ $terkunci ? 'true' : 'false' }} || Boolean(quizTools[selectedQuiz]?.has_essay)">
                     <span class="font-display text-lg font-bold text-ink">Serempak</span>
                 </span>
-                <span class="mt-2 block text-base text-ink-muted">Server membuka soal satu per satu untuk seluruh kelas. Timer dan jeda berjalan otomatis.</span>
+                <span class="mt-2 block text-base text-ink-muted" x-text="quizTools[selectedQuiz]?.has_essay ? 'Kuis ini memuat soal essay, sehingga hanya dapat dijalankan pada Mode Acak.' : 'Server membuka soal satu per satu untuk seluruh kelas. Timer dan jeda berjalan otomatis.'"></span>
             </label>
         </div>
         @if ($terkunci)
@@ -190,7 +195,7 @@
                 value="{{ old('durasi_total_menit', $session?->durasi_total_detik ? intdiv($session->durasi_total_detik, 60) : '') }}"
                 class="input" placeholder="100" x-bind:disabled="timingMode !== 'duration' || mode !== 'acak'"
                 @error('durasi_total_menit') aria-invalid="true" @enderror>
-            <p class="help mt-2">Kosongkan untuk otomatis. Essay memakai 100 menit; PG memakai jumlah durasi soal.</p>
+            <p class="help mt-2">Kosongkan untuk otomatis: kuis yang memuat soal essay memakai 100 menit, sedangkan kuis khusus pilihan ganda memakai jumlah durasi soal.</p>
             @error('durasi_total_menit') <p class="field-error">{{ $message }}</p> @enderror
         </div>
 

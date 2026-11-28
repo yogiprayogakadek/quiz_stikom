@@ -265,6 +265,19 @@ class AccountSecurityTest extends TestCase
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
     }
 
+    public function test_lupa_password_dibatasi_rate_limiter_lima_kali_per_menit(): void
+    {
+        Notification::fake();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->post(route('password.email'), ['email' => 'target-throttle@example.test'])
+                ->assertRedirect();
+        }
+
+        $this->post(route('password.email'), ['email' => 'target-throttle@example.test'])
+            ->assertStatus(429);
+    }
+
     private function organization(): Organization
     {
         return Organization::query()->firstOrFail();

@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WorkspaceInvitationMail;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\OrganizationUsage;
+use App\Services\PlatformMail;
 use App\Support\OrganizationContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -78,6 +81,20 @@ class TeamController extends Controller
 
             return $admin;
         });
+
+        if (! blank($admin->email)) {
+            try {
+                PlatformMail::apply();
+                Mail::to($admin->email)->send(new WorkspaceInvitationMail(
+                    $organization,
+                    $admin,
+                    'Admin Organisasi',
+                    $temporaryPassword,
+                ));
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
 
         return back()
             ->with('sukses', 'Admin organisasi ditambahkan.')

@@ -60,6 +60,43 @@ class OrganizationUsage
         });
     }
 
+    public function refundAi(int $organizationId, string $kind, int $requests = 1): void
+    {
+        $remaining = max(0, $requests);
+        if ($remaining === 0) {
+            return;
+        }
+
+        $timezone = Organization::query()->whereKey($organizationId)->value('timezone') ?? config('app.timezone');
+        $start = now($timezone)->startOfMonth()->utc();
+
+        DB::transaction(function () use ($organizationId, $kind, $start, &$remaining) {
+            Organization::query()->whereKey($organizationId)->lockForUpdate()->firstOrFail();
+
+            $events = AiUsageEvent::withoutGlobalScopes()
+                ->where('organization_id', $organizationId)
+                ->where('kind', $kind)
+                ->where('created_at', '>=', $start)
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($events as $event) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                if ($event->requests <= $remaining) {
+                    $remaining -= (int) $event->requests;
+                    $event->delete();
+                } else {
+                    $event->decrement('requests', $remaining);
+                    $remaining = 0;
+                }
+            }
+        });
+    }
+
     public function storageUsed(int $organizationId): int
     {
         $paths = DB::table('organization_settings')

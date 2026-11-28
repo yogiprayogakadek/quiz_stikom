@@ -279,10 +279,6 @@ class SettingController extends Controller
 
     private function isOwner(?User $user, ?Organization $organization): bool
     {
-        return $organization !== null && $user !== null && $user->organizations()
-            ->whereKey($organization->id)
-            ->wherePivot('role', 'owner')
-            ->wherePivot('status', 'active')
-            ->exists();
+        return $user?->isOwnerOf($organization) ?? false;
     }
 }

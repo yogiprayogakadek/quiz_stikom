@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Master;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WorkspaceRequestReviewedMail;
 use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\WorkspaceRequest;
 use App\Services\OrganizationProvisioning;
+use App\Services\PlatformMail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -87,6 +90,16 @@ class WorkspaceRequestController extends Controller
             return $organization;
         });
 
+        $freshRequest = $workspaceRequest->fresh('requester');
+        if ($freshRequest?->requester && ! blank($freshRequest->requester->email)) {
+            try {
+                PlatformMail::apply();
+                Mail::to($freshRequest->requester->email)->send(new WorkspaceRequestReviewedMail($freshRequest, $organization));
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
+
         return redirect()
             ->route('master.owners.index')
             ->with('sukses', 'Workspace '.$organization->name.' disetujui dan dibuat untuk '.$organization->owners()->first()?->nama.'.');
@@ -130,6 +143,16 @@ class WorkspaceRequestController extends Controller
                 'ip_address' => $request->ip(),
             ]);
         });
+
+        $freshRequest = $workspaceRequest->fresh('requester');
+        if ($freshRequest?->requester && ! blank($freshRequest->requester->email)) {
+            try {
+                PlatformMail::apply();
+                Mail::to($freshRequest->requester->email)->send(new WorkspaceRequestReviewedMail($freshRequest));
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
 
         return redirect()
             ->route('master.owners.index')

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Master;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WorkspaceInvitationMail;
 use App\Models\AppSetting;
 use App\Models\AuditLog;
 use App\Models\Organization;
@@ -10,11 +11,13 @@ use App\Models\User;
 use App\Models\WorkspaceRequest;
 use App\Services\OrganizationProvisioning;
 use App\Services\OrganizationUsage;
+use App\Services\PlatformMail;
 use App\Services\SystemHealth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -129,6 +132,20 @@ class OrganizationController extends Controller
             return [$organization, $owner, $temporaryPassword];
         });
 
+        if (! blank($owner->email)) {
+            try {
+                PlatformMail::apply();
+                Mail::to($owner->email)->send(new WorkspaceInvitationMail(
+                    $organization,
+                    $owner,
+                    'Owner Organisasi',
+                    $temporaryPassword,
+                ));
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
+
         $response = back()->with('sukses', 'Workspace '.$organization->name.' berhasil dibuat untuk '.$owner->nama.'.');
 
         if ($temporaryPassword !== null) {
@@ -231,12 +248,20 @@ class OrganizationController extends Controller
             'quiz_questions' => DB::table('quiz_questions')->whereIn('quiz_id', $quizIds)->get(),
             'questions' => DB::table('questions')->where('organization_id', $organization->id)->get(),
             'options' => DB::table('options')->whereIn('question_id', $questionIds)->get(),
+            'question_media' => DB::table('question_media')
+                ->where('organization_id', $organization->id)
+                ->select(['id', 'question_id', 'organization_id', 'mime_type', 'size_bytes', 'original_name', 'created_at', 'updated_at'])
+                ->get(),
             'sessions' => DB::table('quiz_sessions')->where('organization_id', $organization->id)->get(),
+            'session_participants' => DB::table('quiz_session_participants')->whereIn('quiz_session_id', $sessionIds)->get(),
             'session_questions' => DB::table('session_questions')->whereIn('quiz_session_id', $sessionIds)->get(),
+            'session_messages' => DB::table('session_messages')->whereIn('quiz_session_id', $sessionIds)->get(),
             'attempts' => DB::table('attempts')->where('organization_id', $organization->id)->get(),
             'attempt_questions' => DB::table('attempt_questions')->whereIn('attempt_id', $attemptIds)->get(),
             'answers' => DB::table('answers')->whereIn('attempt_id', $attemptIds)->get(),
             'events' => DB::table('attempt_events')->whereIn('attempt_id', $attemptIds)->get(),
+            'quiz_grades' => DB::table('quiz_grades')->where('organization_id', $organization->id)->get(),
+            'participant_feedbacks' => DB::table('participant_feedbacks')->whereIn('attempt_id', $attemptIds)->get(),
             'ai_generations' => DB::table('ai_generations')->where('organization_id', $organization->id)->get(),
             'ai_usage' => DB::table('ai_usage_events')->where('organization_id', $organization->id)->get(),
             'participant_login_activities' => DB::table('participant_login_activities')->where('organization_id', $organization->id)->get(),

@@ -23,7 +23,7 @@ class PasswordController extends Controller
         $rules = [
             'password' => ['required', 'string', Password::min(8), 'confirmed'],
         ];
-        if (! $user->must_change_password) {
+        if (! $user->wajibGantiPassword()) {
             $rules['current_password'] = ['required', 'current_password'];
         }
 

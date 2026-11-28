@@ -6,6 +6,7 @@
         "build": "vite build",
         "dev": "vite",
         "test:exam-tools": "node --test tests/js/exam-tools.test.mjs",
+        "test:k6-utils": "node --test tests/js/k6-utils.test.mjs",
         "test:polling": "node --test tests/js/polling.test.mjs"
     },
     "devDependencies": {

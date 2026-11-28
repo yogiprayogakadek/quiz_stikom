@@ -76,16 +76,23 @@
                         <p class="mt-1 text-base text-ink-muted">{{ $kuis->sessions_count }} sesi memakai kuis ini.</p>
 
                         <div class="mt-4 flex flex-wrap gap-2">
-                            <a href="{{ route('admin.quizzes.questions.index', $kuis) }}" class="btn btn-primary">
+                            <a href="{{ route('admin.quizzes.questions.index', $kuis) }}" class="btn btn-primary min-h-11">
                                 <x-icon name="pencil" :size="18" />
                                 Kelola soal ({{ $kuis->questions_count }})
                             </a>
-                            <a href="{{ route('admin.quizzes.edit', $kuis) }}" class="btn btn-secondary">Edit kuis</a>
+                            <a href="{{ route('admin.quizzes.edit', $kuis) }}" class="btn btn-secondary min-h-11">Edit kuis</a>
+                            <form method="POST" action="{{ route('admin.quizzes.duplicate', $kuis) }}">
+                                @csrf
+                                <button type="submit" class="btn btn-secondary min-h-11">
+                                    <x-icon name="copy" :size="18" />
+                                    <span>Duplikat</span>
+                                </button>
+                            </form>
                             @if ($kuis->sessions_count === 0)
                                 <form method="POST" action="{{ route('admin.quizzes.destroy', $kuis) }}" onsubmit="return confirm('Hapus kuis ini?')">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="btn btn-ghost text-coral-deep">Hapus</button>
+                                    <button type="submit" class="btn btn-ghost min-h-11 text-coral-deep">Hapus</button>
                                 </form>
                             @else
                                 <span class="self-center text-sm text-ink-subtle">Dipakai sesi, tidak bisa dihapus</span>

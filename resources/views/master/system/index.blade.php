@@ -13,6 +13,10 @@
         $lastBackupAt = $snapshot['last_backup'] !== null
             ? \Illuminate\Support\Carbon::createFromTimestamp($snapshot['last_backup']['diubah'])
             : null;
+        $lastSchedulerAt = $snapshot['scheduler']['last_run_at'] !== null
+            ? \Illuminate\Support\Carbon::createFromTimestamp($snapshot['scheduler']['last_run_at'])
+            : null;
+        $schedulerBermasalah = ! $snapshot['scheduler']['active'];
         $realtimeTerlambat = $snapshot['queue_sizes']['realtime'] > 20
             || ($snapshot['queue_oldest_age_seconds']['realtime'] ?? 0) > 10;
         $redisBermasalah = $snapshot['redis']['configured']
@@ -25,6 +29,7 @@
         $operasionalSiap = ! $snapshot['debug']
             && $snapshot['failed_jobs'] === 0
             && $snapshot['mail_configured']
+            && ! $schedulerBermasalah
             && $lastBackupAt !== null
             && $lastBackupAt->gte(now()->subDays(7))
             && ! $realtimeTerlambat
@@ -56,6 +61,19 @@
                 @endif
                 @if ($reverbBermasalah)
                     <li class="flex gap-2"><x-icon name="alert" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Reverb tidak terjangkau.</span> Polling tetap bekerja, tetapi pembaruan realtime tertunda.</span></li>
+                @endif
+                @if ($schedulerBermasalah)
+                    <li class="flex gap-2">
+                        <x-icon name="clock" :size="18" class="mt-0.5 shrink-0 text-coral-deep" />
+                        <span>
+                            <span class="font-bold text-ink">Scheduler tidak aktif.</span>
+                            @if ($lastSchedulerAt === null)
+                                Detak <code>schedule:work</code> belum tercatat. Pastikan program Supervisor scheduler berjalan.
+                            @else
+                                Detak terakhir {{ $lastSchedulerAt->diffForHumans() }}; periksa program Supervisor scheduler.
+                            @endif
+                        </span>
+                    </li>
                 @endif
                 @if ($databaseLambat)
                     <li class="flex gap-2"><x-icon name="clock" :size="18" class="mt-0.5 shrink-0 text-coral-deep" /> <span><span class="font-bold text-ink">Database lambat atau tidak terjangkau.</span> Latensi pemeriksaan melebihi 200 ms.</span></li>
@@ -226,6 +244,18 @@
                         <dt class="text-ink-muted">Reverb</dt>
                         <dd class="text-right font-bold {{ $snapshot['reverb']['available'] ? 'text-leaf-deep' : 'text-coral-deep' }}">
                             {{ $snapshot['reverb']['available'] ? 'Siap · '.number_format($snapshot['reverb']['latency_ms'], 2, ',', '.').' ms' : 'Tidak terjangkau' }}
+                        </dd>
+                    </div>
+                    <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">
+                        <dt class="text-ink-muted">Scheduler</dt>
+                        <dd class="text-right font-bold {{ $snapshot['scheduler']['active'] ? 'text-leaf-deep' : 'text-coral-deep' }}">
+                            @if ($snapshot['scheduler']['active'] && $lastSchedulerAt !== null)
+                                Siap · {{ $lastSchedulerAt->diffForHumans() }}
+                            @elseif ($lastSchedulerAt !== null)
+                                Tertunda · {{ $lastSchedulerAt->diffForHumans() }}
+                            @else
+                                Belum berjalan
+                            @endif
                         </dd>
                     </div>
                     <div class="flex items-start justify-between gap-4 border-b border-outline pb-3">

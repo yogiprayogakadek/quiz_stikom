@@ -85,9 +85,9 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->isAdmin() && (bool) $this->is_platform_admin;
     }
 
-    public function isCurrentOrganizationOwner(): bool
+    public function isOwnerOf(Organization|int|null $organization): bool
     {
-        $organizationId = app(OrganizationContext::class)->id();
+        $organizationId = $organization instanceof Organization ? $organization->id : $organization;
 
         return $organizationId !== null
             && $this->organizations()
@@ -95,6 +95,22 @@ class User extends Authenticatable implements MustVerifyEmailContract
                 ->wherePivot('role', 'owner')
                 ->wherePivot('status', 'active')
                 ->exists();
+    }
+
+    public function isActiveMemberOf(Organization|int|null $organization): bool
+    {
+        $organizationId = $organization instanceof Organization ? $organization->id : $organization;
+
+        return $organizationId !== null
+            && $this->organizations()
+                ->whereKey($organizationId)
+                ->wherePivot('status', 'active')
+                ->exists();
+    }
+
+    public function isCurrentOrganizationOwner(): bool
+    {
+        return $this->isOwnerOf(app(OrganizationContext::class)->id());
     }
 
     public function isPeserta(): bool

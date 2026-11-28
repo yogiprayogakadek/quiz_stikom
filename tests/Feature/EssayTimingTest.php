@@ -72,7 +72,7 @@ class EssayTimingTest extends TestCase
         $this->assertSame(4800, $session->fresh()->durasi_total_detik);
     }
 
-    public function test_sesi_menolak_kuis_campuran_pg_dan_essay(): void
+    public function test_sesi_mengizinkan_kuis_campuran_pg_dan_essay_di_mode_acak_dan_menolak_serempak(): void
     {
         [$organization, $admin, $quiz] = $this->dasar();
         $this->buatSoal($quiz, 'Soal PG', 60);
@@ -93,13 +93,32 @@ class EssayTimingTest extends TestCase
             ])
             ->post(route('admin.sessions.store'), [
                 'quiz_id' => $quiz->id,
-                'nama' => 'Sesi Campuran',
+                'nama' => 'Sesi Campuran Serempak',
+                'mode' => 'serempak',
+                'jeda_detik' => 5,
+            ])
+            ->assertSessionHasErrors('mode');
+
+        $this->assertDatabaseMissing('quiz_sessions', ['nama' => 'Sesi Campuran Serempak']);
+
+        $this->actingAs($admin)
+            ->withSession([
+                'auth_token' => $admin->current_session_token,
+                'organization_id' => $organization->id,
+            ])
+            ->post(route('admin.sessions.store'), [
+                'quiz_id' => $quiz->id,
+                'nama' => 'Sesi Campuran Acak',
                 'mode' => 'acak',
                 'jeda_detik' => 5,
             ])
-            ->assertSessionHasErrors('quiz_id');
+            ->assertRedirect();
 
-        $this->assertDatabaseMissing('quiz_sessions', ['nama' => 'Sesi Campuran']);
+        $this->assertDatabaseHas('quiz_sessions', [
+            'nama' => 'Sesi Campuran Acak',
+            'mode' => 'acak',
+            'durasi_total_detik' => 6000,
+        ]);
     }
 
     public function test_sesi_serempak_menolak_kuis_essay_saat_dibuat(): void

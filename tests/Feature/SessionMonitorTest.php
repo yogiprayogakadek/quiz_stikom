@@ -345,6 +345,65 @@ class SessionMonitorTest extends TestCase
             ->assertViewHas('mulai_index', 1);
     }
 
+    public function test_scheduler_memulihkan_sesi_serempak_yang_macet_pada_soal_terbuka_dan_jeda(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        Queue::fake();
+
+        [$admin, $peserta, , $session] = $this->sesiSerempakLobby();
+
+        $questionKedua = Question::create([
+            'quiz_id' => $session->quiz_id,
+            'teks' => 'Apa protokol standar web terenkripsi?',
+            'durasi_detik' => 60,
+        ]);
+        Option::create([
+            'question_id' => $questionKedua->id,
+            'teks' => 'HTTPS',
+            'is_correct' => true,
+        ]);
+        Option::create([
+            'question_id' => $questionKedua->id,
+            'teks' => 'FTP',
+            'is_correct' => false,
+        ]);
+
+        $this->actingAs($peserta)
+            ->withSession(['auth_token' => 'token-serempak'])
+            ->post("/sesi/{$session->id}/gabung")
+            ->assertRedirect(route('peserta.session.play', $session));
+
+        $this->actingAs($admin)
+            ->withSession(['auth_token' => 'token-admin-serempak'])
+            ->post("/admin/sessions/{$session->id}/mulai", ['peserta_ids' => [$peserta->id]])
+            ->assertRedirect();
+
+        $session->refresh();
+        $this->assertSame('soal_terbuka', $session->fase);
+        $this->assertSame(1, $session->soal_aktif_urutan);
+
+        $session->update([
+            'soal_berakhir_at' => now()->subSeconds(5)->getTimestampMs(),
+            'jeda_detik' => 5,
+        ]);
+
+        $this->artisan('kuis:tutup-attempt-kedaluwarsa')->assertExitCode(0);
+
+        $session->refresh();
+        $this->assertSame('jeda', $session->fase);
+        $this->assertSame(1, $session->soal_aktif_urutan);
+
+        $session->update([
+            'soal_berakhir_at' => now()->subSeconds(12)->getTimestampMs(),
+        ]);
+
+        $this->artisan('kuis:tutup-attempt-kedaluwarsa')->assertExitCode(0);
+
+        $session->refresh();
+        $this->assertSame('soal_terbuka', $session->fase);
+        $this->assertSame(2, $session->soal_aktif_urutan);
+    }
+
     private function sesiAcakBerjalan(): array
     {
         $admin = User::create([

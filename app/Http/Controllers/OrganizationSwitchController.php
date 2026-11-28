@@ -15,8 +15,7 @@ class OrganizationSwitchController extends Controller
         $organization = Organization::findOrFail($data['organization_id']);
 
         abort_unless(
-            $organization->is_active
-            && $request->user()->organizations()->whereKey($organization->id)->wherePivot('status', 'active')->exists(),
+            $organization->is_active && $request->user()->isActiveMemberOf($organization),
             403,
             'Anda bukan anggota aktif organisasi ini.',
         );

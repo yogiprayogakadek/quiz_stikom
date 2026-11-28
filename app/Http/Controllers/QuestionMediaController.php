@@ -24,7 +24,7 @@ class QuestionMediaController extends Controller
                 ->first();
             abort_unless($membership, 403);
 
-            if ($user->role === 'peserta') {
+            if ($user->isPeserta()) {
                 $canView = Attempt::query()
                     ->where('user_id', $user->id)
                     ->whereHas('quizSession', fn ($query) => $query->where('organization_id', $media->organization_id))

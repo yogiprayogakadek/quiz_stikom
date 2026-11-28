@@ -20,7 +20,7 @@ class OrganizationOwnership
 
             $currentOwners = $locked->owners()->lockForUpdate()->get();
 
-            if ($newOwner->trashed() || $newOwner->role !== 'admin') {
+            if ($newOwner->trashed() || ! $newOwner->isAdmin()) {
                 throw ValidationException::withMessages([
                     'new_owner_id' => 'Owner baru harus akun admin yang aktif.',
                 ]);

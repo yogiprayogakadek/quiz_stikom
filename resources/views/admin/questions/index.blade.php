@@ -27,13 +27,24 @@
                 </a>
                 <a
                     href="{{ $ruteExport }}"
-                    class="btn btn-secondary"
+                    class="btn btn-secondary min-h-11"
                     @if ($adaKontenTerstruktur) onclick="return confirm('CSV hanya memuat teks utama. Gambar, tabel, kode, dan konfigurasi jawaban terstruktur tidak ikut diekspor. Tetap lanjutkan?')" @endif
                 >
                     <x-icon name="download" :size="18" />
                     <span>Ekspor CSV</span>
                 </a>
-                <a href="{{ $ruteCreate }}" class="btn btn-primary">
+                <a href="{{ route('admin.quizzes.questions.pdf.preview', $quiz) }}" class="btn btn-secondary min-h-11">
+                    <x-icon name="printer" :size="18" />
+                    <span>Ekspor PDF</span>
+                </a>
+                <form method="POST" action="{{ route('admin.quizzes.duplicate', $quiz) }}" class="inline">
+                    @csrf
+                    <button type="submit" class="btn btn-secondary min-h-11">
+                        <x-icon name="copy" :size="18" />
+                        <span>Duplikat Kuis</span>
+                    </button>
+                </form>
+                <a href="{{ $ruteCreate }}" class="btn btn-primary min-h-11">
                     <x-icon name="plus" :size="18" />
                     <span>Tambah Soal</span>
                 </a>

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\AiGeneration;
 use App\Services\AiQuestionService;
+use App\Services\OrganizationUsage;
 use App\Support\OrganizationContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -36,11 +37,12 @@ class GenerateAiQuestionsJob implements ShouldQueue
             $jumlahPg = (int) ($params['jumlah_pg'] ?? 0);
             $jumlahEssay = (int) ($params['jumlah_essay'] ?? 0);
             $ukuranBatch = 5;
-            $totalBatch = (int) ceil($jumlahPg / $ukuranBatch) + (int) ceil($jumlahEssay / $ukuranBatch);
-            $generation->update(['total' => max(1, $totalBatch)]);
+            $reservedBatches = max(1, (int) ceil($jumlahPg / $ukuranBatch) + (int) ceil($jumlahEssay / $ukuranBatch));
+            $generation->update(['total' => $reservedBatches]);
 
             $ai = app(AiQuestionService::class);
             $questions = [];
+            $completedBatches = 0;
 
             try {
                 for ($sisa = $jumlahPg; $sisa > 0; $sisa -= $ukuranBatch) {
@@ -48,6 +50,7 @@ class GenerateAiQuestionsJob implements ShouldQueue
                         'jumlah_pg' => min($ukuranBatch, $sisa),
                         'jumlah_essay' => 0,
                     ])));
+                    $completedBatches++;
                     $generation->increment('done');
                 }
 
@@ -56,9 +59,15 @@ class GenerateAiQuestionsJob implements ShouldQueue
                         'jumlah_pg' => 0,
                         'jumlah_essay' => min($ukuranBatch, $sisa),
                     ])));
+                    $completedBatches++;
                     $generation->increment('done');
                 }
             } catch (Throwable $e) {
+                $unspent = max(0, $reservedBatches - $completedBatches);
+                if ($generation->organization_id !== null && $unspent > 0) {
+                    app(OrganizationUsage::class)->refundAi((int) $generation->organization_id, 'questions', $unspent);
+                }
+
                 $generation->update([
                     'status' => 'gagal',
                     'error' => $e->getMessage(),

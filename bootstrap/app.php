@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureEmailVerifiedWhenPresent;
+use App\Http\Middleware\EnsureOpenCodeAuthorized;
 use App\Http\Middleware\EnsureOrganizationMember;
 use App\Http\Middleware\EnsureOrganizationOwner;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -50,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'organization_owner' => EnsureOrganizationOwner::class,
             'organization_member' => EnsureOrganizationMember::class,
             'participant_presence' => TrackParticipantPresence::class,
+            'opencode_auth' => EnsureOpenCodeAuthorized::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

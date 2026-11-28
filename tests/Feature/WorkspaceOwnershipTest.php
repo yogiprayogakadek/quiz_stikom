@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Mail\WorkspaceInvitationMail;
+use App\Mail\WorkspaceRequestReviewedMail;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\WorkspaceRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class WorkspaceOwnershipTest extends TestCase
@@ -637,6 +640,84 @@ class WorkspaceOwnershipTest extends TestCase
             ->assertRedirect(route('admin.dashboard'));
 
         $this->assertSame($beta->id, session('organization_id'));
+    }
+
+    public function test_email_notifikasi_dikirim_saat_permintaan_workspace_ditinjau_dan_undangan_dibuat(): void
+    {
+        Mail::fake();
+
+        $master = $this->master();
+        $owner = $this->admin('owner_mail');
+        $organization = $this->organization('mail-org', 'Kampus Mail');
+        $organization->users()->attach($owner->id, [
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $approvedReq = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Disetujui',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.approve.update', $approvedReq), [
+                'slug' => 'workspace-disetujui',
+            ])
+            ->assertRedirect();
+
+        Mail::assertSent(WorkspaceRequestReviewedMail::class, fn (WorkspaceRequestReviewedMail $mail) => $mail->hasTo($owner->email)
+            && $mail->workspaceRequest->is($approvedReq));
+
+        $rejectedReq = WorkspaceRequest::create([
+            'requester_id' => $owner->id,
+            'name' => 'Workspace Ditolak',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'status' => WorkspaceRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->put(route('master.workspace-requests.reject', $rejectedReq), [
+                'rejection_reason' => 'Data institusi belum lengkap.',
+            ])
+            ->assertRedirect();
+
+        Mail::assertSent(WorkspaceRequestReviewedMail::class, fn (WorkspaceRequestReviewedMail $mail) => $mail->hasTo($owner->email)
+            && $mail->workspaceRequest->is($rejectedReq));
+
+        $this->actingAs($master)
+            ->withSession(['auth_token' => $master->current_session_token])
+            ->post(route('master.organizations.store'), [
+                'name' => 'Workspace Undangan Master',
+                'slug' => 'workspace-undangan-master',
+                'type' => 'education',
+                'timezone' => 'Asia/Jakarta',
+                'owner_name' => 'Owner Undangan',
+                'owner_username' => 'owner_undangan',
+                'owner_email' => 'owner-undangan@example.test',
+            ])
+            ->assertRedirect();
+
+        Mail::assertSent(WorkspaceInvitationMail::class, fn (WorkspaceInvitationMail $mail) => $mail->hasTo('owner-undangan@example.test'));
+
+        $this->actingAs($owner)
+            ->withSession([
+                'auth_token' => $owner->current_session_token,
+                'organization_id' => $organization->id,
+            ])
+            ->post(route('admin.team.store'), [
+                'nama' => 'Dosen Tim Baru',
+                'username' => 'dosen_tim_baru',
+                'email' => 'dosen-tim@example.test',
+            ])
+            ->assertRedirect();
+
+        Mail::assertSent(WorkspaceInvitationMail::class, fn (WorkspaceInvitationMail $mail) => $mail->hasTo('dosen-tim@example.test'));
     }
 
     private function master(): User

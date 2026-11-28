@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\OpenCodeController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['throttle:30,1'])
+Route::middleware(['opencode_auth', 'throttle:30,1'])
     ->prefix('opencode')
     ->group(function (): void {
         Route::get('/models', [OpenCodeController::class, 'models'])->name('api.opencode.models');

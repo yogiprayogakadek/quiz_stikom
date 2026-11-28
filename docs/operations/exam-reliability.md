@@ -43,9 +43,9 @@ REDIS_SESSION_DB=2
 
 Setelah mengubah `.env`, jalankan `php artisan config:cache`. Pastikan halaman **Master → Sistem** menunjukkan Redis siap.
 
-## Worker dan Reverb
+## Worker, Reverb, dan Scheduler
 
-Gunakan tiga program Supervisor. Sesuaikan path proyek dan versi PHP bila diperlukan.
+Gunakan empat program Supervisor agar antrean, WebSocket, serta penjadwal (`schedule:work` untuk penutupan attempt, pemulihan sesi Serempak, dan cadangan database harian) dikelola di satu tempat. Sesuaikan path proyek dan versi PHP bila diperlukan.
 
 ```ini
 [program:quiz-realtime]
@@ -76,6 +76,16 @@ autorestart=true
 user=www-data
 redirect_stderr=true
 stdout_logfile=/var/log/quiz-reverb.log
+stopwaitsecs=10
+
+[program:quiz-scheduler]
+command=php /var/www/skylearn-kuis/artisan schedule:work
+directory=/var/www/skylearn-kuis
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/quiz-scheduler.log
 stopwaitsecs=10
 ```
 
@@ -137,26 +147,28 @@ Aktifkan OPcache produksi (`opcache.enable=1`, `opcache.memory_consumption=128`,
 
 1. Jangan restart MySQL.
 2. Jika Reverb mati, jalankan `sudo supervisorctl restart quiz-reverb`. Polling tetap melayani peserta.
-3. Restart worker secara graceful dengan `php artisan queue:restart`; Supervisor akan menyalakannya kembali.
+3. Restart worker dan scheduler secara graceful dengan `php artisan queue:restart` serta `php artisan schedule:interrupt`; Supervisor akan menyalakannya kembali dengan konfigurasi terbaru.
 4. Perubahan Nginx memakai reload.
 5. Restart PHP-FPM hanya jika log menunjukkan `pm.max_children` tercapai atau worker macet. Minta peserta tetap di halaman agar antrean localStorage dapat dikirim ulang.
 
-Periksa `uptime`, `free -h`, `df -h`, `sudo supervisorctl status`, halaman **Master → Sistem**, dan log Nginx/PHP-FPM sebelum mengambil tindakan.
+Periksa `uptime`, `free -h`, `df -h`, `sudo supervisorctl status`, status **Scheduler** di halaman **Master -> Sistem**, dan log Nginx/PHP-FPM sebelum mengambil tindakan.
 
 ## Uji sebelum ujian nyata
 
-Jalankan tes k6 pada sesi simulasi selama 10 menit:
+Buat akun pengujian dari PowerShell di laptop:
 
-```bash
-k6 run \
-  -e BASE_URL=http://192.168.1.10 \
-  -e SESSION_ID=1 \
-  -e DISPLAY_TOKEN=token-display \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=password-admin \
-  tests/load/k6-peserta.js
+```powershell
+.\tests\load\generate-participants.ps1 -Count 100 -Prefix loadtest -Password 'ganti-password-uji' -OutputPath .\storage\app\private\loadtest-participants.csv
 ```
 
-Untuk ikut menguji essay Mode Acak, siapkan 100 attempt dengan ID berurutan dan tambahkan `ATTEMPT_ID_BASE` serta `ESSAY_QUESTION_ID`. Kriteria lulus: error di bawah 1%, p95 status di bawah 500 ms, dan p95 penyimpanan jawaban di bawah 750 ms.
+Pilih workspace pengujian dan impor CSV peserta tersebut. Buat kuis `Simulasi Beban Jaringan Komputer`, lalu impor `tests/load/questions-network-simulation.csv` melalui menu impor soal. Buat sesi sumber dengan Mode Serempak, acak opsi dan leaderboard realtime aktif, maksimal 100 peserta, kebijakan clipboard `monitor`, serta durasi berdasarkan soal. Buat simulasi dari sesi tersebut, pilih seluruh akun `loadtest`, dan buka lobby sebelum menjalankan k6. Skrip akan menyelesaikan kewajiban ganti password pertama, login, dan bergabung ke simulasi secara otomatis.
+
+Jalankan tes k6 selama 10 menit:
+
+```powershell
+k6 run -e BASE_URL=https://quiz.ruangproject.my.id -e WORKSPACE_SLUG=simulasi-kubernetes -e SESSION_ID=<ID_SIMULASI> -e USERNAME_PREFIX=loadtest -e PASSWORD=ganti-password-uji -e VUS=100 -e DURATION_SECONDS=600 .\tests\load\k6-peserta.js
+```
+
+Tunggu monitor admin menampilkan seluruh peserta sudah bergabung, kemudian mulai sesi. Jalankan skrip hanya pada simulasi karena jawaban benar-benar disimpan. Kriteria lulus: error workflow di bawah 1%, p95 status di bawah 500 ms, dan p95 penyimpanan jawaban di bawah 750 ms.
 
 Ulangi pengujian dengan Reverb dihentikan, lalu dengan worker `realtime` dan PHP-FPM di-restart satu per satu. Jawaban harus tetap tersimpan atau dikirim ulang dari localStorage tanpa duplikasi, polling tetap memperbarui status, dan queue `realtime` harus kembali kosong setelah proses pulih.

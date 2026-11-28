@@ -7,6 +7,7 @@ use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
 use App\Models\Kelas;
 use App\Models\Quiz;
+use App\Services\QuizCloneService;
 use App\Support\ExamTools;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -103,5 +104,14 @@ class QuizController extends Controller
         $quiz->delete();
 
         return redirect()->route('admin.quizzes.index')->with('sukses', 'Kuis dihapus.');
+    }
+
+    public function duplicate(Request $request, Quiz $quiz, QuizCloneService $cloner): RedirectResponse
+    {
+        $salinan = $cloner->duplicate($quiz, $request->user());
+
+        return redirect()
+            ->route('admin.quizzes.questions.index', $salinan)
+            ->with('sukses', "Kuis berhasil diduplikasi menjadi \"{$salinan->judul}\". Anda dapat mengubah pengaturan atau soalnya.");
     }
 }

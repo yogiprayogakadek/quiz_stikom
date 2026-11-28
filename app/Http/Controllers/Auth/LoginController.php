@@ -108,7 +108,7 @@ class LoginController extends Controller
 
         $request->session()->put('auth_token', $token);
 
-        if ($user->role === 'peserta') {
+        if ($user->isPeserta()) {
             ParticipantLoginActivity::recordAndBroadcast($user, 'login');
             $organizationId = app(OrganizationContext::class)->id();
             if ($organizationId !== null) {
@@ -141,7 +141,7 @@ class LoginController extends Controller
         if ($user !== null) {
             User::whereKey($user->id)->update(['current_session_token' => null]);
 
-            if ($user->role === 'peserta') {
+            if ($user->isPeserta()) {
                 ParticipantLoginActivity::recordAndBroadcast($user, 'logout', 'manual');
             }
         }

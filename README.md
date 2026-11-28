@@ -260,15 +260,35 @@ sudo supervisorctl update
 sudo supervisorctl start skylearn-reverb skylearn-realtime skylearn-default
 ```
 
-### 5. Penutup attempt kedaluwarsa
+### 5. Scheduler (penutup attempt, pemulihan sesi, dan cadangan harian)
 
-Mode Acak menutup attempt yang melewati waktu lewat scheduler. Tambahkan cron:
+Jalankan scheduler langsung di Supervisor bersama worker agar Anda tidak perlu mengelola `crontab` terpisah, `/etc/supervisor/conf.d/skylearn-scheduler.conf`:
 
-```cron
-* * * * * cd /var/www/skylearn-kuis && php artisan schedule:run >> /dev/null 2>&1
+```ini
+[program:skylearn-scheduler]
+command=php /var/www/skylearn-kuis/artisan schedule:work
+directory=/var/www/skylearn-kuis
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/skylearn-scheduler.log
+stopwaitsecs=10
 ```
 
-Perintah yang dijalankan: `kuis:tutup-attempt-kedaluwarsa`, setiap menit.
+Aktifkan bersama program lainnya:
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start skylearn-scheduler
+```
+
+Perintah yang dieksekusi otomatis oleh scheduler (dan terpantau detaknya di halaman **Master -> Sistem**):
+- Setiap menit: `kuis:tutup-attempt-kedaluwarsa` (attempt Mode Acak kedaluwarsa, sesi terjadwal, dan pemulihan sesi Mode Serempak).
+- Harian: `queue:prune-failed`, `kuis:backup-database` (`02:00`), dan `kuis:bersihkan-data-usang` (`02:30`).
+
+*(Catatan: Bila server tidak memakai Supervisor, gunakan satu baris `crontab -u www-data -e`: `* * * * * cd /var/www/skylearn-kuis && php artisan schedule:run >> /dev/null 2>&1`. Jangan mengaktifkan keduanya sekaligus.)*
 
 ### 6. Firewall
 
@@ -311,19 +331,19 @@ Unduh contoh dari `/admin/participants/template`. Kolom yang dibaca: `nama` dan 
 
 ## Uji beban
 
-Skrip k6 ada di `tests/load/k6-peserta.js`. Secara default skrip menjalankan 100 peserta selama 10 menit, polling status, dan menjawab soal PG yang sedang dibuka. Token display dan akun admin dapat ditambahkan agar kedua monitor ikut berjalan:
+Skrip k6 menguji simulasi Mode Serempak dengan 100 akun berbeda. Buat CSV akun dari PowerShell, lalu impor ke workspace pengujian:
 
-```bash
-k6 run \
-  -e BASE_URL=http://192.168.1.10 \
-  -e SESSION_ID=1 \
-  -e DISPLAY_TOKEN=token-display \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=password-admin \
-  tests/load/k6-peserta.js
+```powershell
+.\tests\load\generate-participants.ps1 -Count 100 -Prefix loadtest -Password 'ganti-password-uji' -OutputPath .\storage\app\private\loadtest-participants.csv
 ```
 
-Buat sesi simulasi dan akun `peserta1` sampai `peserta100` terlebih dahulu. Untuk menguji autosave essay Mode Acak, siapkan attempt berurutan lalu tambahkan `ATTEMPT_ID_BASE` dan `ESSAY_QUESTION_ID`. Jalankan hanya pada sesi simulasi karena skrip benar-benar menyimpan jawaban. Target lulus: error di bawah 1%, p95 status di bawah 500 ms, dan p95 simpan jawaban di bawah 750 ms.
+Buat kuis `Simulasi Beban Jaringan Komputer`, kemudian impor `tests/load/questions-network-simulation.csv` melalui menu impor soal. Buat sesi sumber dengan Mode Serempak, acak opsi dan leaderboard realtime aktif, maksimal 100 peserta, serta durasi berdasarkan soal. Buat simulasi dari sesi tersebut, pilih seluruh akun `loadtest`, dan buka lobby. Setelah itu jalankan:
+
+```powershell
+k6 run -e BASE_URL=https://quiz.ruangproject.my.id -e WORKSPACE_SLUG=simulasi-kubernetes -e SESSION_ID=<ID_SIMULASI> -e USERNAME_PREFIX=loadtest -e PASSWORD=ganti-password-uji -e VUS=100 -e DURATION_SECONDS=600 .\tests\load\k6-peserta.js
+```
+
+k6 menyelesaikan kewajiban ganti password pertama dengan password CSV yang sama, lalu bergabung ke simulasi. Tunggu monitor menampilkan seluruh peserta sebelum admin memulai sesi. Jalankan hanya pada simulasi karena skrip benar-benar menyimpan jawaban. Target lulus: error workflow di bawah 1%, p95 status di bawah 500 ms, dan p95 simpan jawaban di bawah 750 ms.
 
 Konfigurasi Redis, PHP-FPM, log waktu Nginx, runbook insiden, dan uji gangguan dijelaskan di `docs/operations/exam-reliability.md`.
 

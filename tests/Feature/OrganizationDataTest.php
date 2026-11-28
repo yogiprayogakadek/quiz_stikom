@@ -44,6 +44,11 @@ class OrganizationDataTest extends TestCase
         $this->assertCount(1, $data['ai_usage']);
         $this->assertCount(1, $data['participant_login_activities']);
         $this->assertCount(1, $data['audit_logs']);
+        $this->assertCount(1, $data['question_media']);
+        $this->assertCount(1, $data['session_participants']);
+        $this->assertArrayHasKey('session_messages', $data);
+        $this->assertArrayHasKey('quiz_grades', $data);
+        $this->assertArrayHasKey('participant_feedbacks', $data);
         $this->assertCount(2, $data['users']);
         $this->assertArrayNotHasKey('password', $data['users'][0]);
         $this->assertArrayNotHasKey('current_session_token', $data['users'][0]);
@@ -206,6 +211,16 @@ class OrganizationDataTest extends TestCase
             'teks' => 'Hypertext Transfer Protocol',
             'is_correct' => true,
         ]);
+        DB::table('question_media')->insert([
+            'organization_id' => $organization->id,
+            'question_id' => $questionId,
+            'path' => 'question-media/'.$organization->id.'/contoh.png',
+            'mime_type' => 'image/png',
+            'size_bytes' => 128,
+            'original_name' => 'contoh.png',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         DB::table('quiz_questions')->insert(['quiz_id' => $quizId, 'question_id' => $questionId]);
         DB::table('kelas_quiz')->insert([
             'kelas_id' => $classId,
@@ -237,6 +252,12 @@ class OrganizationDataTest extends TestCase
             'quiz_session_id' => $sessionId,
             'question_id' => $questionId,
             'urutan' => 1,
+        ]);
+        DB::table('quiz_session_participants')->insert([
+            'quiz_session_id' => $sessionId,
+            'user_id' => $participant->id,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $attemptId = DB::table('attempts')->insertGetId([

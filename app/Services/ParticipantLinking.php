@@ -22,10 +22,7 @@ class ParticipantLinking
 
     public function isActiveMember(User $participant, int $organizationId): bool
     {
-        return $participant->organizations()
-            ->whereKey($organizationId)
-            ->wherePivot('status', 'active')
-            ->exists();
+        return $participant->isActiveMemberOf($organizationId);
     }
 
     public function link(User $participant, Organization $organization, string $source, array $metadata = []): void

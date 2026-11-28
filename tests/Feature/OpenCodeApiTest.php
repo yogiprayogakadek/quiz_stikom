@@ -3,14 +3,20 @@
 namespace Tests\Feature;
 
 use App\Jobs\ProcessWithOpenCode;
+use App\Models\Organization;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class OpenCodeApiTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -310,15 +316,93 @@ class OpenCodeApiTest extends TestCase
         Queue::assertPushed(ProcessWithOpenCode::class, fn (ProcessWithOpenCode $job): bool => $job->variant === null);
     }
 
+    public function test_opencode_endpoints_reject_unauthenticated_requests(): void
+    {
+        $this->configureApi(['without_auth_header' => true]);
+
+        $this->getJson('/api/opencode/models')->assertUnauthorized();
+        $this->postJson('/api/opencode/process', ['data' => 'test'])->assertUnauthorized();
+        $this->getJson('/api/opencode/result/sample-key')->assertUnauthorized();
+    }
+
+    public function test_opencode_endpoints_reject_non_admin_user_without_bearer_token(): void
+    {
+        $this->configureApi(['without_auth_header' => true]);
+
+        $peserta = User::create([
+            'nama' => 'Peserta API',
+            'username' => 'peserta-opencode',
+            'password' => Hash::make('password123'),
+            'role' => 'peserta',
+        ]);
+
+        $this->actingAs($peserta)
+            ->getJson('/api/opencode/models')
+            ->assertUnauthorized();
+    }
+
+    public function test_opencode_endpoints_allow_authenticated_admin_without_bearer_token(): void
+    {
+        $this->configureApi(['without_auth_header' => true]);
+        $this->fakeModels();
+
+        $admin = User::create([
+            'nama' => 'Admin API',
+            'username' => 'admin-opencode',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson('/api/opencode/models')
+            ->assertOk()
+            ->assertJsonPath('connected', true);
+    }
+
+    public function test_process_returns_429_when_workspace_ai_quota_is_exhausted(): void
+    {
+        Queue::fake();
+        config(['platform.ai_monthly_requests' => 0]);
+        $this->configureApi(['variant' => '', 'without_auth_header' => true]);
+
+        $organization = Organization::create([
+            'name' => 'Kampus Kuota',
+            'slug' => 'kampus-kuota',
+            'type' => 'education',
+            'timezone' => 'Asia/Jakarta',
+            'is_active' => true,
+        ]);
+
+        $admin = User::create([
+            'nama' => 'Admin Kuota',
+            'username' => 'admin-kuota-opencode',
+            'password' => Hash::make('password123'),
+            'role' => 'admin',
+        ]);
+        $organization->users()->syncWithoutDetaching([
+            $admin->id => ['role' => 'admin', 'status' => 'active'],
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson('/api/opencode/process', ['data' => 'test'])
+            ->assertStatus(429);
+
+        Queue::assertNothingPushed();
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
     private function configureApi(array $overrides = []): void
     {
+        $withoutHeader = (bool) ($overrides['without_auth_header'] ?? false);
+        unset($overrides['without_auth_header']);
+
         config()->set('services.opencode', array_merge([
             'url' => 'http://opencode.test',
             'username' => 'opencode',
             'password' => 'secret',
+            'api_token' => 'secret-api-token',
             'agent' => 'data-processor',
             'model' => 'deepseek-v4.1-flash-free',
             'model_fallbacks' => [],
@@ -329,6 +413,10 @@ class OpenCodeApiTest extends TestCase
             'max_attempts' => 1,
             'variant' => 'high',
         ], $overrides));
+
+        if (! $withoutHeader) {
+            $this->withToken((string) config('services.opencode.api_token'));
+        }
     }
 
     private function fakeModels(): void
@@ -338,7 +426,7 @@ class OpenCodeApiTest extends TestCase
                 return $this->fakeModelsResponse();
             }
 
-            return Http::response(['message' => 'unexpected '.$request->method().' '.$url], 500);
+            return Http::response(['message' => 'unexpected '.$request->method().' '.$request->url()], 500);
         });
     }
 

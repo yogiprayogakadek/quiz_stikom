@@ -389,6 +389,58 @@ class QuizEngine
         return $hasil;
     }
 
+    public function reconcileSerempakSession(QuizSession $session, int $graceMs = 3000): string
+    {
+        $session->refresh();
+
+        if ($session->mode !== 'serempak'
+            || $session->status !== 'berjalan'
+            || $session->soal_aktif_urutan === null
+            || $session->soal_berakhir_at === null) {
+            return 'none';
+        }
+
+        $nowMs = now()->getTimestampMs();
+        $urutan = (int) $session->soal_aktif_urutan;
+        $berakhirMs = (int) $session->soal_berakhir_at;
+
+        if ($session->fase === 'soal_terbuka' && $nowMs >= ($berakhirMs + max(0, $graceMs))) {
+            $this->tutupSoal($session, $urutan);
+
+            return 'question_closed';
+        }
+
+        $jedaMs = max(1, (int) $session->jeda_detik) * 1000;
+        if ($session->fase === 'jeda' && $nowMs >= ($berakhirMs + $jedaMs + max(0, $graceMs))) {
+            $this->lanjutSoal($session, $urutan);
+
+            return 'question_advanced';
+        }
+
+        return 'none';
+    }
+
+    public function reconcileSerempakSessions(int $graceMs = 3000): array
+    {
+        $hasil = ['question_closed' => 0, 'question_advanced' => 0];
+
+        QuizSession::withoutGlobalScopes()
+            ->where('mode', 'serempak')
+            ->where('status', 'berjalan')
+            ->whereNotNull('soal_aktif_urutan')
+            ->whereNotNull('soal_berakhir_at')
+            ->orderBy('id')
+            ->each(function (QuizSession $session) use ($graceMs, &$hasil) {
+                $action = $this->reconcileSerempakSession($session, $graceMs);
+
+                if (isset($hasil[$action])) {
+                    $hasil[$action]++;
+                }
+            });
+
+        return $hasil;
+    }
+
     public function mulaiSesi(QuizSession $session): void
     {
         if ($session->isTerjadwal()

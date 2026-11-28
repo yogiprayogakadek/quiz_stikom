@@ -12,7 +12,7 @@
         </a>
     </x-slot:aksi>
 
-    <form method="POST" action="{{ $ruteUpdate }}" enctype="multipart/form-data" class="card max-w-3xl">
+    <form method="POST" action="{{ $ruteUpdate }}" enctype="multipart/form-data" class="card w-full min-w-0 max-w-3xl">
         @csrf
         @method('PUT')
         @include('admin.questions._form', ['question' => $question, 'quiz' => $kuis])

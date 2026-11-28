@@ -47,6 +47,7 @@ return [
         'url' => env('OPENCODE_URL', 'http://192.168.0.247:4096'),
         'username' => env('OPENCODE_USERNAME', 'opencode'),
         'password' => env('OPENCODE_PASSWORD'),
+        'api_token' => env('OPENCODE_API_TOKEN'),
         'agent' => env('OPENCODE_AGENT', 'data-processor'),
         'model' => env('OPENCODE_MODEL', 'deepseek-v4.1-flash-free'),
         'variant' => env('OPENCODE_MODEL_VARIANT'),

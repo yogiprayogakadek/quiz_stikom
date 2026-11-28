@@ -56,17 +56,8 @@ class StoreSessionRequest extends FormRequest
                 ->where('tipe', 'essay')
                 ->exists();
 
-            $punyaPg = Question::query()
-                ->where('quiz_id', $quizId)
-                ->where('tipe', 'pilihan_ganda')
-                ->exists();
-
-            if ($punyaEssay && $punyaPg) {
-                $validator->errors()->add('quiz_id', 'Satu sesi tidak boleh mencampur soal PG dan essay. Pisahkan ke kuis berbeda.');
-            }
-
             if ($punyaEssay && $this->input('mode') === 'serempak') {
-                $validator->errors()->add('mode', 'Mode Serempak hanya untuk soal pilihan ganda.');
+                $validator->errors()->add('mode', 'Kuis yang memuat soal essay hanya dapat dijalankan pada Mode Acak.');
             }
 
             $quiz = Quiz::query()->find($quizId);

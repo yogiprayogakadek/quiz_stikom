@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\KelasController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
+use App\Http\Controllers\Admin\QuestionPdfController;
 use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\RemedialController;
 use App\Http\Controllers\Admin\ReportController;
@@ -59,9 +60,13 @@ Route::middleware('guest')->group(function () {
     Route::get('/o/{organization:slug}/login', [LoginController::class, 'showOrganization'])->name('organizations.login');
     Route::post('/o/{organization:slug}/login', [LoginController::class, 'login'])->name('organizations.login.store');
     Route::get('/lupa-password', [AccountRecoveryController::class, 'requestForm'])->name('password.request');
-    Route::post('/lupa-password', [AccountRecoveryController::class, 'sendResetLink'])->name('password.email');
+    Route::post('/lupa-password', [AccountRecoveryController::class, 'sendResetLink'])
+        ->middleware('throttle:password-recovery')
+        ->name('password.email');
     Route::get('/reset-password/{token}', [AccountRecoveryController::class, 'resetForm'])->name('password.reset');
-    Route::post('/reset-password', [AccountRecoveryController::class, 'reset'])->name('password.update');
+    Route::post('/reset-password', [AccountRecoveryController::class, 'reset'])
+        ->middleware('throttle:password-recovery')
+        ->name('password.update');
 });
 
 Route::prefix('master')->name('master.')->middleware('guest')->group(function () {
@@ -173,6 +178,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
 
     Route::get('quizzes/{quiz}/questions/template', [QuestionController::class, 'template'])->name('quizzes.questions.template');
     Route::get('quizzes/{quiz}/questions/export', [QuestionController::class, 'export'])->name('quizzes.questions.export');
+    Route::get('quizzes/{quiz}/questions/pdf/pratinjau', [QuestionPdfController::class, 'preview'])->name('quizzes.questions.pdf.preview');
+    Route::get('quizzes/{quiz}/questions/pdf', [QuestionPdfController::class, 'download'])->name('quizzes.questions.pdf.download');
     Route::get('quizzes/{quiz}/questions/import', [QuestionController::class, 'importForm'])->name('quizzes.questions.import');
     Route::post('quizzes/{quiz}/questions/import', [QuestionController::class, 'import'])->name('quizzes.questions.import.store');
     Route::get('quizzes/{quiz}/questions/import/result', [QuestionController::class, 'importResult'])->name('quizzes.questions.import.result');
@@ -187,6 +194,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'organ
 
     // Backward-compatible question routes (redirects / fallback if needed)
     Route::get('questions/template', [QuestionController::class, 'template'])->name('questions.template');
+    Route::post('quizzes/{quiz}/duplicate', [QuizController::class, 'duplicate'])->name('quizzes.duplicate');
     Route::resource('quizzes', QuizController::class)->except(['show']);
     Route::resource('classes', KelasController::class)->except(['show', 'create'])->parameters(['classes' => 'kelas']);
     Route::post('classes/{kelas}/regenerate-cover', [KelasController::class, 'regenerateCover'])->name('classes.regenerate-cover');

@@ -537,11 +537,8 @@ class ParticipantController extends Controller
 
     private function authorizeParticipant(User $participant): void
     {
-        $organizationId = app(OrganizationContext::class)->id();
         abort_unless(
-            $participant->role === 'peserta'
-            && $organizationId !== null
-            && $participant->organizations()->whereKey($organizationId)->wherePivot('status', 'active')->exists(),
+            $participant->isPeserta() && $participant->isActiveMemberOf(app(OrganizationContext::class)->id()),
             404,
         );
     }

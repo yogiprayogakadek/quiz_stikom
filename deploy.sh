@@ -14,3 +14,8 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan queue:restart
+php artisan schedule:interrupt
+
+if command -v supervisorctl >/dev/null 2>&1; then
+    supervisorctl status 2>/dev/null || echo "Catatan: jalankan 'sudo supervisorctl status' untuk memeriksa worker, reverb, dan scheduler."
+fi
